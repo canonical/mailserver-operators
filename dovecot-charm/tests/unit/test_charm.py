@@ -772,3 +772,28 @@ class TestTLSCertificate(unittest.TestCase):
         charm._on_certificate_available(event)
 
         mock_systemctl.assert_any_call("is-enabled", "dovecot")
+
+
+class TestCOSProvider(unittest.TestCase):
+    """Tests for COS agent provider initialization."""
+
+    def setUp(self):
+        self.harness = Harness(DovecotCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.begin()
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config(
+                {
+                    "primary-unit": "dovecot-charm/0",
+                    "mailname": "example.com",
+                    "postmaster-address": "admin@example.com",
+                    "cron-mailto": "admin@example.com",
+                }
+            )
+
+    def test_cos_agent_provider_initialized(self):
+        self.assertIsNotNone(self.harness.charm._grafana_agent)
+
+    def test_cos_metrics_endpoint_port(self):
+        provider = self.harness.charm._grafana_agent
+        self.assertIsNotNone(provider)

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import jinja2
 from charmhelpers.core import host
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateAvailableEvent,
     CertificateRequestAttributes,
@@ -116,6 +117,19 @@ class DovecotCharm(CharmBase):
             self.framework.observe(
                 self._tls.on.certificate_available, self._on_certificate_available
             )
+
+        # COS observability integration
+        self._grafana_agent = COSAgentProvider(
+            self,
+            relation_name="cos-agent",
+            metrics_endpoints=[
+                {"path": "/metrics", "port": 9900},
+            ],
+            metrics_rules_dir="./src/prometheus_alert_rules",
+            logs_rules_dir="./src/loki_alert_rules",
+            dashboard_dirs=["./src/grafana_dashboards"],
+            refresh_events=[self.on.config_changed],
+        )
 
     @property
     def cron_mailto(self):

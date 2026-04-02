@@ -38,6 +38,8 @@ coverage-report = [
 integration = [
   "jubilant==1.8.0",
   "pytest",
+  "requests",
+  "tenacity",
 ]
 
 [tool.uv]
