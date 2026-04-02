@@ -523,3 +523,175 @@ class TestForceSync(unittest.TestCase):
             self.harness.charm._on_force_sync(event)
         event.fail.assert_called_once()
         self.assertIn("fail", event.fail.call_args[0][0])
+
+
+class TestStorageHandlers(unittest.TestCase):
+    """Tests for storage event handlers."""
+
+    def setUp(self):
+        self.harness = Harness(DovecotCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.begin()
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config(
+                {
+                    "primary-unit": "dovecot-charm/0",
+                    "mailname": "example.com",
+                    "postmaster-address": "admin@example.com",
+                    "cron-mailto": "admin@example.com",
+                }
+            )
+
+    @patch("charm.shutil.which")
+    def test_storage_attached_defer_if_cryptsetup_missing(self, mock_which):
+        mock_which.return_value = None
+
+        storage_ids = self.harness.add_storage("mail-data", count=1)
+        self.harness.model.unit.status = BlockedStatus("Checking storage")
+        self.harness.attach_storage(storage_ids[0])
+
+        self.assertEqual(self.harness.model.unit.status.message, "Checking storage")
+
+    @patch("charm.DovecotCharm._setup_luks_storage")
+    @patch("charm.shutil.which")
+    def test_storage_attached_defer_logic(self, mock_which, mock_setup_luks):
+        mock_which.return_value = None
+
+        self.harness.add_storage("mail-data", count=1)
+        self.harness.attach_storage("mail-data/0")
+
+        mock_setup_luks.assert_not_called()
+
+    @patch("charm.os.path.ismount")
+    @patch("charm.shutil.which")
+    def test_storage_attached_manage_luks_disabled_waits_for_mount(self, mock_which, mock_ismount):
+        mock_ismount.return_value = False
+
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config({"manage-luks": False})
+
+        self.harness.add_storage("mail-data", count=1)
+        self.harness.attach_storage("mail-data/0")
+
+        self.assertIsInstance(self.harness.model.unit.status, BlockedStatus)
+        self.assertEqual(
+            self.harness.model.unit.status.message,
+            "mail-data not mounted; manage-luks disabled",
+        )
+        mock_which.assert_not_called()
+
+    @patch("charm.os.path.ismount")
+    @patch("charm.shutil.which")
+    def test_storage_attached_manage_luks_disabled_active(self, mock_which, mock_ismount):
+        mock_ismount.return_value = True
+
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config({"manage-luks": False})
+
+        self.harness.add_storage("mail-data", count=1)
+        self.harness.attach_storage("mail-data/0")
+
+        self.assertIsInstance(self.harness.model.unit.status, ActiveStatus)
+        mock_which.assert_not_called()
+
+
+class TestStorageDetaching(unittest.TestCase):
+    """Tests for storage detaching handler."""
+
+    def setUp(self):
+        self.harness = Harness(DovecotCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.begin()
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config(
+                {
+                    "primary-unit": "dovecot-charm/0",
+                    "mailname": "example.com",
+                    "postmaster-address": "admin@example.com",
+                    "cron-mailto": "admin@example.com",
+                }
+            )
+
+    @patch("charm.subprocess.run")
+    @patch("charm.os.path.exists")
+    @patch("charm.os.path.ismount")
+    def test_storage_detaching_unmount_and_close(self, mock_ismount, mock_exists, mock_run):
+        mock_ismount.return_value = True
+        mock_exists.return_value = True
+        mock_run.return_value = MagicMock()
+
+        event = MagicMock()
+        self.harness.charm._on_mail_data_storage_detaching(event)
+
+        mock_run.assert_any_call(["umount", "/srv/mail"], check=True)
+        mock_run.assert_any_call(["cryptsetup", "luksClose", "mail-data"], check=True)
+
+    @patch("charm.subprocess.run")
+    @patch("charm.os.path.exists")
+    @patch("charm.os.path.ismount")
+    def test_storage_detaching_not_mounted(self, mock_ismount, mock_exists, mock_run):
+        mock_ismount.return_value = False
+        mock_exists.return_value = False
+
+        event = MagicMock()
+        self.harness.charm._on_mail_data_storage_detaching(event)
+
+        mock_run.assert_not_called()
+
+    @patch("charm.subprocess.run")
+    @patch("charm.os.path.exists")
+    @patch("charm.os.path.ismount")
+    def test_storage_detaching_luks_disabled_skips_close(
+        self, mock_ismount, mock_exists, mock_run
+    ):
+        mock_ismount.return_value = True
+        mock_exists.return_value = True
+        mock_run.return_value = MagicMock()
+
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config({"manage-luks": False})
+
+        event = MagicMock()
+        self.harness.charm._on_mail_data_storage_detaching(event)
+
+        mock_run.assert_called_once_with(["umount", "/srv/mail"], check=True)
+
+
+class TestUpdateStatus(unittest.TestCase):
+    """Tests for update-status handler."""
+
+    def setUp(self):
+        self.harness = Harness(DovecotCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.begin()
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config(
+                {
+                    "primary-unit": "dovecot-charm/0",
+                    "mailname": "example.com",
+                    "postmaster-address": "admin@example.com",
+                    "cron-mailto": "admin@example.com",
+                }
+            )
+
+    @patch("charm.os.path.ismount")
+    def test_update_status_luks_disabled_mounted(self, mock_ismount):
+        mock_ismount.return_value = True
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config({"manage-luks": False})
+
+        self.harness.charm.on.update_status.emit()
+        self.assertIsInstance(self.harness.model.unit.status, ActiveStatus)
+
+    @patch("charm.os.path.ismount")
+    def test_update_status_luks_disabled_not_mounted(self, mock_ismount):
+        mock_ismount.return_value = False
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config({"manage-luks": False})
+
+        self.harness.charm.on.update_status.emit()
+        self.assertIsInstance(self.harness.model.unit.status, BlockedStatus)
+        self.assertEqual(
+            self.harness.model.unit.status.message,
+            "mail-data not mounted; manage-luks disabled",
+        )
