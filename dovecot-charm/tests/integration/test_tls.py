@@ -23,7 +23,7 @@ def deploy_with_tls(juju: jubilant.Juju, dovecot_charm: str):
     try:
         logging.info("Adding TLS relation...")
         juju.integrate(f"{dovecot_charm}:certificates", f"{TLS_APP}:certificates")
-    except Exception as e:
+    except Exception:
         logging.info("TLS relation already there...")
     logging.info("Waiting for active/idle status...")
     juju.wait(jubilant.all_active, timeout=1200)

@@ -27,8 +27,11 @@ lint = [
   "ruff",
 ]
 unit = [
+  "cosl",
   "coverage[toml]",
+  "cryptography",
   "ops[testing]",
+  "pydantic",
   "pytest",
 ]
 coverage-report = [

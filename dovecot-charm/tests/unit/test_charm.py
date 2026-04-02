@@ -141,6 +141,9 @@ class TestInstallFlow(unittest.TestCase):
         for port, proto in expected_ports:
             self.assertIn((port, proto), opened_set, f"Port {port}/{proto} not opened")
 
+    @patch("charm.DovecotCharm._setup_mail_sync_cronjob")
+    @patch("charm.DovecotCharm._install_mail_sync_script")
+    @patch("charm.DovecotCharm._setup_ssh_keys")
     @patch("charm.DovecotCharm._setup_procmail")
     @patch("charm.DovecotCharm._setup_dovecot")
     @patch("charm.DovecotCharm._open_ports")
@@ -153,6 +156,9 @@ class TestInstallFlow(unittest.TestCase):
         mock_open_ports,
         mock_dovecot,
         mock_procmail,
+        mock_setup_ssh,
+        mock_install_sync,
+        mock_setup_cron,
     ):
         self.harness.charm._install()
         mock_apt.update.assert_called_once()
@@ -161,6 +167,9 @@ class TestInstallFlow(unittest.TestCase):
         mock_dovecot.assert_called_once()
         mock_procmail.assert_called_once()
         mock_copy.assert_called_once_with("/etc/hostname", "/etc/mailname")
+        mock_setup_ssh.assert_called_once()
+        mock_install_sync.assert_called_once()
+        mock_setup_cron.assert_called_once()
 
     def test_is_primary_true(self):
         self.assertTrue(self.harness.charm._is_primary)
