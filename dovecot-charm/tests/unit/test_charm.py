@@ -3,7 +3,7 @@
 
 import subprocess
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
@@ -224,3 +224,241 @@ class TestClearQueue(unittest.TestCase):
         self.harness.charm._on_clear_queue_action(event)
         event.fail.assert_called_once()
         self.assertIn("postsuper", event.fail.call_args[0][0])
+
+
+class TestGDPRArchive(unittest.TestCase):
+    """Tests for GDPR archive action."""
+
+    def setUp(self):
+        self.harness = Harness(DovecotCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.begin()
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config(
+                {
+                    "primary-unit": "dovecot-charm/0",
+                    "mailname": "example.com",
+                    "postmaster-address": "admin@example.com",
+                    "cron-mailto": "admin@example.com",
+                }
+            )
+
+    @patch("charm.shutil.rmtree")
+    @patch("charm.os.makedirs")
+    @patch("charm.subprocess.run")
+    def test_gdpr_archive_compressed(self, mock_run, mock_makedirs, mock_rmtree):
+        mock_run.return_value = MagicMock()
+        event = MagicMock()
+        event.params = {"username": "alice", "compress": True}
+
+        self.harness.charm._on_gdpr_archive(event)
+
+        mock_run.assert_any_call(
+            ["doveadm", "backup", "-u", "alice", "mdbox:/srv/mail/archives/alice/"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        mock_run.assert_any_call(
+            [
+                "tar",
+                "-czf",
+                "/srv/mail/archives/alice.tar.gz",
+                "-C",
+                "/srv/mail/archives",
+                "alice",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        mock_rmtree.assert_called_once_with("/srv/mail/archives/alice")
+        event.set_results.assert_called_once()
+        self.assertEqual(
+            event.set_results.call_args[0][0]["path"],
+            "/srv/mail/archives/alice.tar.gz",
+        )
+
+    @patch("charm.os.makedirs")
+    @patch("charm.subprocess.run")
+    def test_gdpr_archive_uncompressed(self, mock_run, mock_makedirs):
+        mock_run.return_value = MagicMock()
+        event = MagicMock()
+        event.params = {"username": "bob", "compress": False}
+
+        self.harness.charm._on_gdpr_archive(event)
+
+        event.set_results.assert_called_once()
+        self.assertEqual(
+            event.set_results.call_args[0][0]["path"],
+            "/srv/mail/archives/bob",
+        )
+
+    @patch("charm.os.makedirs")
+    @patch("charm.subprocess.run")
+    def test_gdpr_archive_failure(self, mock_run, mock_makedirs):
+        mock_run.side_effect = subprocess.CalledProcessError(1, "doveadm", stderr="no such user")
+        event = MagicMock()
+        event.params = {"username": "ghost", "compress": True}
+
+        self.harness.charm._on_gdpr_archive(event)
+
+        event.fail.assert_called_once()
+        self.assertIn("ghost", event.fail.call_args[0][0])
+
+
+class TestGDPRDelete(unittest.TestCase):
+    """Tests for GDPR delete action."""
+
+    def setUp(self):
+        self.harness = Harness(DovecotCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.begin()
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config(
+                {
+                    "primary-unit": "dovecot-charm/0",
+                    "mailname": "example.com",
+                    "postmaster-address": "admin@example.com",
+                    "cron-mailto": "admin@example.com",
+                }
+            )
+
+    def test_gdpr_delete_no_confirm(self):
+        event = MagicMock()
+        event.params = {"username": "alice", "confirm": False}
+        self.harness.charm._on_gdpr_delete(event)
+        event.fail.assert_called_once_with("Deletion not confirmed. Set confirm=true to proceed.")
+
+    @patch("charm.shutil.rmtree")
+    @patch("charm.os.path.exists")
+    @patch("charm.subprocess.run")
+    def test_gdpr_delete_confirmed(self, mock_run, mock_exists, mock_rmtree):
+        mock_run.return_value = MagicMock()
+        mock_exists.return_value = True
+
+        event = MagicMock()
+        event.params = {"username": "alice", "confirm": True}
+        self.harness.charm._on_gdpr_delete(event)
+
+        mock_run.assert_called_once_with(
+            ["doveadm", "expunge", "-u", "alice", "mailbox", "*", "all"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        mock_rmtree.assert_called_once_with("/srv/mail/alice")
+        event.set_results.assert_called_once()
+
+    @patch("charm.os.path.exists")
+    @patch("charm.subprocess.run")
+    def test_gdpr_delete_no_mail_dir(self, mock_run, mock_exists):
+        mock_run.return_value = MagicMock()
+        mock_exists.return_value = False
+
+        event = MagicMock()
+        event.params = {"username": "nodir", "confirm": True}
+        self.harness.charm._on_gdpr_delete(event)
+
+        event.set_results.assert_called_once()
+
+    @patch("charm.subprocess.run")
+    def test_gdpr_delete_expunge_fails(self, mock_run):
+        mock_run.side_effect = subprocess.CalledProcessError(1, "doveadm", stderr="error")
+        event = MagicMock()
+        event.params = {"username": "alice", "confirm": True}
+        self.harness.charm._on_gdpr_delete(event)
+        event.fail.assert_called_once()
+
+
+class TestGDPRTakeout(unittest.TestCase):
+    """Tests for GDPR takeout action."""
+
+    def setUp(self):
+        self.harness = Harness(DovecotCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.begin()
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config(
+                {
+                    "primary-unit": "dovecot-charm/0",
+                    "mailname": "example.com",
+                    "postmaster-address": "admin@example.com",
+                    "cron-mailto": "admin@example.com",
+                }
+            )
+
+    @patch("charm.shutil.rmtree")
+    @patch("charm.os.makedirs")
+    @patch("charm.subprocess.run")
+    def test_gdpr_takeout_maildir(self, mock_run, mock_makedirs, mock_rmtree):
+        mock_run.return_value = MagicMock()
+        event = MagicMock()
+        event.params = {"username": "alice", "format": "maildir"}
+
+        self.harness.charm._on_gdpr_takeout(event)
+
+        mock_run.assert_any_call(
+            [
+                "doveadm",
+                "sync",
+                "-u",
+                "alice",
+                "maildir:/tmp/gdpr-takeout/alice/:LAYOUT=fs",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        mock_run.assert_any_call(
+            [
+                "tar",
+                "-czf",
+                "/tmp/gdpr-takeout/alice-takeout.tar.gz",
+                "-C",
+                "/tmp/gdpr-takeout",
+                "alice",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        mock_rmtree.assert_called_once()
+        event.set_results.assert_called_once()
+        self.assertEqual(
+            event.set_results.call_args[0][0]["path"],
+            "/tmp/gdpr-takeout/alice-takeout.tar.gz",
+        )
+
+    @patch("charm.shutil.rmtree")
+    @patch("charm.os.makedirs")
+    @patch("charm.subprocess.run")
+    @patch("builtins.open", new_callable=mock_open)
+    def test_gdpr_takeout_mbox(self, mock_file, mock_run, mock_makedirs, mock_rmtree):
+        fetch_result = MagicMock()
+        fetch_result.stdout = "From alice@example.com\nSubject: hi\n"
+        mock_run.return_value = fetch_result
+
+        event = MagicMock()
+        event.params = {"username": "alice", "format": "mbox"}
+
+        self.harness.charm._on_gdpr_takeout(event)
+
+        mock_run.assert_any_call(
+            ["doveadm", "fetch", "-u", "alice", "text", "mailbox", "*", "all"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        mock_file.assert_called_with("/tmp/gdpr-takeout/alice/alice.mbox", "w")
+        event.set_results.assert_called_once()
+
+    @patch("charm.os.makedirs")
+    @patch("charm.subprocess.run")
+    def test_gdpr_takeout_failure(self, mock_run, mock_makedirs):
+        mock_run.side_effect = subprocess.CalledProcessError(1, "doveadm", stderr="user not found")
+        event = MagicMock()
+        event.params = {"username": "ghost", "format": "maildir"}
+        self.harness.charm._on_gdpr_takeout(event)
+        event.fail.assert_called_once()
+        self.assertIn("ghost", event.fail.call_args[0][0])

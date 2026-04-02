@@ -73,3 +73,37 @@ actions:
         description: The queue to clear (deferred or all).
         default: deferred
         enum: [deferred, all]
+  gdpr-archive:
+    description: Archive a user's mailbox to a compressed backup for long-term retention.
+    params:
+      username:
+        type: string
+        description: The username whose mailbox to archive.
+      compress:
+        type: boolean
+        default: true
+        description: Whether to compress the archive as tar.gz.
+    required: [username]
+  gdpr-delete:
+    description: Permanently delete a user's mailbox (GDPR right to erasure).
+    params:
+      username:
+        type: string
+        description: The username whose mailbox to delete.
+      confirm:
+        type: boolean
+        default: false
+        description: Must be set to true to proceed with deletion.
+    required: [username, confirm]
+  gdpr-takeout:
+    description: Export a user's mail data in a portable format (GDPR data portability).
+    params:
+      username:
+        type: string
+        description: The username whose data to export.
+      format:
+        type: string
+        default: maildir
+        description: Export format (maildir or mbox).
+        enum: [maildir, mbox]
+    required: [username]
