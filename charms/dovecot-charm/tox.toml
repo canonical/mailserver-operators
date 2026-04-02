@@ -1,0 +1,68 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+skipsdist = true
+skip_missing_interpreters = true
+envlist = [ "fmt", "lint", "unit", "coverage-report" ]
+requires = [ "tox>=4.21" ]
+no_package = true
+
+[env_run_base]
+passenv = [ "PYTHONPATH", "CHARM_BUILD_DIR", "MODEL_SETTINGS" ]
+runner = "uv-venv-lock-runner"
+
+[env_run_base.setenv]
+PYTHONPATH = "{toxinidir}:{toxinidir}/lib:{[vars]src_path}"
+PY_COLORS = "1"
+
+[env.fmt]
+description = "Apply coding style standards to code"
+commands = [
+  [ "ruff", "check", "--fix", "--select", "I", "{toxinidir}/src/", "{toxinidir}/tests/" ],
+  [ "ruff", "format", "{toxinidir}/src/", "{toxinidir}/tests/" ],
+]
+dependency_groups = [ "fmt" ]
+
+[env.lint]
+description = "Check code against coding style standards"
+commands = [
+  [ "ruff", "format", "--check", "--diff", "{toxinidir}/src/", "{toxinidir}/tests/" ],
+  [ "ruff", "check", "{toxinidir}/src/", "{toxinidir}/tests/" ],
+]
+dependency_groups = [ "lint" ]
+
+[env.unit]
+description = "Run unit tests"
+commands = [
+  [
+    "coverage", "run",
+    "--source={[vars]src_path}",
+    "-m", "pytest",
+    "--ignore={[vars]tst_path}integration",
+    "-v", "--tb", "native", "-s",
+    { replace = "posargs", extend = "true" },
+  ],
+  [ "coverage", "report" ],
+]
+dependency_groups = [ "unit" ]
+
+[env.coverage-report]
+description = "Create test coverage report"
+commands = [ [ "coverage", "report" ] ]
+dependency_groups = [ "coverage-report" ]
+
+[env.integration]
+description = "Run integration tests"
+commands = [
+  [
+    "pytest", "-v", "--tb", "native",
+    "--ignore={[vars]tst_path}unit",
+    "--log-cli-level=INFO", "-s",
+    { replace = "posargs", extend = "true" },
+  ],
+]
+dependency_groups = [ "integration" ]
+
+[vars]
+src_path = "{toxinidir}/src/"
+tst_path = "{toxinidir}/tests/"

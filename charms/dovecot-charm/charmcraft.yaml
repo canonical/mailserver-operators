@@ -1,0 +1,75 @@
+# This file configures Charmcraft.
+# See https://juju.is/docs/sdk/charmcraft-config for guidance.
+
+type: charm
+base: ubuntu@24.04
+
+platforms:
+  amd64:
+
+charm-libs:
+  - lib: operator-libs-linux.apt
+    version: "0"
+
+name: dovecot-charm
+
+summary: Dovecot IMAP/POP3 mail server charm
+
+description: |
+  Deploys and configures Dovecot as an IMAP/POP3 mail server.
+  Intended for Canonical IS team use.
+
+parts:
+  charm:
+    source: .
+    plugin: uv
+    build-snaps:
+    - astral-uv
+  dump:
+    plugin: dump
+    source: .
+    stage:
+    - templates
+
+peers:
+  replicas:
+    interface: replicas
+
+config:
+  options:
+    cron-mailto:
+      description: Mail address to send cronjobs output to
+      default: ""
+      type: string
+    mailname:
+      description: Mail server mailname
+      default: ""
+      type: string
+    postmaster-address:
+      description: Postmaster email address
+      default: ""
+      type: string
+    primary-unit:
+      description: Primary unit
+      default: ""
+      type: string
+    sync-schedule:
+      description: |
+        Cron schedule for syncing mail to secondary unit.
+        Format: "*/30 * * * *" (every 30 minutes)
+      default: "*/30 * * * *"
+      type: string
+    manage-luks:
+      description: Whether the charm manages LUKS encryption on mail-data storage
+      type: boolean
+      default: true
+
+actions:
+  clear-queue:
+    description: Forcibly remove messages from the Postfix mail queue.
+    params:
+      queue:
+        type: string
+        description: The queue to clear (deferred or all).
+        default: deferred
+        enum: [deferred, all]

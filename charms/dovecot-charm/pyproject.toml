@@ -1,0 +1,59 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Project metadata (PEP 621)
+[project]
+name = "dovecot-charm"
+version = "0.0.0"
+description = "Dovecot IMAP/POP3 mail server charm"
+requires-python = ">=3.12"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "ops==3.6.0",
+    "charmhelpers>=1.2.1",
+    "jinja2",
+]
+
+[dependency-groups]
+fmt = [
+  "ruff",
+]
+lint = [
+  "codespell",
+  "ruff",
+]
+unit = [
+  "coverage[toml]",
+  "ops[testing]",
+  "pytest",
+]
+coverage-report = [
+  "coverage[toml]",
+  "pytest",
+]
+integration = [
+  "jubilant==1.8.0",
+  "pytest",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 99
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+log_cli_level = "INFO"
+pythonpath = [ "lib", "src" ]
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true

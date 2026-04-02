@@ -1,0 +1,249 @@
+log_timestamp = "%Y-%m-%d %H:%M:%S "
+valid_chroot_dirs = {{ dovecot_chroot }}
+mail_location = maildir:{{ mail_root }}/%u/Maildir
+first_valid_uid = 1000
+last_valid_uid = 60000
+default_process_limit = 100
+default_client_limit = 1000
+default_vsz_limit = 256M
+auth_verbose = yes
+auth_verbose_passwords = sha1:8
+
+# TODO: change to ssl = required once TLS relation is added (pr/5-tls)
+ssl = yes
+ssl_cert = </etc/dovecot/private/{{ mailname }}.pem
+ssl_key = </etc/dovecot/private/{{ mailname }}.key
+# SSL ciphers to use, the default is:
+#ssl_cipher_list = ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH
+# To disable non-EC DH, use:
+#ssl_cipher_list = ALL:!DH:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH
+ssl_cipher_list = EECDH+AESGCM+AES128:EECDH+AESGCM+AES256:EECDH+AES128+SHA:EECDH+AES256+SHA:EDH+aRSA+AES128+SHA:EDH+aRSA+AES256+SHA:kRSA+aRSA+AES128+SHA:kRSA+aRSA+AES256+SHA
+ssl_min_protocol = TLSv1.2
+ssl_prefer_server_ciphers = yes
+
+postmaster_address = {{ postmaster_address }}
+
+# Enable managesieve protocol:
+protocols = $protocols sieve
+
+protocol lda {
+  mail_plugins = $mail_plugins sieve
+  lda_mailbox_autocreate = yes
+  lda_mailbox_autosubscribe = yes
+  lda_original_recipient_header = X-Original-To
+}
+
+# Which recipient address to use for Delivered-To: header and Received:
+# header. The default is "final", which is the same as the one given to
+# RCPT TO command. "original" uses the address given in RCPT TO's ORCPT
+# parameter, "none" uses nothing. Note that "none" is currently always used
+# when a mail has multiple recipients.
+#lmtp_hdr_delivery_address = final
+
+protocol lmtp {
+  mail_plugins = $mail_plugins sieve
+}
+
+protocol imap {
+  # Maximum number of IMAP connections allowed for a user from each IP address.
+  mail_max_userip_connections = 30
+}
+
+# There are 3 types of services that need to be optimized in different ways:
+#
+#    Master services (e.g. auth, anvil, indexer, director, log):
+#
+#        Currently there isn't any easy way to optimize these. If these become a bottleneck,
+#        typically you need to run another Dovecot server. In some cases it may be possible
+#        to create multiple master processes and have each one be responsible for only specific
+#        users/processes, although this may also require some extra development.
+#
+#    Services that do disk I/O or other blocking operations (e.g. imap, pop3, lmtp):
+#    Typically post-login process for handling IMAP/POP3/Submission/ManageSieve client connections.
+#
+#        These should have client_limit=1, because any blocking operation will block all the
+#        other clients and cause unnecessary delays and even timeouts. This means that process_limit
+#        specifies the maximum number of available parallel connections.
+#
+#    Services that have no blocking operations (e.g. imap-login, pop3-login):
+#
+#        For best performance (but a bit less safety), these should have process_limit and process_min_avail
+#        set to the number of CPU cores, so each CPU will be busy serving the process but without unnecessary
+#        context switches.
+#        Then client_limit needs to be set high enough to be able to serve all the needed connections:
+#          (max connections=process_limit * client_limit).
+#        service_count is commonly set to unlimited (0) for these services.
+#        Otherwise when the service_count is beginning to be reached, the total number of available connections
+#        will shrink. With very bad luck that could mean that all the processes are simply waiting for the
+#        existing connections to die away before the process can die and a new one can be created.
+#        Although this could be made less likely by setting process_limit higher than process_min_avail,
+#        but that's still not a guarantee since each process could get a very long running connection and the
+#        process_limit would be eventually reached.
+#
+#  service_count:
+#     Number of connections to handle before starting a new process. 1 is more secure, but 0 is faster. <doc/wiki/LoginProcess.txt>
+#     0: Default client_limit * process_limit = 1000*100 = 100k connections
+#     1: 1 * process_limit = 1*100 = 100 connections
+
+
+
+### 
+# imap, pop3, submission, managesieve
+#
+# Post-login process for handling IMAP/POP3/Submission/ManageSieve client connections.
+#
+# client_limit may be increased from the default 1 to save some CPU and memory, but it also increases the latency when one process
+# serving multiple clients it waiting for a long time for a lock or disk I/O. In future these waits may be reduced or avoided completely,
+# but for now it's not safe to set this value higher than 1 in enterprise mail systems.
+# For small mostly-idling hobbyist servers a larger number may work without problems.
+#
+# service_count can be changed from 1 if only a single UID is used for mail users.
+# This is improves performance, but it's less secure, because bugs in code may leak email data from another user's earlier connection.
+#
+# process_limit defaults to 1024, which means that the number of simultaneous connections for the protocol that this service handles
+# (IMAP, POP3, Submission, or ManageSieve) is limited by this setting. If you expect more connections, increase this value.
+# 
+# vsz_limit:
+#     Limit the process's address space (both RLIMIT_DATA and RLIMIT_AS if available). When the space is reached,
+#     some memory allocations may start failing with "Out of memory", or the kernel may kill the process with signal 9.
+#     This setting is mainly intended to prevent memory leaks from eating up all of the memory, but there can be also legitimate
+#     reasons why the process reaches this limit. For example a huge mailbox may not be accessed if this limit is too low.
+#     The default value (18446744073709551615=2^64-1) sets the limit to default_vsz_limit, while 0 disables the limit entirely.
+#
+# We need to set vsz_limit to the value of the maximum index file size.
+
+service imap {
+  service_count = 1
+  client_limit = 1
+  process_limit = 1000
+  vsz_limit = 1G
+}
+
+service pop3 {
+  service_count = 1
+  client_limit = 1
+  process_limit = 1000
+  vsz_limit = 1G
+}
+
+service managesieve {
+  service_count = 1
+  client_limit = 1
+  process_limit = 1000
+}
+
+###
+# imap-login, pop3-login, submission-login, managesieve-login
+#
+# The main purpose of login processes is to handle the IMAP, POP3, Submission (v2.3), and ManageSieve connections before the
+# user has logged in. The login processes don't need to be able to do anything else than let the user log in, so they can run
+# in highly restricted environment.
+#
+# By default they are run as a non-privileged dovenull user chrooted into a non-writable directory containing only authentication
+# UNIX sockets.
+# 
+# We want security so let's set service_count = 1
+#
+#  vsz_limit:
+#     Can be low on -login services with one process per client.
+#     (Else, set to 1GB and process_limit = process_min_avail = CPU cores)
+#
+#  process_limit:
+#     Since one login process can handle only one connection, the service's process_limit setting limits the number of users that can 
+#     be logging in at the same time (defaults to default_process_limit=99). 
+#     SSL/TLS proxying processes are also counted here, so if you're using SSL/TLS you'll need to make sure this count is higher than 
+#     the maximum number of users that can be logged in simultaneously. With TLS/SSL connections, the login process will not terminate,
+#     and remains to perform proxying between imap backend process and the client.
+#
+#  process_min_avail:
+#     To avoid startup latency for new client connections, set process_min_avail to higher than zero. That many idling processes are
+#     always kept around waiting for new connections.
+
+service imap-login {
+  chroot = login
+  # Disable non SSL IMAP
+  inet_listener imap {
+    port = 0
+  }
+  service_count = 1
+  process_limit = 1500
+  process_min_avail = 10
+  vsz_limit = 64M
+}
+
+service pop3-login {
+  chroot = login
+  # Disable non SSL POP3
+  inet_listener pop3 {
+    port = 0
+  }
+  service_count = 1
+  process_limit = 1500
+  process_min_avail = 5
+  vsz_limit = 64M
+}
+
+service managesieve-login {
+  inet_listener sieve {
+    port = 4190
+  }
+  service_count = 1
+  process_limit = 1500
+  process_min_avail = 5
+  vsz_limit = 64M
+}
+
+# dovecot: config: Warning: service auth { client_limit=1000 } is lower than required under max. load (4700)
+# dovecot: config: Warning: service anvil { client_limit=1000 } is lower than required under max. load (4603)
+service auth {
+  client_limit = 5000
+}
+
+service anvil {
+  client_limit = 5000
+}
+
+plugin {
+  sieve_user_log = {{ mail_root  }}/%u/sieve.log
+  sieve_extensions = +editheader
+  # For versions v0.3.0 and beyond 0 means that redirect is prohibited.
+  sieve_max_redirects = 0
+  # days between notifications to the same recipient
+  sieve_vacation_min_period = 1d
+  sieve_vacation_default_period = 3d
+  sieve_vacation_max_period = 30d
+}
+
+# OpenMetrics exporter (built-in since Dovecot 2.3.11)
+service stats {
+  inet_listener http {
+    address = 0.0.0.0
+    port = 9900
+  }
+}
+
+# Recommended metrics for observability
+metric auth_success {
+  filter = event=auth_request_finished AND success=yes
+}
+
+metric auth_failure {
+  filter = event=auth_request_finished AND success=no
+}
+
+metric imap_command {
+  filter = event=imap_command_finished
+  group_by = cmd_name tagged_reply_state
+}
+
+metric mail_delivery {
+  filter = event=mail_delivery_finished
+}
+
+metric mail_user_session {
+  filter = event=mail_user_session_finished
+}
+
+metric smtp_submit {
+  filter = event=smtp_submit_finished
+}
