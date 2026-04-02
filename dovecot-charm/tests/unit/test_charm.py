@@ -695,3 +695,80 @@ class TestUpdateStatus(unittest.TestCase):
             self.harness.model.unit.status.message,
             "mail-data not mounted; manage-luks disabled",
         )
+
+
+class TestTLSCertificate(unittest.TestCase):
+    """Tests for TLS certificate handling."""
+
+    def setUp(self):
+        self.harness = Harness(DovecotCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.begin()
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config(
+                {
+                    "primary-unit": "dovecot-charm/0",
+                    "mailname": "mail.example.com",
+                    "postmaster-address": "admin@example.com",
+                    "cron-mailto": "admin@example.com",
+                }
+            )
+
+    @patch("charm.DovecotCharm._systemctl")
+    @patch("charm.host.write_file")
+    def test_certificate_available_writes_files(self, mock_write_file, mock_systemctl):
+        charm = self.harness.charm
+        charm._tls = MagicMock()
+        charm._tls.private_key = "FAKE-PRIVATE-KEY"
+        charm.tls_cert_dir = MagicMock()
+        charm.tls_cert_dir.__truediv__ = lambda self, name: MagicMock(
+            __str__=lambda s: f"/etc/dovecot/private/{name}"
+        )
+
+        event = MagicMock()
+        event.certificate = "CERT-DATA"
+        event.ca = "CA-DATA"
+        event.chain = ["CHAIN-1"]
+
+        charm._on_certificate_available(event)
+
+        cert_call = mock_write_file.call_args_list[0]
+        self.assertIn("CERT-DATA", cert_call[0][1])
+        self.assertIn("CA-DATA", cert_call[0][1])
+        self.assertIn("CHAIN-1", cert_call[0][1])
+        self.assertEqual(cert_call[1]["perms"], 0o644)
+
+        key_call = mock_write_file.call_args_list[1]
+        self.assertIn("FAKE-PRIVATE-KEY", key_call[0][1])
+        self.assertEqual(key_call[1]["perms"], 0o600)
+
+    @patch("charm.DovecotCharm._systemctl")
+    @patch("charm.host.write_file")
+    def test_certificate_available_no_mailname_returns(self, mock_write_file, mock_systemctl):
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config({"mailname": ""})
+
+        event = MagicMock()
+        event.certificate = "CERT-DATA"
+        self.harness.charm._on_certificate_available(event)
+        mock_write_file.assert_not_called()
+
+    @patch("charm.DovecotCharm._systemctl")
+    @patch("charm.host.write_file")
+    def test_certificate_available_restarts_dovecot(self, mock_write_file, mock_systemctl):
+        charm = self.harness.charm
+        charm._tls = MagicMock()
+        charm._tls.private_key = "KEY"
+        charm.tls_cert_dir = MagicMock()
+        charm.tls_cert_dir.__truediv__ = lambda self, name: MagicMock(
+            __str__=lambda s: f"/etc/dovecot/private/{name}"
+        )
+
+        event = MagicMock()
+        event.certificate = "CERT"
+        event.ca = None
+        event.chain = None
+
+        charm._on_certificate_available(event)
+
+        mock_systemctl.assert_any_call("is-enabled", "dovecot")

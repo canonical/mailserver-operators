@@ -10,7 +10,7 @@ auth_verbose = yes
 auth_verbose_passwords = sha1:8
 
 # TODO: change to ssl = required once TLS relation is added (pr/5-tls)
-ssl = yes
+ssl = required
 ssl_cert = </etc/dovecot/private/{{ mailname }}.pem
 ssl_key = </etc/dovecot/private/{{ mailname }}.key
 # SSL ciphers to use, the default is:

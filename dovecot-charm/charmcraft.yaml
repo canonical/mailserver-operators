@@ -10,6 +10,8 @@ platforms:
 charm-libs:
   - lib: operator-libs-linux.apt
     version: "0"
+  - lib: tls-certificates-interface.tls_certificates
+    version: "4"
 
 name: dovecot-charm
 
@@ -43,6 +45,10 @@ storage:
 peers:
   replicas:
     interface: replicas
+
+requires:
+  certificates:
+    interface: tls-certificates
 
 config:
   options:

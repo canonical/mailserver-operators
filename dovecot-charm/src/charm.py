@@ -14,6 +14,11 @@ from pathlib import Path
 
 import jinja2
 from charmhelpers.core import host
+from charms.tls_certificates_interface.v4.tls_certificates import (
+    CertificateAvailableEvent,
+    CertificateRequestAttributes,
+    TLSCertificatesRequiresV4,
+)
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
@@ -89,6 +94,28 @@ class DovecotCharm(CharmBase):
             "ubuntu-advantage-desktop-daemon",
             "vacation",
         ]
+
+        # TLS certificates directory
+        self.tls_cert_dir = Path("/etc/dovecot/private")
+
+        # TLS certificates integration
+        self._tls = None
+        mailname = self.config.get("mailname", "")
+        if mailname:
+            self._tls = TLSCertificatesRequiresV4(
+                charm=self,
+                relationship_name="certificates",
+                certificate_requests=[
+                    CertificateRequestAttributes(
+                        common_name=mailname,
+                        sans_dns=frozenset([mailname]),
+                    )
+                ],
+                refresh_events=[self.on.config_changed],
+            )
+            self.framework.observe(
+                self._tls.on.certificate_available, self._on_certificate_available
+            )
 
     @property
     def cron_mailto(self):
@@ -661,6 +688,41 @@ class DovecotCharm(CharmBase):
         with open(fstab_path, "a") as f:
             f.write(entry)
         logger.info("fstab configured")
+
+    def _on_certificate_available(self, event: CertificateAvailableEvent):
+        """Handle TLS certificate available event."""
+        mailname = self.config.get("mailname", "")
+        if not mailname:
+            logger.warning("Certificate available but mailname is not configured")
+            return
+
+        self.tls_cert_dir.mkdir(parents=True, exist_ok=True)
+
+        cert_path = self.tls_cert_dir / f"{mailname}.pem"
+        key_path = self.tls_cert_dir / f"{mailname}.key"
+
+        cert_content = str(event.certificate)
+        if event.ca:
+            cert_content += "\n" + str(event.ca)
+        if event.chain:
+            for chain_cert in event.chain:
+                cert_content += "\n" + str(chain_cert)
+        host.write_file(str(cert_path), cert_content, perms=0o644)
+
+        if self._tls:
+            private_key = self._tls.private_key
+            if private_key:
+                host.write_file(str(key_path), str(private_key), perms=0o600)
+            else:
+                logger.error("No private key available from TLS library")
+                return
+
+        logger.info(f"TLS certificate written to {cert_path}")
+        logger.info(f"TLS private key written to {key_path}")
+
+        if self._systemctl("is-enabled", "dovecot"):
+            self._systemctl("restart", "dovecot")
+        self.unit.status = ActiveStatus()
 
 
 if __name__ == "__main__":  # pragma: nocover
