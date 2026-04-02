@@ -107,3 +107,5 @@ actions:
         description: Export format (maildir or mbox).
         enum: [maildir, mbox]
     required: [username]
+  force-sync:
+    description: Manually trigger synchronization of mail to the secondary unit.

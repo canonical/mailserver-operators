@@ -462,3 +462,64 @@ class TestGDPRTakeout(unittest.TestCase):
         self.harness.charm._on_gdpr_takeout(event)
         event.fail.assert_called_once()
         self.assertIn("ghost", event.fail.call_args[0][0])
+
+
+class TestForceSync(unittest.TestCase):
+    """Tests for the force-sync action."""
+
+    def setUp(self):
+        self.harness = Harness(DovecotCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.begin()
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config(
+                {
+                    "primary-unit": "dovecot-charm/0",
+                    "mailname": "example.com",
+                    "postmaster-address": "admin@example.com",
+                    "cron-mailto": "admin@example.com",
+                }
+            )
+
+    @patch("charm.subprocess.run")
+    def test_force_sync_success(self, mock_run):
+        mock_run.return_value = MagicMock(stdout="ok", stderr="")
+        from unittest.mock import PropertyMock
+
+        with patch.object(
+            type(self.harness.charm),
+            "_secondary_hostname",
+            new_callable=PropertyMock,
+            return_value="10.0.0.2",
+        ):
+            event = MagicMock()
+            self.harness.charm._on_force_sync(event)
+        event.set_results.assert_called_once_with({"result": "Sync completed successfully"})
+
+    def test_force_sync_not_primary(self):
+        with patch("charm.DovecotCharm._install"):
+            self.harness.update_config({"primary-unit": "dovecot-charm/999"})
+        event = MagicMock()
+        self.harness.charm._on_force_sync(event)
+        event.fail.assert_called_once_with("This action can only be run on the primary unit.")
+
+    def test_force_sync_no_secondary(self):
+        event = MagicMock()
+        self.harness.charm._on_force_sync(event)
+        event.fail.assert_called_once_with("No secondary unit found to sync to.")
+
+    @patch("charm.subprocess.run")
+    def test_force_sync_subprocess_failure(self, mock_run):
+        mock_run.side_effect = subprocess.CalledProcessError(1, "sync", stderr="fail")
+        from unittest.mock import PropertyMock
+
+        with patch.object(
+            type(self.harness.charm),
+            "_secondary_hostname",
+            new_callable=PropertyMock,
+            return_value="10.0.0.2",
+        ):
+            event = MagicMock()
+            self.harness.charm._on_force_sync(event)
+        event.fail.assert_called_once()
+        self.assertIn("fail", event.fail.call_args[0][0])

@@ -7,6 +7,7 @@
 import logging
 import os
 import shutil
+import socket
 import subprocess
 from pathlib import Path
 
@@ -34,6 +35,8 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.gdpr_archive_action, self._on_gdpr_archive)
         self.framework.observe(self.on.gdpr_delete_action, self._on_gdpr_delete)
         self.framework.observe(self.on.gdpr_takeout_action, self._on_gdpr_takeout)
+        self.framework.observe(self.on.replicas_relation_changed, self._on_replicas_changed)
+        self.framework.observe(self.on.force_sync_action, self._on_force_sync)
 
         # Paths
         self.mail_root = "/srv/mail"
@@ -54,6 +57,13 @@ class DovecotCharm(CharmBase):
         # GDPR archive/takeout directories
         self.gdpr_archive_dir = "/srv/mail/archives"
         self.gdpr_takeout_dir = "/tmp/gdpr-takeout"
+
+        # Sync to secondary
+        self.sync_smtp_aliases_target = "/usr/local/bin/sync-smtp-aliases.sh"
+        self.sync_to_secondary_target = "/usr/local/bin/sync-to-secondary.sh"
+        self.sync_to_secondary_cronjob_target = "/etc/cron.d/sync-to-secondary"
+        self.sync_to_secondary_template = "sync-to-secondary.sh.tmpl"
+        self.sync_to_secondary_cronjob_template = "sync-to-secondary_cron.tmpl"
 
         self.required_packages = [
             "cron",
@@ -140,6 +150,12 @@ class DovecotCharm(CharmBase):
         self._setup_dovecot()
         self._setup_procmail()
         shutil.copy("/etc/hostname", "/etc/mailname")
+        logger.warning("setting up ssh")
+        self._setup_ssh_keys()
+        logger.warning("finished setting up ssh")
+        if self._is_primary:
+            self._install_mail_sync_script()
+            self._setup_mail_sync_cronjob()
         self.unit.status = MaintenanceStatus("Charm install done")
 
     def _open_ports(self):
@@ -348,6 +364,114 @@ class DovecotCharm(CharmBase):
             event.set_results({"status": "success", "path": tar_path})
         except subprocess.CalledProcessError as e:
             msg = f"Failed to export mailbox for '{username}': {e.stderr}"
+            logger.error(msg)
+            event.fail(msg)
+
+    @property
+    def _secondary_hostname(self):
+        """Return the hostname/IP of the secondary unit."""
+        relation = self.model.get_relation("replicas")
+        if not relation:
+            return None
+
+        for unit in relation.units:
+            return (
+                relation.data[unit].get("hostname")
+                or relation.data[unit].get("private-address")
+                or relation.data[unit].get("ingress-address")
+            )
+
+        return None
+
+    def _setup_ssh_keys(self):
+        """Generate SSH key and share public key via peer relation."""
+        ssh_dir = Path("/root/.ssh")
+        ssh_dir.mkdir(mode=0o700, exist_ok=True)
+        key_file = ssh_dir / "id_ed25519"
+
+        if not key_file.exists():
+            logger.warning("keyfile not there")
+            os.system(f'ssh-keygen -t ed25519 -N "" -f {key_file}')
+
+        pub_key = (ssh_dir / "id_ed25519.pub").read_text().strip()
+        relation = self.model.get_relation("replicas")
+        if relation:
+            relation.data[self.unit]["public_key"] = pub_key
+            relation.data[self.unit]["hostname"] = socket.gethostname()
+
+        config_file = ssh_dir / "config"
+        if not config_file.exists():
+            config_file.write_text("Host *\n    StrictHostKeyChecking no\n")
+            config_file.chmod(0o600)
+
+    def _on_replicas_changed(self, event):
+        """Handle replicas relation changed — sync SSH authorized_keys."""
+        authorized_keys = []
+        relation = self.model.get_relation("replicas")
+
+        for unit in relation.units:
+            pk = relation.data[unit].get("public_key")
+            if pk:
+                authorized_keys.append(pk)
+
+        our_pk = relation.data[self.unit].get("public_key")
+        if our_pk:
+            authorized_keys.append(our_pk)
+
+        auth_file = Path("/root/.ssh/authorized_keys")
+        auth_file.write_text("\n".join(authorized_keys))
+        auth_file.chmod(0o600)
+
+        self._ensure_root_ssh_configs()
+
+    def _ensure_root_ssh_configs(self):
+        """Ensure PermitRootLogin is set in sshd_config."""
+        os.system(
+            "sed -i 's/^#*PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config"
+        )
+        os.system("systemctl restart ssh")
+
+    def _install_mail_sync_script(self):
+        """Install mail pool synchronization script."""
+        self.unit.status = MaintenanceStatus("Installing mail pool synchronization script")
+        template_context = {
+            "secondary_hostname": self._secondary_hostname,
+            "mail_root": self.mail_root,
+        }
+        template = self.jinja.get_template(self.sync_to_secondary_template)
+        contents = template.render(template_context)
+        host.write_file(self.sync_to_secondary_target, contents, perms=0o755)
+        self.unit.status = MaintenanceStatus("Mail pool synchronization installed")
+
+    def _setup_mail_sync_cronjob(self):
+        """Set up mail pool synchronization cronjob."""
+        self.unit.status = MaintenanceStatus("Setting up mail pool synchronization cronjob")
+        template_context = {
+            "schedule": self.config.get("sync-schedule", "*/30 * * * *"),
+        }
+        template = self.jinja.get_template(self.sync_to_secondary_cronjob_template)
+        contents = template.render(template_context)
+        host.write_file(self.sync_to_secondary_cronjob_target, contents, perms=0o644)
+        self._systemctl("restart", "cron")
+        self.unit.status = MaintenanceStatus("Mail pool synchronization cronjob has been set up")
+
+    def _on_force_sync(self, event):
+        """Force synchronization with secondary unit."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
+
+        if not self._secondary_hostname:
+            event.fail("No secondary unit found to sync to.")
+            return
+
+        try:
+            cmd = [self.sync_to_secondary_target]
+            logger.info(f"Running manual sync: {' '.join(cmd)}")
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            event.set_results({"result": "Sync completed successfully"})
+        except subprocess.CalledProcessError as e:
+            msg = f"Sync failed: {e.stderr}"
             logger.error(msg)
             event.fail(msg)
 

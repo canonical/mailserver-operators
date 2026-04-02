@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -eu
+
+# Sync using doveadm (dsync) for users that have a Maildir.
+# Avoids syncing system accounts without mailboxes.
+remote="remote:root@{{ secondary_hostname }}"
+found=0
+for user_dir in "{{ mail_root }}"/*; do
+	if [ -d "$user_dir/Maildir" ]; then
+		user="$(basename "$user_dir")"
+		doveadm backup -u "$user" "$remote"
+		found=1
+	fi
+done
+if [ "$found" -eq 0 ]; then
+	echo "No Maildir found under {{ mail_root }}; nothing to sync." >&2
+	exit 1
+fi
+touch {{ mail_root }}/.last-dsync
