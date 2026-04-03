@@ -125,3 +125,56 @@ def test_clear_queue_failure(ctx, base_state):
             base_state,
         )
     assert "postsuper" in exc_info.value.message
+
+
+# --- TLS certificate tests ---
+
+
+def test_certificate_available_writes_files(ctx, base_state, tmp_path):
+    with (
+        patch("charm.DovecotCharm._install"),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
+        patch("charm.systemd.service_reload", return_value=True),
+        ctx(ctx.on.config_changed(), base_state) as mgr,
+    ):
+        mgr.charm.tls_cert_dir = tmp_path
+        event = MagicMock()
+        event.certificate.certificate = "CERT_DATA"
+        event.certificate.ca = "CA_DATA"
+        mgr.charm._tls = MagicMock()
+        mgr.charm._tls.private_key = "KEY_DATA"
+        mgr.charm._on_certificate_available(event)
+    assert (tmp_path / "example.com.pem").exists()
+
+
+def test_certificate_available_no_mailname_returns(ctx, base_state):
+    state_in = dataclasses.replace(base_state, config={**base_state.config, "mailname": ""})
+    with (
+        patch("charm.DovecotCharm._install"),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
+        patch("charm.systemd.service_reload") as mock_service_reload,
+        ctx(ctx.on.config_changed(), state_in) as mgr,
+    ):
+        event = MagicMock()
+        mgr.charm._on_certificate_available(event)
+    mock_service_reload.assert_not_called()
+
+
+def test_certificate_available_restarts_dovecot(ctx, base_state, tmp_path):
+    with (
+        patch("charm.DovecotCharm._install"),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
+        patch("charm.systemd.service_reload", return_value=True) as mock_service_reload,
+        ctx(ctx.on.config_changed(), base_state) as mgr,
+    ):
+        mgr.charm.tls_cert_dir = tmp_path
+        event = MagicMock()
+        event.certificate.certificate = "CERT_DATA"
+        event.certificate.ca = None
+        mgr.charm._tls = MagicMock()
+        mgr.charm._tls.private_key = "KEY_DATA"
+        mgr.charm._on_certificate_available(event)
+    mock_service_reload.assert_called_with("dovecot")

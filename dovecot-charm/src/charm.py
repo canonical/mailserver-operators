@@ -18,6 +18,11 @@ from ops.charm import CharmBase
 from ops.main import main
 from ops.model import BlockedStatus, MaintenanceStatus
 
+from charmlibs.interfaces.tls_certificates import (
+    CertificateAvailableEvent,
+    CertificateRequestAttributes,
+    TLSCertificatesRequiresV4,
+)
 from constants import (
     DOVECOT_CONF_TARGET,
     DOVECOT_CONF_TEMPLATE,
@@ -61,6 +66,28 @@ class DovecotCharm(CharmBase):
         self.jinja = jinja2.Environment(
             loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True
         )
+
+        # TLS certificates directory
+        self.tls_cert_dir = Path("/etc/dovecot/private")
+
+        # TLS certificates integration
+        self._tls = None
+        mailname = self.config.get("mailname", "")
+        if mailname:
+            self._tls = TLSCertificatesRequiresV4(
+                charm=self,
+                relationship_name="certificates",
+                certificate_requests=[
+                    CertificateRequestAttributes(
+                        common_name=mailname,
+                        sans_dns=frozenset([mailname]),
+                    )
+                ],
+                refresh_events=[self.on.config_changed],
+            )
+            self.framework.observe(
+                self._tls.on.certificate_available, self._on_certificate_available
+            )
 
     def get_units(self) -> typing.List[str]:
         """Return a list of all units in the application.
@@ -247,6 +274,35 @@ class DovecotCharm(CharmBase):
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to clear Postfix queue: {e.stderr}")
             event.fail(f"Failed to run postsuper: {e.stderr}")
+
+    def _on_certificate_available(self, event: CertificateAvailableEvent):
+        """Handle TLS certificate available event."""
+        mailname = self.config.get("mailname", "")
+        if not mailname:
+            logger.warning("Certificate available but mailname not configured")
+            return
+
+        self.tls_cert_dir.mkdir(parents=True, exist_ok=True)
+
+        cert_path = self.tls_cert_dir / f"{mailname}.pem"
+        key_path = self.tls_cert_dir / f"{mailname}.key"
+
+        cert_content = str(event.certificate.certificate)
+        if event.certificate.ca:
+            cert_content += "\n" + str(event.certificate.ca)
+
+        cert_path.write_text(cert_content)
+        cert_path.chmod(0o644)
+        logger.info(f"Certificate written to {cert_path}")
+
+        private_key = self._tls.private_key
+        if private_key:
+            key_path.write_text(str(private_key))
+            key_path.chmod(0o600)
+            logger.info(f"Private key written to {key_path}")
+
+        if systemd.service_reload("dovecot"):
+            logger.info("Dovecot service reloaded with new TLS certificate")
 
 
 if __name__ == "__main__":  # pragma: nocover

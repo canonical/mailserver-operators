@@ -10,16 +10,16 @@ auth_verbose = yes
 auth_verbose_passwords = no
 
 # TODO: change to ssl = required once TLS relation is added (pr/5-tls)
-ssl = yes
-ssl_cert = </etc/dovecot/private/dovecot.pem
-ssl_key = </etc/dovecot/private/dovecot.key
-## SSL ciphers to use, the default is:
-##ssl_cipher_list = ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH
-## To disable non-EC DH, use:
-##ssl_cipher_list = ALL:!DH:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH
-#ssl_cipher_list = EECDH+AESGCM+AES128:EECDH+AESGCM+AES256:EECDH+AES128+SHA:EECDH+AES256+SHA:EDH+aRSA+AES128+SHA:EDH+aRSA+AES256+SHA:kRSA+aRSA+AES128+SHA:kRSA+aRSA+AES256+SHA
-#ssl_min_protocol = TLSv1.2
-#ssl_prefer_server_ciphers = yes
+ssl = required
+ssl_cert = </etc/dovecot/private/{{ mailname }}.pem
+ssl_key = </etc/dovecot/private/{{ mailname }}.key
+# SSL ciphers to use, the default is:
+#ssl_cipher_list = ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH
+# To disable non-EC DH, use:
+#ssl_cipher_list = ALL:!DH:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH
+ssl_cipher_list = EECDH+AESGCM+AES128:EECDH+AESGCM+AES256:EECDH+AES128+SHA:EECDH+AES256+SHA:EDH+aRSA+AES128+SHA:EDH+aRSA+AES256+SHA:kRSA+aRSA+AES128+SHA:kRSA+aRSA+AES256+SHA
+ssl_min_protocol = TLSv1.2
+ssl_prefer_server_ciphers = yes
 
 postmaster_address = {{ postmaster_address }}
 
