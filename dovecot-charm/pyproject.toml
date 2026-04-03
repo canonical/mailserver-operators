@@ -35,6 +35,10 @@ coverage-report = [
   "coverage[toml]",
   "pytest",
 ]
+static = [
+  "mypy",
+  "ops",
+]
 integration = [
   "jubilant==1.8.0",
   "pytest",

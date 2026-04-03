@@ -3,7 +3,7 @@
 
 skipsdist = true
 skip_missing_interpreters = true
-envlist = [ "lint", "unit", "coverage-report" ]
+envlist = [ "lint", "static", "unit", "coverage-report" ]
 requires = [ "tox>=4.21" ]
 no_package = true
 
@@ -45,6 +45,13 @@ commands = [
   [ "coverage", "report" ],
 ]
 dependency_groups = [ "unit" ]
+
+[env.static]
+description = "Run static type checks"
+commands = [
+  [ "mypy", "{toxinidir}/src/", "--ignore-missing-imports" ],
+]
+dependency_groups = [ "static" ]
 
 [env.coverage-report]
 description = "Create test coverage report"
