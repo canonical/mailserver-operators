@@ -176,3 +176,46 @@ def test_update_status_luks_disabled_not_mounted(ctx, base_state):
     with patch("charm.os.path.ismount", return_value=False):
         state_out = ctx.run(ctx.on.update_status(), state_in)
     assert state_out.unit_status == BlockedStatus("mail-data not mounted; manage-luks disabled")
+
+
+# --- TLS certificate tests ---
+
+
+def test_certificate_available_writes_files(ctx, base_state, tmp_path):
+    with (
+        patch("charm.DovecotCharm._install"),
+        patch("charm.DovecotCharm._systemctl", return_value=True),
+        ctx(ctx.on.config_changed(), base_state) as mgr,
+    ):
+        mgr.charm.tls_cert_dir = tmp_path
+        event = MagicMock()
+        event.certificate.certificate = "CERT_DATA"
+        event.certificate.ca = "CA_DATA"
+        mgr.charm._tls = MagicMock()
+        mgr.charm._tls.private_key = "KEY_DATA"
+        mgr.charm._on_certificate_available(event)
+    assert (tmp_path / "example.com.pem").exists()
+
+
+def test_certificate_available_no_mailname_returns(ctx, base_state):
+    state_in = dataclasses.replace(base_state, config={**base_state.config, "mailname": ""})
+    with patch("charm.DovecotCharm._install"), ctx(ctx.on.config_changed(), state_in) as mgr:
+        event = MagicMock()
+        mgr.charm._on_certificate_available(event)
+    event.certificate.assert_not_called()
+
+
+def test_certificate_available_restarts_dovecot(ctx, base_state, tmp_path):
+    with (
+        patch("charm.DovecotCharm._install"),
+        patch("charm.DovecotCharm._systemctl", return_value=True) as mock_systemctl,
+        ctx(ctx.on.config_changed(), base_state) as mgr,
+    ):
+        mgr.charm.tls_cert_dir = tmp_path
+        event = MagicMock()
+        event.certificate.certificate = "CERT_DATA"
+        event.certificate.ca = None
+        mgr.charm._tls = MagicMock()
+        mgr.charm._tls.private_key = "KEY_DATA"
+        mgr.charm._on_certificate_available(event)
+    mock_systemctl.assert_any_call("is-enabled", "dovecot")

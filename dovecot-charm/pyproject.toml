@@ -18,6 +18,7 @@ dependencies = [
     "charmlibs-apt==1.0.0",
     "jinja2",
     "pydantic[email]>=2.12.5",
+    "cryptography>=46.0.6",
     "charmlibs-systemd==1.0.0",
 ]
 
@@ -119,6 +120,13 @@ lint.per-file-ignores."tests/*" = [
   "D415",
   "D417",
   "S",
+]
+lint.per-file-ignores."src/charms/*" = [
+  "B006",
+  "B028",
+  "RUF100",
+  "S101",
+  "SIM103",
 ]
 lint.flake8-copyright.author = "Canonical Ltd."
 lint.flake8-copyright.min-file-size = 1
