@@ -28,5 +28,7 @@ Release policy and schedule
 Releases
 --------
 
-.. TODO: Add a list of releases here, with links to the individual release notes.
-         Use a toctree directive
+.. toctree::
+   :maxdepth: 1
+
+   release-notes-0001
