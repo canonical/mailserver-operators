@@ -1,0 +1,4 @@
+name: pr-5-gdpr
+type: major
+summary: GDPR data actions: archive, delete, takeout
+url: https://github.com/canonical/mailserver-operators/pull/5
