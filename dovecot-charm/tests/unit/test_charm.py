@@ -2,10 +2,11 @@
 # See LICENSE file for licensing details.
 
 from subprocess import CalledProcessError  # nosec
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import ops.testing
 import pytest
+
 
 
 def test_open_ports(ctx, base_state):
@@ -18,6 +19,42 @@ def test_open_ports(ctx, base_state):
 
     expected = {ops.testing.TCPPort(p) for p in [143, 993, 110, 995, 4190, 9900]}
     assert state_out.opened_ports == expected
+
+
+def test_install_calls_all_setup_steps(ctx, base_state):
+    with (
+        patch("charm.apt") as mock_apt,
+        patch("charm.shutil.copy") as mock_copy,
+        patch("charm.DovecotCharm._open_ports") as mock_open_ports,
+        patch("charm.DovecotCharm._setup_dovecot") as mock_dovecot,
+        patch("charm.DovecotCharm._setup_procmail") as mock_procmail,
+        patch("charm.DovecotCharm._setup_ssh_keys") as mock_setup_ssh,
+        patch("charm.DovecotCharm._install_mail_sync_script"),
+        patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
+    ):
+        ctx.run(ctx.on.install(), base_state)
+
+    mock_apt.update.assert_called_once()
+    mock_apt.add_package.assert_called_once()
+    mock_copy.assert_called_once_with("/etc/hostname", "/etc/mailname")
+    mock_open_ports.assert_called_once()
+    mock_dovecot.assert_called_once()
+    mock_procmail.assert_called_once()
+    mock_setup_ssh.assert_called_once()
+
+
+def test_is_primary_true(ctx, base_state):
+    with patch("charm.DovecotCharm._install"), ctx(ctx.on.config_changed(), base_state) as mgr:
+        assert mgr.charm._is_primary is True
+
+
+def test_is_primary_false(ctx, base_state):
+    state_in = dataclasses.replace(
+        base_state, config={**base_state.config, "primary-unit": "dovecot-charm/999"}
+    )
+    with patch("charm.DovecotCharm._install"), ctx(ctx.on.config_changed(), state_in) as mgr:
+        assert mgr.charm._is_primary is False
+
 
 
 # --- Clear-queue action tests ---
@@ -219,3 +256,54 @@ def test_certificate_available_restarts_dovecot(ctx, base_state, tmp_path):
         mgr.charm._tls.private_key = "KEY_DATA"
         mgr.charm._on_certificate_available(event)
     mock_systemctl.assert_any_call("is-enabled", "dovecot")
+
+
+# --- Force-sync action tests ---
+
+
+def test_force_sync_success(ctx, base_state):
+    mock_result = MagicMock(stdout="ok", stderr="")
+    with (
+        patch("charm.subprocess.run", return_value=mock_result),
+        patch.object(
+            DovecotCharm,
+            "_secondary_hostname",
+            new_callable=PropertyMock,
+            return_value="10.0.0.2",
+        ),
+    ):
+        ctx.run(ctx.on.action("force-sync"), base_state)
+    assert ctx.action_results == {"result": "Sync completed successfully"}
+
+
+def test_force_sync_not_primary(ctx, base_state):
+    state_in = dataclasses.replace(
+        base_state, config={**base_state.config, "primary-unit": "dovecot-charm/999"}
+    )
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(ctx.on.action("force-sync"), state_in)
+    assert "primary unit" in exc_info.value.message
+
+
+def test_force_sync_no_secondary(ctx, base_state):
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(ctx.on.action("force-sync"), base_state)
+    assert "secondary" in exc_info.value.message
+
+
+def test_force_sync_subprocess_failure(ctx, base_state):
+    with (
+        patch(
+            "charm.subprocess.run",
+            side_effect=CalledProcessError(1, "sync", stderr="fail"),
+        ),
+        patch.object(
+            DovecotCharm,
+            "_secondary_hostname",
+            new_callable=PropertyMock,
+            return_value="10.0.0.2",
+        ),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(ctx.on.action("force-sync"), base_state)
+    assert "fail" in exc_info.value.message

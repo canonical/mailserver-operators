@@ -83,3 +83,5 @@ actions:
         description: The queue to clear (deferred or all).
         default: deferred
         enum: [deferred, all]
+  force-sync:
+    description: Manually trigger synchronization of mail to the secondary unit.
