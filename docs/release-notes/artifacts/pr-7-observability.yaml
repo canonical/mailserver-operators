@@ -1,0 +1,4 @@
+name: pr-7-observability
+type: major
+summary: COS observability integration
+url: https://github.com/canonical/mailserver-operators/pull/7

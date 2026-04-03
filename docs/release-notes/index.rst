@@ -38,3 +38,4 @@ Releases
    release-notes-0005
    release-notes-0006
    release-notes-0007
+   release-notes-0008
