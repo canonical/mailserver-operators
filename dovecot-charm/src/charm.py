@@ -5,7 +5,9 @@
 """Dovecot IMAP/POP3 mail server charm."""
 
 import logging
+import os
 import shutil
+import stat
 import subprocess  # nosec
 import typing
 from pathlib import Path
@@ -68,6 +70,13 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.upgrade_charm, self._reconcile)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
+        self.framework.observe(
+            self.on.mail_data_storage_attached, self._on_mail_data_storage_attached
+        )
+        self.framework.observe(
+            self.on.mail_data_storage_detaching, self._on_mail_data_storage_detaching
+        )
+        self.framework.observe(self.on.update_status, self._on_update_status)
 
         self.framework.observe(
             self.on[PEER_RELATION_NAME].relation_created,
@@ -234,6 +243,185 @@ class DovecotCharm(CharmBase):
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to clear Postfix queue: {e.stderr}")
             event.fail(f"Failed to run postsuper: {e.stderr}")
+
+    @property
+    def _manage_luks(self):
+        """Return True if the charm should manage LUKS encryption."""
+        return bool(self.config.get("manage-luks", True))
+
+    def _mail_storage_mounted(self):
+        """Return True if mail storage is mounted."""
+        return os.path.ismount(self.mail_root)
+
+    def _on_mail_data_storage_attached(self, event):
+        """Handle storage attached event."""
+        if not self._manage_luks:
+            if self._mail_storage_mounted():
+                self.unit.status = ActiveStatus()
+            else:
+                self.unit.status = BlockedStatus("mail-data not mounted; manage-luks disabled")
+                event.defer()
+            return
+
+        if shutil.which("cryptsetup") is None:
+            logger.info("cryptsetup not installed, deferring storage setup")
+            event.defer()
+            return
+
+        dev_path = event.storage.location
+        if not dev_path:
+            logger.error("Storage attached but no location found")
+            return
+
+        try:
+            self._setup_luks_storage(dev_path)
+            self.unit.status = ActiveStatus()
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to setup LUKS storage: {e}")
+            self.unit.status = BlockedStatus("Failed to setup LUKS storage")
+        except RuntimeError as e:
+            logger.error(f"Storage validation failed: {e}")
+            self.unit.status = BlockedStatus(str(e))
+
+    def _on_mail_data_storage_detaching(self, event):
+        """Handle storage detaching event."""
+        try:
+            if os.path.ismount(self.mail_root):
+                subprocess.run(["umount", self.mail_root], check=True)  # noqa: S607
+
+            if self._manage_luks and os.path.exists("/dev/mapper/mail-data"):
+                subprocess.run(["cryptsetup", "luksClose", "mail-data"], check=True)  # noqa: S607
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to detach storage: {e}")
+
+    def _on_update_status(self, event):
+        """Handle update-status event."""
+        if not self._manage_luks:
+            if self._mail_storage_mounted():
+                self.unit.status = ActiveStatus()
+            else:
+                self.unit.status = BlockedStatus("mail-data not mounted; manage-luks disabled")
+
+    def _setup_luks_storage(self, dev_path):  # noqa: C901
+        """Set up LUKS encryption on device using keyfile."""
+        keyfile = "/etc/dovecot-charm.key"
+        mapper_name = "mail-data"
+        mapper_path = f"/dev/mapper/{mapper_name}"
+
+        if not os.path.exists(dev_path):
+            raise RuntimeError(f"Device {dev_path} does not exist")
+
+        mode = os.stat(dev_path).st_mode
+        if not stat.S_ISBLK(mode):
+            raise RuntimeError(f"{dev_path} is not a valid block device")
+
+        if not os.path.exists(keyfile):
+            logger.info(f"Generating keyfile at {keyfile}...")
+            subprocess.run(
+                ["dd", "if=/dev/urandom", f"of={keyfile}", "bs=512", "count=8"],  # noqa: S607
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            os.chmod(keyfile, 0o400)
+            logger.info("Keyfile generated successfully")
+
+        is_luks = False
+        try:
+            subprocess.run(
+                ["cryptsetup", "isLuks", dev_path],  # noqa: S607
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            is_luks = True
+            logger.info(f"{dev_path} is already a LUKS device")
+        except subprocess.CalledProcessError:
+            logger.info(f"{dev_path} is not a LUKS device")
+
+        if not is_luks:
+            logger.info(f"Formatting {dev_path} as LUKS with keyfile...")
+            subprocess.run(
+                ["cryptsetup", "luksFormat", dev_path, "--key-file", keyfile, "--batch-mode"],  # noqa: S607
+                check=True,
+                capture_output=True,
+            )
+            logger.info("LUKS format completed")
+
+        if not os.path.exists(mapper_path):
+            logger.info(f"Opening LUKS device {dev_path}...")
+            subprocess.run(
+                ["cryptsetup", "open", dev_path, mapper_name, "--key-file", keyfile],  # noqa: S607
+                check=True,
+                capture_output=True,
+            )
+            logger.info(f"LUKS device opened as {mapper_path}")
+
+            subprocess.run(["dmsetup", "mknodes"], check=True, capture_output=True)  # noqa: S607
+            logger.info("Device mapper nodes refreshed")
+
+        has_fs = False
+        try:
+            result = subprocess.run(
+                ["blkid", mapper_path],  # noqa: S607
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            if 'TYPE="ext4"' in result.stdout:
+                has_fs = True
+                logger.info(f"{mapper_path} already has ext4 filesystem")
+        except subprocess.CalledProcessError:
+            logger.info(f"{mapper_path} has no filesystem")
+
+        if not has_fs:
+            logger.info(f"Formatting {mapper_path} as ext4...")
+            subprocess.run(["mkfs.ext4", "-m", "0", mapper_path], check=True, capture_output=True)  # noqa: S607
+            logger.info("ext4 filesystem created")
+
+        self._configure_crypttab(mapper_name, dev_path, keyfile)
+        self._configure_fstab(mapper_path, self.mail_root)
+
+        if not os.path.exists(self.mail_root):
+            os.makedirs(self.mail_root)
+
+        if not os.path.ismount(self.mail_root):
+            logger.info(f"Mounting {mapper_path} to {self.mail_root}...")
+            subprocess.run(["mount", mapper_path, self.mail_root], check=True)  # noqa: S607
+            os.chmod(self.mail_root, 0o1777)  # noqa: S103
+            logger.info(f"Successfully mounted to {self.mail_root}")
+
+    def _configure_crypttab(self, mapper_name, dev_path, keyfile):
+        """Configure /etc/crypttab for persistent LUKS mapping."""
+        crypttab_path = "/etc/crypttab"
+        entry = f"{mapper_name} {dev_path} {keyfile} luks,discard,noauto\n"
+
+        if os.path.exists(crypttab_path):
+            with open(crypttab_path) as f:
+                if mapper_name in f.read():
+                    logger.info("crypttab entry already exists")
+                    return
+
+        logger.info(f"Adding crypttab entry for {mapper_name}")
+        with open(crypttab_path, "a") as f:
+            f.write(entry)
+        logger.info("crypttab configured")
+
+    def _configure_fstab(self, mapper_path, mount_point):
+        """Configure /etc/fstab for persistent mounting."""
+        fstab_path = "/etc/fstab"
+        entry = f"{mapper_path} {mount_point} ext4 defaults,noauto 0 2\n"
+
+        if os.path.exists(fstab_path):
+            with open(fstab_path) as f:
+                if mount_point in f.read():
+                    logger.info("fstab entry already exists")
+                    return
+
+        logger.info(f"Adding fstab entry for {mount_point}")
+        with open(fstab_path, "a") as f:
+            f.write(entry)
+        logger.info("fstab configured")
 
 
 if __name__ == "__main__":  # pragma: nocover
