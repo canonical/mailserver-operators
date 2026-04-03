@@ -1,0 +1,89 @@
+# Prometheus alert rules for imap-server charm
+# Adapted from canonical-is-prometheus/is/mail.rules
+# COS agent automatically injects juju_model/juju_unit topology labels
+groups:
+  - name: DovecotAlerts
+    rules:
+      - alert: DovecotMasterProcessDown
+        expr: up{job="juju_imap-server"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Dovecot master process is down"
+          description: >-
+            The Dovecot master process on {{ $labels.juju_unit }} has been
+            unreachable for more than 5 minutes.
+
+      - alert: DovecotExporterDown
+        expr: absent(dovecot_up{job="juju_imap-server"})
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dovecot exporter is not responding"
+          description: >-
+            The dovecot_exporter metrics endpoint on {{ $labels.juju_unit }}
+            has not reported in for 5 minutes.
+
+  - name: MailPortAlerts
+    rules:
+      - alert: IMAPSSLPortUnresponsive
+        expr: probe_success{instance=~".*:993"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "IMAP SSL port 993 is unresponsive"
+          description: >-
+            TCP probe to port 993 (IMAP SSL) on {{ $labels.instance }} has
+            been failing for more than 5 minutes.
+
+      - alert: POP3SSLPortUnresponsive
+        expr: probe_success{instance=~".*:995"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "POP3 SSL port 995 is unresponsive"
+          description: >-
+            TCP probe to port 995 (POP3 SSL) on {{ $labels.instance }} has
+            been failing for more than 5 minutes.
+
+      - alert: SievePortUnresponsive
+        expr: probe_success{instance=~".*:4190"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sieve port 4190 is unresponsive"
+          description: >-
+            TCP probe to port 4190 (ManageSieve) on {{ $labels.instance }}
+            has been failing for more than 5 minutes.
+
+  - name: MailSyncAlerts
+    rules:
+      - alert: MailLastDsyncStale
+        expr: >-
+          (time() - dovecot_last_dsync_timestamp{job="juju_imap-server"}) > 86400
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Last dsync is stale (>24h)"
+          description: >-
+            The last dsync timestamp on {{ $labels.juju_unit }} is older
+            than 24 hours. Mail replication may be broken.
+
+      - alert: MailStorageAlmostFull
+        expr: >-
+          (node_filesystem_avail_bytes{mountpoint="/srv/mail"}
+          / node_filesystem_size_bytes{mountpoint="/srv/mail"}) < 0.1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mail storage is almost full (<10% free)"
+          description: >-
+            The /srv/mail filesystem on {{ $labels.juju_unit }} has less
+            than 10% free space remaining.

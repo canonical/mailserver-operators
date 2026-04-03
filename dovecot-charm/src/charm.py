@@ -21,6 +21,7 @@ from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateAvailableEvent,
     CertificateRequestAttributes,
@@ -132,16 +133,18 @@ class DovecotCharm(CharmBase):
                 self._tls.on.certificate_available, self._on_certificate_available
             )
 
-    def get_units(self):
-        """Return a list of all units in the application."""
-        peer_relation = typing.cast(ops.Relation, self.model.get_relation(PEER_RELATION_NAME))
-        if not peer_relation:
-            logger.warning(
-                f"primary unit: {self.unit.name} is running without peer relation {PEER_RELATION_NAME}"
-            )
-            return [self.unit.name]
+        # COS observability
+        self._grafana_agent = COSAgentProvider(
+            self,
+            relation_name="cos-agent",
+            metrics_endpoints=[{"path": "/metrics", "port": 9900}],
+            metrics_rules_dir="./src/prometheus_alert_rules",
+            logs_rules_dir="./src/loki_alert_rules",
+            dashboard_dirs=["./src/grafana_dashboards"],
+            refresh_events=[self.on.config_changed],
+        )
 
-        units = [unit.name for unit in peer_relation.units]
+    def get_units(self):
         if self.unit.name not in units:
             units.append(self.unit.name)
         return units

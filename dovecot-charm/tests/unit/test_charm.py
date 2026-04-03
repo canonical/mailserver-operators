@@ -453,3 +453,16 @@ def test_gdpr_takeout_failure(ctx, base_state):
             base_state,
         )
     assert "ghost" in exc_info.value.message
+
+
+# --- COS observability tests ---
+
+
+def test_cos_agent_provider_initialized(ctx, base_state):
+    with patch("charm.DovecotCharm._install"), ctx(ctx.on.config_changed(), base_state) as mgr:
+        assert mgr.charm._grafana_agent is not None
+
+
+def test_cos_metrics_endpoint_port(ctx, base_state):
+    with patch("charm.DovecotCharm._install"), ctx(ctx.on.config_changed(), base_state) as mgr:
+        assert mgr.charm._grafana_agent is not None

@@ -10,6 +10,8 @@ platforms:
 charm-libs:
   - lib: tls-certificates-interface.tls_certificates
     version: "4"
+  - lib: grafana-agent.cos_agent
+    version: "0"
 
 name: dovecot-charm
 
@@ -29,6 +31,7 @@ parts:
     source: .
     stage:
     - templates
+    - src
 
 storage:
   mail-data:
@@ -46,6 +49,10 @@ peers:
 requires:
   certificates:
     interface: tls-certificates
+
+provides:
+  cos-agent:
+    interface: cos_agent
 
 config:
   options:
