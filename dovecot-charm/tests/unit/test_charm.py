@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 
 from subprocess import CalledProcessError  # nosec
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, PropertyMock, mock_open, patch
 
 import ops.testing
 import pytest
@@ -307,3 +307,149 @@ def test_force_sync_subprocess_failure(ctx, base_state):
     ):
         ctx.run(ctx.on.action("force-sync"), base_state)
     assert "fail" in exc_info.value.message
+
+
+# --- GDPR archive action tests ---
+
+
+def test_gdpr_archive_compressed(ctx, base_state):
+    mock_result = MagicMock(returncode=0)
+    with (
+        patch("charm.subprocess.run", return_value=mock_result),
+        patch("charm.os.makedirs"),
+        patch("charm.shutil.rmtree"),
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-archive", params={"username": "alice", "compress": True}),
+            base_state,
+        )
+    assert ctx.action_results["status"] == "success"
+    assert "alice.tar.gz" in ctx.action_results["path"]
+
+
+def test_gdpr_archive_uncompressed(ctx, base_state):
+    mock_result = MagicMock(returncode=0)
+    with (
+        patch("charm.subprocess.run", return_value=mock_result),
+        patch("charm.os.makedirs"),
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-archive", params={"username": "alice", "compress": False}),
+            base_state,
+        )
+    assert ctx.action_results["status"] == "success"
+    assert "alice" in ctx.action_results["path"]
+
+
+def test_gdpr_archive_failure(ctx, base_state):
+    with (
+        patch(
+            "charm.subprocess.run",
+            side_effect=CalledProcessError(1, "doveadm", stderr="error"),
+        ),
+        patch("charm.os.makedirs"),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-archive", params={"username": "alice", "compress": False}),
+            base_state,
+        )
+    assert "error" in exc_info.value.message
+
+
+# --- GDPR delete action tests ---
+
+
+def test_gdpr_delete_no_confirm(ctx, base_state):
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(
+            ctx.on.action("gdpr-delete", params={"username": "alice", "confirm": False}),
+            base_state,
+        )
+    assert "confirm" in exc_info.value.message.lower()
+
+
+def test_gdpr_delete_confirmed(ctx, base_state):
+    with (
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+        patch("charm.os.path.exists", return_value=True),
+        patch("charm.shutil.rmtree"),
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-delete", params={"username": "alice", "confirm": True}),
+            base_state,
+        )
+    assert ctx.action_results["status"] == "success"
+
+
+def test_gdpr_delete_no_mail_dir(ctx, base_state):
+    with (
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+        patch("charm.os.path.exists", return_value=False),
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-delete", params={"username": "alice", "confirm": True}),
+            base_state,
+        )
+    assert ctx.action_results["status"] == "success"
+
+
+def test_gdpr_delete_expunge_fails(ctx, base_state):
+    with (
+        patch(
+            "charm.subprocess.run",
+            side_effect=CalledProcessError(1, "doveadm", stderr="oops"),
+        ),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-delete", params={"username": "alice", "confirm": True}),
+            base_state,
+        )
+    assert "oops" in exc_info.value.message
+
+
+# --- GDPR takeout action tests ---
+
+
+def test_gdpr_takeout_maildir(ctx, base_state):
+    with (
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+        patch("charm.os.makedirs"),
+        patch("charm.shutil.rmtree"),
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-takeout", params={"username": "alice", "format": "maildir"}),
+            base_state,
+        )
+    assert ctx.action_results["status"] == "success"
+
+
+def test_gdpr_takeout_mbox(ctx, base_state):
+    with (
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0, stdout="mail content")),
+        patch("charm.os.makedirs"),
+        patch("charm.shutil.rmtree"),
+        patch("builtins.open", mock_open()),
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-takeout", params={"username": "alice", "format": "mbox"}),
+            base_state,
+        )
+    assert ctx.action_results["status"] == "success"
+
+
+def test_gdpr_takeout_failure(ctx, base_state):
+    with (
+        patch(
+            "charm.subprocess.run",
+            side_effect=CalledProcessError(1, "doveadm", stderr="ghost"),
+        ),
+        patch("charm.os.makedirs"),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-takeout", params={"username": "alice", "format": "maildir"}),
+            base_state,
+        )
+    assert "ghost" in exc_info.value.message
