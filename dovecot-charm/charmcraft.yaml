@@ -1,5 +1,5 @@
-# This file configures Charmcraft.
-# See https://juju.is/docs/sdk/charmcraft-config for guidance.
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
 
 type: charm
 base: ubuntu@24.04

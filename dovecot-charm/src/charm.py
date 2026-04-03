@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-# Copyright 2024 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Dovecot IMAP/POP3 mail server charm."""
 
 import logging
-import os
 import shutil
 import subprocess
 from pathlib import Path
 
 import jinja2
 from charmhelpers.core import host
+from charms.operator_libs_linux.v0 import apt
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
-
-from charms.operator_libs_linux.v0 import apt
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,6 @@ import typing
 
 import ops
 import ops.testing
-
 from charm import Charm
 
 
