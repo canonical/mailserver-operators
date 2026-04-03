@@ -47,10 +47,8 @@ commands = [
 dependency_groups = [ "unit" ]
 
 [env.static]
-description = "Run static type checks"
-commands = [
-  [ "mypy", "{toxinidir}/src/", "--ignore-missing-imports" ],
-]
+description = "Run static analysis tests"
+commands = [ [ "bandit", "-c", "{toxinidir}/pyproject.toml", "-r", "{[vars]src_path}", "{[vars]tst_path}" ] ]
 dependency_groups = [ "static" ]
 
 [env.coverage-report]

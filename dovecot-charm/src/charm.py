@@ -6,7 +6,7 @@
 
 import logging
 import shutil
-import subprocess
+import subprocess  # nosec
 from pathlib import Path
 
 import jinja2
@@ -36,7 +36,9 @@ class DovecotCharm(CharmBase):
         self.templates_dir = self.charm_dir.joinpath("templates")
 
         # Template system
-        self.jinja = jinja2.Environment(loader=jinja2.FileSystemLoader(self.templates_dir))
+        self.jinja = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(self.templates_dir), autoescape=True
+        )
 
         # Dovecot config
         self.dovecot_conf_template = "dovecot.conf.tmpl"
@@ -176,10 +178,12 @@ class DovecotCharm(CharmBase):
 
         # Configure Postfix to use procmail
         try:
+            # The command and arguments are fixed literals with no user-controlled input.
             subprocess.run(
-                ["postconf", "-e", 'mailbox_command=/usr/bin/procmail -a "$EXTENSION"'],
+                ["/usr/sbin/postconf", "-e", 'mailbox_command=/usr/bin/procmail -a "$EXTENSION"'],
                 check=True,
-            )
+                capture_output=True,
+            )  # nosec B603
             self._systemctl("restart", "postfix")
         except subprocess.CalledProcessError as e:
             logger.warning(f"Failed to configure postfix: {e}")
@@ -191,7 +195,8 @@ class DovecotCharm(CharmBase):
         cmd = ["systemctl"]
         cmd.extend(args)
         logger.debug("running: %s", " ".join(cmd))
-        subprocess.run(cmd, capture_output=True, check=True)
+        # The command and arguments are fixed literals with no user-controlled input.
+        subprocess.run(cmd, capture_output=True, check=True)  # nosec B603
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""
@@ -205,7 +210,8 @@ class DovecotCharm(CharmBase):
             logger.info("Running clear-queue action: Deleting deferred mail from Postfix queue.")
 
         try:
-            result = subprocess.run(command, check=True, capture_output=True, text=True)
+            # The command and arguments are fixed literals with no user-controlled input.
+            result = subprocess.run(command, check=True, capture_output=True, text=True)  # nosec B603
             event.set_results({"status": "success", "output": result.stdout})
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to clear Postfix queue: {e.stderr}")

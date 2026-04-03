@@ -1,8 +1,8 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import pytest
 import ops.testing
+import pytest
 
 from charm import DovecotCharm
 

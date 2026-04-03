@@ -2,11 +2,11 @@
 # See LICENSE file for licensing details.
 
 import dataclasses
-from subprocess import CalledProcessError
+from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
 
-import pytest
 import ops.testing
+import pytest
 from ops.model import ActiveStatus, BlockedStatus
 
 # --- Config validation tests ---
@@ -101,18 +101,16 @@ def test_install_calls_all_setup_steps(ctx, base_state):
 
 
 def test_is_primary_true(ctx, base_state):
-    with patch("charm.DovecotCharm._install"):
-        with ctx(ctx.on.config_changed(), base_state) as mgr:
-            assert mgr.charm._is_primary is True
+    with patch("charm.DovecotCharm._install"), ctx(ctx.on.config_changed(), base_state) as mgr:
+        assert mgr.charm._is_primary is True
 
 
 def test_is_primary_false(ctx, base_state):
     state_in = dataclasses.replace(
         base_state, config={**base_state.config, "primary-unit": "dovecot-charm/999"}
     )
-    with patch("charm.DovecotCharm._install"):
-        with ctx(ctx.on.config_changed(), state_in) as mgr:
-            assert mgr.charm._is_primary is False
+    with patch("charm.DovecotCharm._install"), ctx(ctx.on.config_changed(), state_in) as mgr:
+        assert mgr.charm._is_primary is False
 
 
 # --- Clear-queue action tests ---
@@ -151,13 +149,15 @@ def test_clear_queue_all(ctx, base_state):
 
 
 def test_clear_queue_failure(ctx, base_state):
-    with patch(
-        "charm.subprocess.run",
-        side_effect=CalledProcessError(1, "postsuper", stderr="error msg"),
+    with (
+        patch(
+            "charm.subprocess.run",
+            side_effect=CalledProcessError(1, "postsuper", stderr="error msg"),
+        ),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
     ):
-        with pytest.raises(ops.testing.ActionFailed) as exc_info:
-            ctx.run(
-                ctx.on.action("clear-queue", params={"queue": "deferred"}),
-                base_state,
-            )
+        ctx.run(
+            ctx.on.action("clear-queue", params={"queue": "deferred"}),
+            base_state,
+        )
     assert "postsuper" in exc_info.value.message
