@@ -3,7 +3,7 @@
 
 skipsdist = true
 skip_missing_interpreters = true
-envlist = [ "fmt", "lint", "unit", "coverage-report" ]
+envlist = [ "lint", "unit", "coverage-report" ]
 requires = [ "tox>=4.21" ]
 no_package = true
 

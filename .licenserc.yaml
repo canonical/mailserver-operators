@@ -29,4 +29,5 @@ header:
   - 'docs/release-notes/template/*.yaml'
   - 'uv.lock'
   - '**/templates/**'
+  - '**/lib/**'
   comment: on-failure
