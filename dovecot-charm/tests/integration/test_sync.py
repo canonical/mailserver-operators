@@ -20,7 +20,6 @@ def deploy_two_units(juju, dovecot_charm):
     }
     juju.config(APP_NAME, config)
     status = juju.status()
-    status.apps[APP_NAME].units
     if len(status.apps[APP_NAME].units) < 2:
         logging.info("Adding the second unit...")
         juju.add_unit(APP_NAME, num_units=1)
@@ -121,7 +120,7 @@ def _verify_imap(juju, unit_name, subject, retries=5):
             mail = imaplib.IMAP4_SSL(unit_ip, port=993, ssl_context=context)
             mail.login("syncuser", "password")
             mail.select("inbox")
-            typ, data = mail.search(None, f'(HEADER Subject "{subject}")')
+            _typ, data = mail.search(None, f'(HEADER Subject "{subject}")')
             mail.close()
             mail.logout()
 

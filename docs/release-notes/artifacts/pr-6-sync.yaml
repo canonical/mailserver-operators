@@ -1,0 +1,4 @@
+name: pr-6-sync
+type: minor
+summary: Sync integration test suite
+url: https://github.com/canonical/mailserver-operators/pull/6
