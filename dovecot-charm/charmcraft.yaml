@@ -59,10 +59,6 @@ config:
         Format: "*/30 * * * *" (every 30 minutes)
       default: "*/30 * * * *"
       type: string
-    manage-luks:
-      description: Whether the charm manages LUKS encryption on mail-data storage
-      type: boolean
-      default: true
 
 actions:
   clear-queue:

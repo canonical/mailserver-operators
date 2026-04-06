@@ -39,7 +39,7 @@ Added the initial Dovecot IMAP/POP3 charm scaffold. The charm validates four req
 
 Relevant links:
 
-* `PR <https://github.com/canonical/mailserver-operators/pull/1>`_
+* `PR <https://github.com/canonical/mailserver-operators/pull/2>`_
 
 Bug fixes
 ---------

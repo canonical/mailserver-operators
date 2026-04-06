@@ -37,7 +37,7 @@ class DovecotCharm(CharmBase):
 
         # Template system
         self.jinja = jinja2.Environment(
-            loader=jinja2.FileSystemLoader(self.templates_dir), autoescape=True
+            loader=jinja2.FileSystemLoader(self.templates_dir), autoescape=False
         )
 
         # Dovecot config
@@ -200,7 +200,7 @@ class DovecotCharm(CharmBase):
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""
-        queue_to_clear = event.params["queue"]
+        queue_to_clear = event.params.get("queue", "deferred")
         command = ["postsuper", "-d", "ALL"]
 
         if queue_to_clear == "all":
