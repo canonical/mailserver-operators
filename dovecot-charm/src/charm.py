@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # Paths
 MAIL_ROOT = "/srv/mail"
 ENCRYPTED_MOUNTPOINT = "/srv"
-TEMPLATES_DIR = Path(__file__).parent.joinpath("templates")
+TEMPLATES_DIR = Path(__file__).parent.parent.joinpath("templates")
 
 # Dovecot config
 DOVECOT_CONF_TEMPLATE = "dovecot.conf.tmpl"
