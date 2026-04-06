@@ -7,10 +7,6 @@ base: ubuntu@24.04
 platforms:
   amd64:
 
-charm-libs:
-  - lib: operator-libs-linux.apt
-    version: "0"
-
 name: dovecot-charm
 
 summary: Dovecot IMAP/POP3 mail server charm

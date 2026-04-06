@@ -17,6 +17,7 @@ dependencies = [
     "charmhelpers>=1.2.1",
     "charmlibs-apt==1.0.0",
     "jinja2",
+    "pydantic[email]>=2.12.5",
 ]
 
 [dependency-groups]

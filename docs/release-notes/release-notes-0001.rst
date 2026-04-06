@@ -1,9 +1,9 @@
 .. _release_notes_release_notes_0001:
 
-Dovecot release notes – 2.3/edge
+Dovecot charm release notes – 2.3/edge
 =================================
 
-These release notes cover new features and changes in Dovecot.
+These release notes cover new features and changes in Dovecot charm.
 
 Main features:
 

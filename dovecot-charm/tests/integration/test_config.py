@@ -6,22 +6,33 @@ import logging
 import jubilant
 
 
-def test_packages_installed(juju: jubilant.Juju, dovecot_charm: str):
-    """Verify required packages are installed."""
-    logging.info("Checking if dovecot-lmtpd is installed...")
-    juju.exec("dpkg -l | grep dovecot-lmtpd", unit=f"{dovecot_charm}/0")
+def test_dovecot_protocol_responses(juju: jubilant.Juju, dovecot_charm: str):
+    """Verify Dovecot responds to simple IMAP and POP3 commands."""
+    unit_name = f"{dovecot_charm}/0"
 
+    logging.info("Checking IMAP response on port 143...")
+    juju.exec(
+        "curl -fsS --max-time 10 --url imap://127.0.0.1:143 --request CAPABILITY | grep -q 'CAPABILITY'",
+        unit=unit_name,
+    )
 
-def test_ports_listening(juju: jubilant.Juju, dovecot_charm: str):
-    """Verify mail ports are open/listening."""
-    ports = [143, 993, 110, 995]
+    logging.info("Checking IMAPS response on port 993...")
+    juju.exec(
+        "curl -fsS --insecure --max-time 10 --url imaps://127.0.0.1:993 --request CAPABILITY | grep -q 'CAPABILITY'",
+        unit=unit_name,
+    )
 
-    logging.info("Checking listening ports...")
+    logging.info("Checking POP3 response on port 110...")
+    juju.exec(
+        "curl -fsS --max-time 10 --url pop3://127.0.0.1:110 --request CAPA | grep -Eq '(\\+OK|CAPA)'",
+        unit=unit_name,
+    )
 
-    for port in ports:
-        logging.info(f"Checking port {port}...")
-        cmd = f"ss -tln | grep ':{port} '"
-        juju.exec(cmd, unit=f"{dovecot_charm}/0")
+    logging.info("Checking POP3S response on port 995...")
+    juju.exec(
+        "curl -fsS --insecure --max-time 10 --url pop3s://127.0.0.1:995 --request CAPA | grep -Eq '(\\+OK|CAPA)'",
+        unit=unit_name,
+    )
 
 
 def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
