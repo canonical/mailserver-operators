@@ -6,10 +6,10 @@ Like any Juju charm, this charm supports one-line deployment, configuration, int
 
 * Multi-protocol mail server: IMAP, IMAPS, POP3, POP3S, Sieve, and LMTP
 * TLS/SSL encryption with configurable cipher suites
-* Mail filtering via Sieve and Procmail
+* Mail filtering with Sieve and Procmail
 * Multi-unit deployments with peer-relation-based mail synchronisation
-* Scheduled mail syncing between primary and secondary units via cron
-* Postfix mail queue management via the `clear-queue` action
+* Scheduled mail syncing between primary and secondary units using cron
+* Postfix mail queue management using the `clear-queue` action
 
 For information about how to deploy, integrate, and manage this charm, see the [Dovecot charm documentation](https://github.com/canonical/mailserver-operators/tree/main/docs).
 
@@ -49,7 +49,7 @@ See [`charmcraft.yaml`](dovecot-charm/charmcraft.yaml) for all available configu
 
 ## Integrations
 
-The charm uses a **`replicas`** peer relation to synchronise mail between units in a multi-unit deployment. The primary unit is designated via the `primary-unit` configuration option.
+The charm uses a **`replicas`** peer relation to synchronise mail between units in a multi-unit deployment. The primary unit is designated with the `primary-unit` configuration option.
 
 ## Learn more
 
