@@ -7,6 +7,17 @@ from unittest.mock import patch
 from ops.model import BlockedStatus
 
 
+def test_config_missing_multiple_blocks(ctx, base_state):
+    state_in = dataclasses.replace(
+        base_state, config={**base_state.config, "mailname": "", "cron-mailto": ""}
+    )
+    with patch("charm.DovecotCharm._install"):
+        state_out = ctx.run(ctx.on.config_changed(), state_in)
+    assert state_out.unit_status == BlockedStatus(
+        "Invalid charm configuration, check logs for details"
+    )
+
+
 def test_config_missing_mailname_blocks(ctx, base_state):
     state_in = dataclasses.replace(base_state, config={**base_state.config, "mailname": ""})
     with patch("charm.DovecotCharm._install"):

@@ -13,7 +13,6 @@ summary: Dovecot IMAP/POP3 mail server charm
 
 description: |
   Deploys and configures Dovecot as an IMAP/POP3 mail server.
-  Intended for Canonical IS team use.
 
 parts:
   charm:
@@ -34,25 +33,33 @@ peers:
 config:
   options:
     cron-mailto:
-      description: Mail address to send cronjobs output to
+      description: |
+        Email address where cron job output and system notifications will be delivered.
+        This address receives alerts from automated tasks and system processes.
       default: ""
       type: string
     mailname:
-      description: Mail server mailname
+      description: |
+        The fully qualified domain name (FQDN) or hostname for this mail server.
+        Used to identify outgoing mail and should match your server's hostname.
       default: ""
       type: string
     postmaster-address:
-      description: Postmaster email address
+      description: |
+        Email address of the postmaster or mail system administrator.
+        Used as the sender for system-generated messages and bounce notifications.
       default: ""
       type: string
     primary-unit:
-      description: Primary unit
+      description: |
+        The primary unit in a replicated charm deployment (e.g., 'dovecot-charm/0').
+        Only the primary unit receives incoming mail; replicas are read-only.
       default: ""
       type: string
     sync-schedule:
       description: |
-        Cron schedule for syncing mail to secondary unit.
-        Format: "*/30 * * * *" (every 30 minutes)
+        Cron schedule for syncing mail from primary to secondary units.
+        Format: standard cron expression (e.g., "*/30 * * * *" for every 30 minutes).
       default: "*/30 * * * *"
       type: string
 

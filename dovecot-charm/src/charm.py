@@ -49,6 +49,9 @@ REQUIRED_PACKAGES = [
     "vacation",
 ]
 
+HOSTNAME_FILE = "/etc/hostname"
+MAILNAME_FILE = "/etc/mailname"
+
 
 class DovecotCharm(CharmBase):
     """Dovecot IMAP/POP3 mail server charm."""
@@ -59,6 +62,7 @@ class DovecotCharm(CharmBase):
         # Events
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.upgrade_charm, self._on_install)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
 
         # Template system
@@ -67,10 +71,11 @@ class DovecotCharm(CharmBase):
         )
 
     def _get_dovecot_config(self):
-        """Return True if all required config options are set."""
+        """Return the DovecotConfig if all required config options are set, false otherwise."""
         try:
             return DovecotConfig.from_charm(self.config)
         except DovecotConfigInvalidError as exc:
+            logger.exception(f"Configuration validation error: {exc}")
             match exc.errors():
                 case [{"loc": ("cron_mailto",), "msg": msg}]:
                     self.unit.status = BlockedStatus(f"Invalid cron-mailto: {msg}")
@@ -81,7 +86,9 @@ class DovecotCharm(CharmBase):
                 case [{"loc": ("primary_unit",), "msg": msg}]:
                     self.unit.status = BlockedStatus(f"Invalid primary-unit: {msg}")
                 case _:
-                    self.unit.status = BlockedStatus("Invalid charm configuration")
+                    self.unit.status = BlockedStatus(
+                        "Invalid charm configuration, check logs for details"
+                    )
             return False
 
     @property
@@ -109,8 +116,8 @@ class DovecotCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Installing required dependencies")
         apt.update()
         apt.add_package(REQUIRED_PACKAGES)
-        shutil.copy("/etc/hostname", "/etc/mailname")
-        self.unit.status = MaintenanceStatus("Charm install done")
+        shutil.copy(HOSTNAME_FILE, MAILNAME_FILE)
+        self.unit.status = MaintenanceStatus("Charm installation done")
 
     def _config(self, dovecot_config: DovecotConfig):
         """Perform basic installation."""
@@ -139,9 +146,30 @@ class DovecotCharm(CharmBase):
         template = self.jinja.get_template(DOVECOT_CONF_TEMPLATE)
         contents = template.render(template_context)
         host.write_file(DOVECOT_CONF_TARGET, contents, perms=0o644)
+        if not self._validate_dovecot_config(dovecot_config):
+            self.unit.status = BlockedStatus(
+                "Invalid Dovecot configuration, check logs for details"
+            )
+            return
         if self._systemctl("is-enabled", "dovecot"):
             self._systemctl("restart", "dovecot")
+        else:
+            self._systemctl("start", "dovecot")
         self.unit.status = MaintenanceStatus("Dovecot configuration updated")
+
+    def _validate_dovecot_config(self, config: DovecotConfig) -> bool:
+        """Validate the Dovecot configuration."""
+        try:
+            # The command and arguments are fixed literals with no user-controlled input.
+            subprocess.run(
+                ["/usr/bin/doveconf", "-c", DOVECOT_CONF_TARGET],
+                check=True,
+                capture_output=True,
+            )  # nosec B603
+            return True
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"Failed to validate dovecot configuration: {e}")
+            return False
 
     def _setup_procmail(self):
         """Set up and configure procmail default file."""
@@ -188,6 +216,10 @@ class DovecotCharm(CharmBase):
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""
         queue_to_clear = event.params.get("queue", "deferred")
+
+        if queue_to_clear not in ("deferred", "all"):
+            event.fail("Invalid queue parameter, must be 'deferred' or 'all'")
+            return
         command = ["postsuper", "-d", "ALL"]
 
         if queue_to_clear == "all":
