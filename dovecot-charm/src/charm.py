@@ -8,7 +8,6 @@ import logging
 import shutil
 import subprocess  # nosec
 from pathlib import Path
-from typing import Any, Mapping
 
 import jinja2
 from charmhelpers.core import host
@@ -16,14 +15,8 @@ from charmlibs import apt
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    EmailStr,
-    Field,
-    ValidationError,
-    field_validator,
-)
+
+from dovecot_config import DovecotConfig, DovecotConfigInvalidError
 
 logger = logging.getLogger(__name__)
 
@@ -57,39 +50,6 @@ REQUIRED_PACKAGES = [
 ]
 
 
-class DovecotConfig(BaseModel):
-    """Pydantic model for validating charm configuration."""
-
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    cron_mailto: EmailStr = Field(..., description="Email address for cron output")
-    mailname: str = Field(..., description="Mailname for the server")
-    postmaster_address: EmailStr = Field(..., description="Postmaster email address")
-    primary_unit: str = Field(..., description="Name of the primary unit")
-
-    @field_validator("mailname", "postmaster_address", "primary_unit", mode="before")
-    @classmethod
-    def _reject_empty_values(cls, value: Any) -> Any:
-        """Ensure string config values are not empty or whitespace-only."""
-        if isinstance(value, str) and not value.strip():
-            raise ValueError("must not be empty")
-        return value
-
-    @classmethod
-    def from_charm(cls, config: Mapping[str, Any]) -> "DovecotConfig":
-        """Create a DovecotConfig instance from charm configuration."""
-        try:
-            return cls(
-                cron_mailto=config.get("cron-mailto"),
-                mailname=config.get("mailname"),
-                postmaster_address=config.get("postmaster-address"),
-                primary_unit=config.get("primary-unit"),
-            )
-        except ValidationError as e:
-            logger.exception(f"Configuration validation error: {e}")
-            raise
-
-
 class DovecotCharm(CharmBase):
     """Dovecot IMAP/POP3 mail server charm."""
 
@@ -110,7 +70,7 @@ class DovecotCharm(CharmBase):
         """Return True if all required config options are set."""
         try:
             return DovecotConfig.from_charm(self.config)
-        except ValidationError as exc:
+        except DovecotConfigInvalidError as exc:
             match exc.errors():
                 case [{"loc": ("cron_mailto",), "msg": msg}]:
                     self.unit.status = BlockedStatus(f"Invalid cron-mailto: {msg}")
