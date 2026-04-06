@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import ops.testing
 import pytest
-from ops.model import BlockedStatus
 
 
 def test_open_ports(ctx, base_state):
