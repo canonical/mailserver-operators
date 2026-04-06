@@ -106,11 +106,10 @@ class DovecotCharm(CharmBase):
             loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True
         )
 
-    def _config_is_valid(self):
+    def _get_dovecot_config(self):
         """Return True if all required config options are set."""
         try:
-            DovecotConfig.from_charm(self.config)
-            return True
+            return DovecotConfig.from_charm(self.config)
         except ValidationError as exc:
             match exc.errors():
                 case [{"loc": ("cron_mailto",), "msg": msg}]:
@@ -132,7 +131,7 @@ class DovecotCharm(CharmBase):
 
     def _on_install(self, event):
         """Install and configure charm."""
-        if not self._config_is_valid():
+        if not self._get_dovecot_config():
             return
         self._install()
         self.unit.status = ActiveStatus()
@@ -140,7 +139,7 @@ class DovecotCharm(CharmBase):
     def _on_config_changed(self, event):
         """Handle changed configuration."""
         self.unit.status = MaintenanceStatus("Configuring charm")
-        if not (dovecot_config := self._config_is_valid()):
+        if not (dovecot_config := self._get_dovecot_config()):
             return
         self._config(dovecot_config)
         self.unit.status = ActiveStatus()
