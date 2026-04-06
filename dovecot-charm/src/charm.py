@@ -11,7 +11,7 @@ from pathlib import Path
 
 import jinja2
 from charmhelpers.core import host
-from charms.operator_libs_linux.v0 import apt
+from charmlibs import apt
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
@@ -37,7 +37,7 @@ class DovecotCharm(CharmBase):
 
         # Template system
         self.jinja = jinja2.Environment(
-            loader=jinja2.FileSystemLoader(self.templates_dir), autoescape=False
+            loader=jinja2.FileSystemLoader(self.templates_dir), autoescape=True
         )
 
         # Dovecot config

@@ -15,6 +15,7 @@ classifiers = [
 dependencies = [
     "ops==3.6.0",
     "charmhelpers>=1.2.1",
+    "charmlibs-apt==1.0.0",
     "jinja2",
 ]
 

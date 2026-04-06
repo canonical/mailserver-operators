@@ -204,28 +204,3 @@ max-complexity = 10
 
 [tool.codespell]
 skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
-
-[dependency-groups]
-dev = [
-    "cryptography==46.0.6",
-    "jsonschema==4.26.0",
-    "jubilant>=1.6.1",
-    "juju>=3.6.1.3",
-    "lightkube==0.19.1",
-    "ops==3.6.0",
-    "pydantic==2.12.5",
-    "pytest>=9.0.1",
-    "pytest-asyncio>=1.3.0",
-    "pytest-operator>=0.31.0",
-    "requests>=2.32.5",
-    "rpds-py==0.30.0",
-    "tox-uv>=1.33.4",
-]
-integration = [
-    "allure-pytest>=2.8.18",
-    "allure-pytest-collection-report @ git+https://github.com/canonical/data-platform-workflows@v24.0.0#subdirectory=python/pytest_plugins/allure_pytest_collection_report",
-    "jubilant==1.7.0",
-    "pytest",
-    "pytest-asyncio",
-    "pytest-operator",
-]
