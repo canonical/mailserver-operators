@@ -86,5 +86,5 @@ def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
     result = juju.run(unit_name, "clear-queue", params={"queue": "all"})
     assert result.status == "completed"
     logging.info(f"Action output: {result.results.get('output')}")
-    time.sleep(5)
+    time.sleep(15)
     _assert_queue_empty(juju, unit_name)
