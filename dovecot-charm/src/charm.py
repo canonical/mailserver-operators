@@ -224,7 +224,6 @@ class DovecotCharm(CharmBase):
             self.unit.status = BlockedStatus(f"Failed to configure postfix: {e.stderr}")
             return
 
-
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""
         queue_to_clear = event.params.get("queue", "deferred")
