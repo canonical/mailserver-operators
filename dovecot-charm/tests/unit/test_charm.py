@@ -9,10 +9,10 @@ import pytest
 
 
 def test_open_ports(ctx, base_state):
-    def fake_config(self, dovecot_config):
-        self._open_ports()
-
-    with patch("charm.DovecotCharm._config", fake_config):
+    with (
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
+    ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
 
     expected = {ops.testing.TCPPort(p) for p in [143, 993, 110, 995, 4190, 9900]}

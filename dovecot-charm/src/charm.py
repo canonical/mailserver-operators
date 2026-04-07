@@ -140,10 +140,10 @@ class DovecotCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Charm installation done")
 
     def _config(self, dovecot_config: DovecotConfig):
-        """Perform basic installation."""
+        """Perform basic configuration."""
         self._setup_dovecot(dovecot_config)
         self._setup_procmail()
-        self.unit.status = MaintenanceStatus("Charm configuration done")
+        self._open_ports()
 
     def _open_ports(self):
         """Open mail ports."""
@@ -172,7 +172,7 @@ class DovecotCharm(CharmBase):
             )
             return
         if systemd.service_running("dovecot"):
-            systemd.service_restart("dovecot")
+            systemd.service_reload("dovecot", restart_on_failure=True)
         else:
             systemd.service_start("dovecot")
         self.unit.status = MaintenanceStatus("Dovecot configuration updated")
@@ -215,11 +215,15 @@ class DovecotCharm(CharmBase):
                 check=True,
                 capture_output=True,
             )  # nosec B603
-            systemd.service_restart("postfix")
+            if systemd.service_running("postfix"):
+                systemd.service_reload("postfix", restart_on_failure=True)
+            else:
+                systemd.service_start("postfix")
         except subprocess.CalledProcessError as e:
             logger.warning(f"Failed to configure postfix: {e}")
+            self.unit.status = BlockedStatus(f"Failed to configure postfix: {e.stderr}")
+            return
 
-        self.unit.status = MaintenanceStatus("Procmail configuration updated")
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""

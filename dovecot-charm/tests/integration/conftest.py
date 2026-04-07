@@ -15,24 +15,14 @@ APP_NAME = "dovecot-charm"
 @pytest.fixture(scope="session", name="juju")
 def juju_fixture(request: pytest.FixtureRequest):
     """Pytest fixture that wraps jubilant.with_model."""
-
-    def _show_debug_log(juju: jubilant.Juju):
-        """Print debug logs on test failure."""
-        if request.session.testsfailed:
-            log = juju.debug_log(limit=1000)
-            print(log, end="")
-
     model_config = {
-        "automatically-retry-hooks": True,
-        "storage-default-block-source": "vm-pool",
-        "prefer-ipv6": False,
+        # "automatically-retry-hooks": True,
     }
     use_existing = request.config.getoption("--use-existing", default=False)
     if use_existing:
         juju = jubilant.Juju()
         juju.model_config(model_config)
         yield juju
-        _show_debug_log(juju)
         return
 
     model = request.config.getoption("--model")
@@ -40,7 +30,6 @@ def juju_fixture(request: pytest.FixtureRequest):
         juju = jubilant.Juju(model=model)
         juju.model_config(model_config)
         yield juju
-        _show_debug_log(juju)
         return
 
     keep_models = typing.cast(bool, request.config.getoption("--keep-models"))
@@ -48,7 +37,6 @@ def juju_fixture(request: pytest.FixtureRequest):
         juju.wait_timeout = 10 * 60
         juju.model_config(model_config)
         yield juju
-        _show_debug_log(juju)
         return
 
 
