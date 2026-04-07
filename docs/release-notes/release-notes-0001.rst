@@ -35,7 +35,7 @@ The following major and minor features were added in this release.
 Added base charm scaffold with config validation and ``clear-queue`` action
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Added the initial Dovecot IMAP/POP3 charm scaffold. The charm validates four required configuration options on every config-changed and install event: ``mailname``, ``postmaster-address``, ``cron-mailto``, and ``primary-unit``. Each missing field causes the unit to enter ``BlockedStatus`` with a descriptive message. When configuration is valid the charm installs Dovecot and related packages using ``apt``, opens the standard IMAP, POP3, ManageSieve and metrics ports, and renders Dovecot and Procmail configuration from Jinja2 templates. A ``clear-queue`` action is provided to flush the Postfix deferred or full mail queue using ``postsuper``.
+Added the initial Dovecot IMAP/POP3 charm scaffold. The charm validates four required configuration options on every config-changed and install event: ``mailname``, ``postmaster-address``, and ``primary-unit``. Each missing field causes the unit to enter ``BlockedStatus`` with a descriptive message. When configuration is valid the charm installs Dovecot and related packages using ``apt``, opens the standard IMAP, POP3, ManageSieve and metrics ports, and renders Dovecot and Procmail configuration from Jinja2 templates. A ``clear-queue`` action is provided to flush the Postfix deferred or full mail queue using ``postsuper``.
 
 Relevant links:
 

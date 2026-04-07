@@ -35,16 +35,21 @@ def test_dovecot_protocol_responses(juju: jubilant.Juju, dovecot_charm: str):
     )
 
 
-def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
-    """Test the clear-queue action."""
+def test_primary_unit_validation(juju: jubilant.Juju, dovecot_charm: str):
+    """Verify that the charm rejects configuration with a non-existent primary unit."""
     unit_name = f"{dovecot_charm}/0"
 
-    logging.info("Running clear-queue action (defaults)...")
-    result = juju.run(unit_name, "clear-queue")
-    assert result.status == "completed"
-    logging.info(f"Action output: {result.results.get('output')}")
+    logging.info("Setting invalid primary unit in config...")
+    juju.config(dovecot_charm, {"primary-unit": "nonexistent-unit"})
 
-    logging.info("Running clear-queue action (all)...")
-    result = juju.run(unit_name, "clear-queue", params={"queue": "all"})
-    assert result.status == "completed"
-    logging.info(f"Action output: {result.results.get('output')}")
+    logging.info("Checking for error status due to invalid primary unit...")
+    juju.wait(
+        lambda _: (
+            juju.status().apps[dovecot_charm].units[unit_name].workload_status.message
+            == "Invalid primary-unit: Value error, Primary unit does not exist"
+        ),
+        timeout=60,
+    )
+
+    juju.config(dovecot_charm, {"primary-unit": unit_name})
+    juju.wait(lambda status: jubilant.all_active(status, dovecot_charm))

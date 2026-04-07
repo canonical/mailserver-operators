@@ -7,11 +7,13 @@
 import logging
 import shutil
 import subprocess  # nosec
+import typing
 from pathlib import Path
 
 import jinja2
+import ops
 from charmhelpers.core import host
-from charmlibs import apt
+from charmlibs import apt, systemd
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
@@ -52,6 +54,8 @@ REQUIRED_PACKAGES = [
 HOSTNAME_FILE = "/etc/hostname"
 MAILNAME_FILE = "/etc/mailname"
 
+PEER_RELATION_NAME = "replicas"
+
 
 class DovecotCharm(CharmBase):
     """Dovecot IMAP/POP3 mail server charm."""
@@ -65,20 +69,41 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.upgrade_charm, self._on_install)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
 
+        self.framework.observe(
+            self.on[PEER_RELATION_NAME].relation_created,
+            self._on_peer_relation_created,
+        )
         # Template system
         self.jinja = jinja2.Environment(
             loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True
         )
 
+    def get_units(self):
+        """Return a list of all units in the application."""
+        peer_relation = typing.cast(ops.Relation, self.model.get_relation(PEER_RELATION_NAME))
+        if not peer_relation:
+            logger.warning(
+                f"primary unit: {self.unit.name} is running without peer relation {PEER_RELATION_NAME}"
+            )
+            return [self.unit.name]
+
+        units = [unit.name for unit in peer_relation.units]
+        if self.unit.name not in units:
+            units.append(self.unit.name)
+        return units
+
+    def _on_peer_relation_created(self, event):
+        """Handle peer relation created event."""
+        relation_data = event.relation.data[self.app]
+        relation_data["unit-name"] = self.unit.name
+
     def _get_dovecot_config(self):
         """Return the DovecotConfig if all required config options are set, false otherwise."""
         try:
-            return DovecotConfig.from_charm(self.config)
+            return DovecotConfig.from_charm(self)
         except DovecotConfigInvalidError as exc:
             logger.exception(f"Configuration validation error: {exc}")
             match exc.errors():
-                case [{"loc": ("cron_mailto",), "msg": msg}]:
-                    self.unit.status = BlockedStatus(f"Invalid cron-mailto: {msg}")
                 case [{"loc": ("mailname",), "msg": msg}]:
                     self.unit.status = BlockedStatus(f"Invalid mailname: {msg}")
                 case [{"loc": ("postmaster_address",), "msg": msg}]:
@@ -90,11 +115,6 @@ class DovecotCharm(CharmBase):
                         "Invalid charm configuration, check logs for details"
                     )
             return False
-
-    @property
-    def _is_primary(self):
-        """Return True if this unit is the configured primary unit."""
-        return self.unit.name == DovecotConfig.from_charm(self.config).primary_unit
 
     def _on_install(self, event):
         """Install and configure charm."""
@@ -151,10 +171,10 @@ class DovecotCharm(CharmBase):
                 "Invalid Dovecot configuration, check logs for details"
             )
             return
-        if self._systemctl("is-enabled", "dovecot"):
-            self._systemctl("restart", "dovecot")
+        if systemd.service_running("dovecot"):
+            systemd.service_restart("dovecot")
         else:
-            self._systemctl("start", "dovecot")
+            systemd.service_start("dovecot")
         self.unit.status = MaintenanceStatus("Dovecot configuration updated")
 
     def _validate_dovecot_config(self, config: DovecotConfig) -> bool:
@@ -195,23 +215,11 @@ class DovecotCharm(CharmBase):
                 check=True,
                 capture_output=True,
             )  # nosec B603
-            self._systemctl("restart", "postfix")
+            systemd.service_restart("postfix")
         except subprocess.CalledProcessError as e:
             logger.warning(f"Failed to configure postfix: {e}")
 
         self.unit.status = MaintenanceStatus("Procmail configuration updated")
-
-    def _systemctl(self, *args):
-        """Run the requested systemctl command."""
-        cmd = ["systemctl"]
-        cmd.extend(args)
-        logger.debug("running: %s", " ".join(cmd))
-        try:
-            # The command and arguments are fixed literals with no user-controlled input.
-            subprocess.run(cmd, capture_output=True, check=True)  # nosec B603
-        except subprocess.CalledProcessError as e:
-            logger.exception(f"Command '{' '.join(cmd)}' failed: {e.stderr}")
-            raise
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""

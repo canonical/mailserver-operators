@@ -72,7 +72,6 @@ def dovecot_charm(
         logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
 
         config = {
-            "cron-mailto": "test@example.com",
             "mailname": "example.com",
             "postmaster-address": "postmaster@example.com",
             "primary-unit": f"{APP_NAME}/0",
@@ -87,5 +86,5 @@ def dovecot_charm(
         )
 
     logging.info("Waiting for active status...")
-    juju.wait(jubilant.all_active, timeout=1200)
+    juju.wait(jubilant.all_active, timeout=10 * 60)
     return APP_NAME

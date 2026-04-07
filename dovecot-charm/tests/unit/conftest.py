@@ -18,7 +18,6 @@ def base_state():
         config={
             "mailname": "example.com",
             "postmaster-address": "admin@example.com",
-            "cron-mailto": "admin@example.com",
             "primary-unit": "dovecot-charm/0",
         }
     )

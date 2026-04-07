@@ -5,7 +5,7 @@
 """Dovecot IMAP/POP3 mail server charm."""
 
 import logging
-from typing import Any, Mapping
+from typing import TYPE_CHECKING
 
 from pydantic import (
     BaseModel,
@@ -13,8 +13,12 @@ from pydantic import (
     EmailStr,
     Field,
     ValidationError,
+    ValidationInfo,
     field_validator,
 )
+
+if TYPE_CHECKING:
+    from charm import DovecotCharm
 
 logger = logging.getLogger(__name__)
 
@@ -36,28 +40,31 @@ class DovecotConfig(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    cron_mailto: EmailStr = Field(..., description="Email address for cron output")
-    mailname: str = Field(..., description="Mailname for the server")
+    mailname: str = Field(..., min_length=1, description="Mailname for the server")
     postmaster_address: EmailStr = Field(..., description="Postmaster email address")
-    primary_unit: str = Field(..., description="Name of the primary unit")
+    primary_unit: str = Field(..., min_length=1, description="Name of the primary unit")
 
-    @field_validator("mailname", "postmaster_address", "primary_unit", mode="before")
+    @field_validator("primary_unit", mode="after")
     @classmethod
-    def _reject_empty_values(cls, value: Any) -> Any:
-        """Ensure string config values are not empty or whitespace-only."""
-        if isinstance(value, str) and not value.strip():
-            raise ValueError("must not be empty")
+    def _validate_primary_unit_exists(cls, value: str, info: ValidationInfo) -> str:
+        """Ensure the primary unit exists in the model."""
+        charm = info.context and info.context.get("charm")
+        if charm and value not in charm.get_units():
+            raise ValueError("Primary unit does not exist")
         return value
 
     @classmethod
-    def from_charm(cls, config: Mapping[str, Any]) -> "DovecotConfig":
+    def from_charm(cls, charm: "DovecotCharm") -> "DovecotConfig":
         """Create a DovecotConfig instance from charm configuration."""
+        config = charm.model.config
         try:
-            return cls(
-                cron_mailto=config.get("cron-mailto"),
-                mailname=config.get("mailname"),
-                postmaster_address=config.get("postmaster-address"),
-                primary_unit=config.get("primary-unit"),
+            return cls.model_validate(
+                {
+                    "mailname": config.get("mailname"),
+                    "postmaster_address": config.get("postmaster-address"),
+                    "primary_unit": config.get("primary-unit"),
+                },
+                context={"charm": charm},
             )
         except ValidationError as e:
             logger.exception(f"Configuration validation error: {e}")

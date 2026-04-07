@@ -32,12 +32,6 @@ peers:
 
 config:
   options:
-    cron-mailto:
-      description: |
-        Email address where cron job output and system notifications will be delivered.
-        This address receives alerts from automated tasks and system processes.
-      default: ""
-      type: string
     mailname:
       description: |
         The fully qualified domain name (FQDN) or hostname for this mail server.

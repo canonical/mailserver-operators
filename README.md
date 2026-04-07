@@ -22,7 +22,6 @@ See the [basic deployment tutorial](https://github.com/canonical/mailserver-oper
 ```bash
 juju deploy dovecot-charm \
   --config mailname=mail.example.com \
-  --config cron-mailto=admin@example.com \
   --config postmaster-address=postmaster@example.com \
   --config primary-unit=dovecot-charm/0
 ```

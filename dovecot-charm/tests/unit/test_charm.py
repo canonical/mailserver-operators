@@ -1,7 +1,6 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import dataclasses
 from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
 
@@ -18,19 +17,6 @@ def test_open_ports(ctx, base_state):
 
     expected = {ops.testing.TCPPort(p) for p in [143, 993, 110, 995, 4190, 9900]}
     assert state_out.opened_ports == expected
-
-
-def test_is_primary_true(ctx, base_state):
-    with patch("charm.DovecotCharm._config"), ctx(ctx.on.config_changed(), base_state) as mgr:
-        assert mgr.charm._is_primary is True
-
-
-def test_is_primary_false(ctx, base_state):
-    state_in = dataclasses.replace(
-        base_state, config={**base_state.config, "primary-unit": "dovecot-charm/999"}
-    )
-    with patch("charm.DovecotCharm._config"), ctx(ctx.on.config_changed(), state_in) as mgr:
-        assert mgr.charm._is_primary is False
 
 
 # --- Clear-queue action tests ---
