@@ -15,24 +15,26 @@ from dovecot_config import DovecotConfig, DovecotConfigInvalidError
     [
         pytest.param(
             {"mailname": "", "postmaster-address": ""},
-            BlockedStatus("Invalid charm configuration, check logs for details"),
+            BlockedStatus(
+                "Invalid charm configuration, check logs for details: mailname, postmaster_address"
+            ),
             id="Multiple missing/invalid config options",
         ),
         pytest.param(
             {"mailname": ""},
-            BlockedStatus("Invalid mailname: String should have at least 1 character"),
+            BlockedStatus("Invalid charm configuration, check logs for details: mailname"),
             id="Invalid mailname config option",
         ),
         pytest.param(
             {"postmaster-address": ""},
             BlockedStatus(
-                "Invalid postmaster-address: value is not a valid email address: An email address must have an @-sign."
+                "Invalid charm configuration, check logs for details: postmaster_address"
             ),
             id="Invalid postmaster-address config option",
         ),
         pytest.param(
             {"primary-unit": ""},
-            BlockedStatus("Invalid primary-unit: String should have at least 1 character"),
+            BlockedStatus("Invalid charm configuration, check logs for details: primary_unit"),
             id="Invalid primary-unit config option",
         ),
     ],

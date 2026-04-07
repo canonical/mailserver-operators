@@ -103,17 +103,10 @@ class DovecotCharm(CharmBase):
             return DovecotConfig.from_charm(self)
         except DovecotConfigInvalidError as exc:
             logger.exception(f"Configuration validation error: {exc}")
-            match exc.errors():
-                case [{"loc": ("mailname",), "msg": msg}]:
-                    self.unit.status = BlockedStatus(f"Invalid mailname: {msg}")
-                case [{"loc": ("postmaster_address",), "msg": msg}]:
-                    self.unit.status = BlockedStatus(f"Invalid postmaster-address: {msg}")
-                case [{"loc": ("primary_unit",), "msg": msg}]:
-                    self.unit.status = BlockedStatus(f"Invalid primary-unit: {msg}")
-                case _:
-                    self.unit.status = BlockedStatus(
-                        "Invalid charm configuration, check logs for details"
-                    )
+            msg = ", ".join([str(*err["loc"]) for err in exc.errors()])
+            self.unit.status = BlockedStatus(
+                f"Invalid charm configuration, check logs for details: {msg}"
+            )
             return False
 
     def _reconcile(self, event):
@@ -165,10 +158,7 @@ class DovecotCharm(CharmBase):
                 "Invalid Dovecot configuration, check logs for details"
             )
             return
-        if systemd.service_running("dovecot"):
-            systemd.service_reload("dovecot", restart_on_failure=True)
-        else:
-            systemd.service_start("dovecot")
+        systemd.service_reload("dovecot", restart_on_failure=True)
         self.unit.status = MaintenanceStatus("Dovecot configuration updated")
 
     def _validate_dovecot_config(self, config: DovecotConfig) -> bool:
@@ -182,7 +172,7 @@ class DovecotCharm(CharmBase):
             )  # nosec B603
             return True
         except subprocess.CalledProcessError as e:
-            logger.warning(f"Failed to validate dovecot configuration: {e}")
+            logger.exception(f"Failed to validate dovecot configuration: {e}")
             return False
 
     def _setup_procmail(self):
@@ -209,12 +199,9 @@ class DovecotCharm(CharmBase):
                 check=True,
                 capture_output=True,
             )  # nosec B603
-            if systemd.service_running("postfix"):
-                systemd.service_reload("postfix", restart_on_failure=True)
-            else:
-                systemd.service_start("postfix")
+            systemd.service_reload("postfix", restart_on_failure=True)
         except subprocess.CalledProcessError as e:
-            logger.warning(f"Failed to configure postfix: {e}")
+            logger.exception(f"Failed to configure postfix: {e}")
             self.unit.status = BlockedStatus(f"Failed to configure postfix: {e.stderr}")
             return
 
