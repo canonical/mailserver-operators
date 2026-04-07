@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import logging
+import time
 
 import jubilant
 
@@ -25,7 +26,8 @@ def _seed_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
 
 def _seed_deferred_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
     """Queue one deferred message by temporarily deferring SMTP transports."""
-    juju.exec("postconf -e defer_transports=smtp && postfix reload", unit=unit_name)
+    juju.exec("postconf -e 'relayhost = [10.255.255.255]' && postfix reload", unit=unit_name)
+    time.sleep(5)  # Give Postfix some time to process the new message
     try:
         juju.exec(
             "printf 'Subject: deferred-test\\n\\nmessage body\\n' | "
@@ -41,7 +43,7 @@ def _seed_deferred_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
             unit=unit_name,
         )
     finally:
-        juju.exec("postconf -X defer_transports && postfix reload", unit=unit_name)
+        juju.exec("sudo postconf -e 'relayhost =' && postfix reload", unit=unit_name)
 
 
 def _assert_queue_empty(juju: jubilant.Juju, unit_name: str):
@@ -72,9 +74,11 @@ def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
     _seed_deferred_queue_with_test_mail(juju, unit_name)
 
     logging.info("Running clear-queue action (defaults)...")
+    time.sleep(5)
     result = juju.run(unit_name, "clear-queue")
     assert result.status == "completed"
     logging.info(f"Action output: {result.results.get('output')}")
+    time.sleep(5)
     _assert_deferred_queue_empty(juju, unit_name)
     _assert_queue_non_empty(juju, unit_name)
 
@@ -82,4 +86,5 @@ def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
     result = juju.run(unit_name, "clear-queue", params={"queue": "all"})
     assert result.status == "completed"
     logging.info(f"Action output: {result.results.get('output')}")
+    time.sleep(5)
     _assert_queue_empty(juju, unit_name)

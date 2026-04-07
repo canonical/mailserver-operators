@@ -94,7 +94,7 @@ class DovecotCharm(CharmBase):
 
     def _on_peer_relation_created(self, event):
         """Handle peer relation created event."""
-        relation_data = event.relation.data[self.app]
+        relation_data = event.relation.data[self.unit]
         relation_data["unit-name"] = self.unit.name
 
     def _get_dovecot_config(self):
@@ -122,7 +122,7 @@ class DovecotCharm(CharmBase):
         if not (dovecot_config := self._get_dovecot_config()):
             return
         self._install()
-        self._config(dovecot_config)
+        self._configure(dovecot_config)
         self.unit.status = ActiveStatus()
 
     def _install(self):
@@ -133,7 +133,7 @@ class DovecotCharm(CharmBase):
         shutil.copy(HOSTNAME_FILE, MAILNAME_FILE)
         self.unit.status = MaintenanceStatus("Charm installation done")
 
-    def _config(self, dovecot_config: DovecotConfig):
+    def _configure(self, dovecot_config: DovecotConfig):
         """Perform basic configuration."""
         self._setup_dovecot(dovecot_config)
         self._setup_procmail()
