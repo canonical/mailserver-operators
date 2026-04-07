@@ -10,6 +10,7 @@ import pytest
 
 def test_open_ports(ctx, base_state):
     with (
+        patch("charm.DovecotCharm._install"),
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
     ):
