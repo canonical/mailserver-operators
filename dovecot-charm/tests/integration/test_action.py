@@ -10,7 +10,7 @@ def _seed_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
     """Queue a test message and wait until Postfix reports a non-empty queue."""
     juju.exec(
         "printf 'Subject: queue-test\\n\\nmessage body\\n' | "
-        "/usr/sbin/sendmail -f test@yourdomain.com someone@example.com || true",
+        "/usr/sbin/sendmail  -odq -f test@yourdomain.com someone@example.com || true",
         unit=unit_name,
     )
     juju.exec(
