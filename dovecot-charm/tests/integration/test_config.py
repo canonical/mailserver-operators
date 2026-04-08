@@ -44,11 +44,12 @@ def test_primary_unit_validation(juju: jubilant.Juju, dovecot_charm: str):
 
     logging.info("Checking for error status due to invalid primary unit...")
     juju.wait(
-        lambda _: (
-            juju.status().apps[dovecot_charm].units[unit_name].workload_status.message
-            == "Invalid primary-unit: Value error, Primary unit does not exist"
-        ),
+        lambda status: jubilant.all_blocked(status, dovecot_charm),
         timeout=5 * 60,
+    )
+    assert (
+        juju.status().apps[dovecot_charm].units[unit_name].workload_status.message
+        == "Invalid charm configuration, check logs for details: primary_unit"
     )
 
     juju.config(dovecot_charm, {"primary-unit": unit_name})
