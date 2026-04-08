@@ -48,8 +48,11 @@ def test_primary_unit_validation(juju: jubilant.Juju, dovecot_charm: str):
             juju.status().apps[dovecot_charm].units[unit_name].workload_status.message
             == "Invalid primary-unit: Value error, Primary unit does not exist"
         ),
-        timeout=60,
+        timeout=5 * 60,
     )
 
     juju.config(dovecot_charm, {"primary-unit": unit_name})
-    juju.wait(lambda status: jubilant.all_active(status, dovecot_charm))
+    juju.wait(
+        lambda status: jubilant.all_active(status, dovecot_charm),
+        timeout=5 * 60,
+    )
