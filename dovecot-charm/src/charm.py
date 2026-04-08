@@ -65,7 +65,7 @@ class DovecotCharm(CharmBase):
 
         # Events
         self.framework.observe(self.on.config_changed, self._reconcile)
-        self.framework.observe(self.on.install, self._reconcile)
+        self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.upgrade_charm, self._reconcile)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
 
@@ -109,12 +109,19 @@ class DovecotCharm(CharmBase):
             )
             return False
 
+    def _on_install(self, event):
+        """Handle install event."""
+        self.unit.status = MaintenanceStatus("Installing packages")
+        if not self._get_dovecot_config():
+            return
+        self._install()
+        self._reconcile(event)
+
     def _reconcile(self, event):
         """Reconcile charm state for install, upgrade, and config-changed events."""
         self.unit.status = MaintenanceStatus("Configuring charm")
         if not (dovecot_config := self._get_dovecot_config()):
             return
-        self._install()
         self._configure(dovecot_config)
         self.unit.status = ActiveStatus()
 
