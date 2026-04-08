@@ -14,6 +14,7 @@ def _seed_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
         "/usr/sbin/sendmail  -odq -f test@yourdomain.com someone@example.com || true",
         unit=unit_name,
     )
+    time.sleep(10)
     juju.exec(
         "for i in $(seq 1 30); do "
         "postqueue -p | grep -qv 'Mail queue is empty' && exit 0; "
@@ -34,9 +35,10 @@ def _seed_deferred_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
             "/usr/sbin/sendmail -f deferred-test@example.com deferred-test@example.net || true",
             unit=unit_name,
         )
+        time.sleep(10)  # Give Postfix some time to process the new message
         juju.exec(
             "for i in $(seq 1 30); do "
-            "find /var/spool/postfix/deferred -type f | grep -q . && exit 0; "
+            "sudo find /var/spool/postfix/deferred -type f | grep -q . && exit 0; "
             "sleep 1; "
             "done; "
             "exit 1",
@@ -54,7 +56,7 @@ def _assert_queue_empty(juju: jubilant.Juju, unit_name: str):
 def _assert_deferred_queue_empty(juju: jubilant.Juju, unit_name: str):
     """Assert that the deferred queue has no queued files."""
     juju.exec(
-        "find /var/spool/postfix/deferred -type f | grep -q . && exit 1 || exit 0",
+        "sudo find /var/spool/postfix/deferred -type f | grep -q . && exit 1 || exit 0",
         unit=unit_name,
     )
 
