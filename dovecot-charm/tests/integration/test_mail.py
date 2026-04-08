@@ -6,6 +6,7 @@ import imaplib
 import logging
 import ssl
 import time
+from secrets import token_hex
 
 import jubilant
 import pytest
@@ -13,21 +14,12 @@ import pytest
 
 def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):
     """Test end-to-end mail delivery and IMAP retrieval."""
-    status = juju.status()
-    units = status.apps[dovecot_charm].units
-    if not units:
-        pytest.fail("No units found")
+    unit_name = f"{dovecot_charm}/0"
+    logging.info(f"Updating primary-unit config to {unit_name}...")
+    juju.config(dovecot_charm, {"primary-unit": unit_name})
+    juju.wait(jubilant.all_active, timeout=300)
 
-    unit_name = next(iter(units.keys()))
-    logging.info(f"Using unit: {unit_name}")
-
-    current_config = juju.config(dovecot_charm)
-    if current_config.get("primary-unit") != unit_name:
-        logging.info(f"Updating primary-unit config to {unit_name}...")
-        juju.config(dovecot_charm, {"primary-unit": unit_name})
-        juju.wait(jubilant.all_active, timeout=300)
-
-    password = "securepassword"  # nosec B105
+    password = token_hex(8)
     logging.info("Configuring user 'ubuntu'...")
 
     juju.exec("usermod -aG mail ubuntu", unit=unit_name)
@@ -47,29 +39,31 @@ def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
-
+    email_found = False
     for i in range(20):
+        mail = None
         try:
             mail = imaplib.IMAP4_SSL(unit_ip, port=993, ssl_context=context)
-            try:
-                mail.login("ubuntu", password)
-                mail.select("inbox")
-                _, data = mail.search(None, f'(HEADER Subject "{subject}")')
+            mail.login("ubuntu", password)
+            mail.select("inbox")
+            _, data = mail.search(None, f'(HEADER Subject "{subject}")')
 
-                if data and data[0]:
-                    logging.info(f"Email found successfully via IMAP! IDs: {data[0]}")
-                    return  # Test passed
-                else:
-                    logging.info("Email not found yet...")
-            finally:
-                with contextlib.suppress(Exception):
-                    mail.close()
-                with contextlib.suppress(Exception):
-                    mail.logout()
-
-        except Exception as e:
+            if data and data[0]:
+                logging.info(f"Email found successfully via IMAP! IDs: {data[0]}")
+                email_found = True
+                break  # Test passed
+            else:
+                logging.info("Email not found yet...")
+        except (imaplib.IMAP4.error, OSError) as e:
             logging.warning(f"IMAP check attempt {i + 1} failed: {e}. Retrying...")
+        finally:
+            if mail is not None:
+                with contextlib.suppress(imaplib.IMAP4.error, OSError):
+                    mail.close()
+                with contextlib.suppress(imaplib.IMAP4.error, OSError):
+                    mail.logout()
 
         time.sleep(3)
 
-    pytest.fail("Failed to verify email via IMAP.")
+    if not email_found:
+        pytest.fail("Failed to verify email via IMAP.")
