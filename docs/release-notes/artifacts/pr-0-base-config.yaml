@@ -1,0 +1,18 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Version of the artifact schema
+version_schema: 2
+
+changes:
+- title: Added base charm scaffold with config validation and clear-queue action
+  author: alithethird
+  type: major
+  description: Added initial Dovecot IMAP/POP3 charm with configuration validation for mailname, postmaster-address and primary-unit fields, install flow, port management, and a clear-queue action for Postfix queue maintenance.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/2"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: true

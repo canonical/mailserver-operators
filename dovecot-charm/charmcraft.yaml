@@ -1,0 +1,68 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+type: charm
+base: ubuntu@24.04
+
+platforms:
+  amd64:
+
+name: dovecot-charm
+
+summary: Dovecot IMAP/POP3 mail server charm
+
+description: |
+  Deploys and configures Dovecot as an IMAP/POP3 mail server.
+
+parts:
+  charm:
+    source: .
+    plugin: uv
+    build-snaps:
+    - astral-uv
+  dump:
+    plugin: dump
+    source: .
+    stage:
+    - templates
+
+peers:
+  replicas:
+    interface: replicas
+
+config:
+  options:
+    mailname:
+      description: |
+        The fully qualified domain name (FQDN) or hostname for this mail server.
+        Used to identify outgoing mail and should match your server's hostname.
+      default: ""
+      type: string
+    postmaster-address:
+      description: |
+        Email address of the postmaster or mail system administrator.
+        Used as the sender for system-generated messages and bounce notifications.
+      default: ""
+      type: string
+    primary-unit:
+      description: |
+        The primary unit in a replicated charm deployment (e.g., 'dovecot-charm/0').
+        Only the primary unit receives incoming mail; replicas are read-only.
+      default: ""
+      type: string
+    sync-schedule:
+      description: |
+        Cron schedule for syncing mail from primary to secondary units.
+        Format: standard cron expression (e.g., "*/30 * * * *" for every 30 minutes).
+      default: "*/30 * * * *"
+      type: string
+
+actions:
+  clear-queue:
+    description: Forcibly remove messages from the Postfix mail queue.
+    params:
+      queue:
+        type: string
+        description: The queue to clear (deferred or all).
+        default: deferred
+        enum: [deferred, all]

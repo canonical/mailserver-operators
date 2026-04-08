@@ -1,0 +1,19 @@
+# Juju-managed file, any direct change will be lost
+# file: /etc/procmailrc
+# system-wide settings for procmail
+SHELL="/bin/bash"
+SENDMAIL="/usr/sbin/sendmail"
+SENDMAILFLAGS="-oi"
+LOGFILE="/srv/mail/$LOGNAME/logs/procmail.log"
+# fully define here so user .procmailrc can use it too
+DELIVER="/usr/lib/dovecot/deliver -d $LOGNAME"
+# fallback:
+DEFAULT="{{ mail_root }}/$LOGNAME/Maildir/"
+MAILDIR="{{ mail_root }}/$LOGNAME/Maildir/"
+COMSAT=no
+
+# uncomment next line to support user .procmailrc files
+INCLUDERC=$HOME/.procmailrc
+
+:0 w
+| $DELIVER

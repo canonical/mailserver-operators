@@ -1,77 +1,68 @@
-<!--
-Avoid using this README file for information that is maintained or published elsewhere, e.g.:
+# Dovecot charm
 
-* metadata.yaml > published on Charmhub
-* documentation > published on (or linked to from) Charmhub
-* detailed contribution guide > documentation or CONTRIBUTING.md
+A [Juju](https://juju.is/) charm that deploys and manages [Dovecot](https://www.dovecot.org/) as an IMAP/POP3 mail server on Ubuntu VMs. Intended for Canonical IS team use.
 
-Use links instead.
--->
-# Platform engineering charm template
-<!-- Use this space for badges -->
+Like any Juju charm, this charm supports one-line deployment, configuration, integration, scaling, and more. For the Dovecot charm, this includes:
 
-Describe your charm in 1-2 sentences. Include the software that the charm deploys (if applicable), and the substrate (VM/K8s).
+* Multi-protocol mail server: IMAP, IMAPS, POP3, POP3S, Sieve, and LMTP
+* TLS/SSL encryption with configurable cipher suites
+* Mail filtering with Sieve and Procmail
+* Multi-unit deployments with peer-relation-based mail synchronisation
+* Scheduled mail syncing between primary and secondary units using cron
+* Postfix mail queue management using the `clear-queue` action
 
-Like any Juju charm, this charm supports one-line deployment, configuration, integration, scaling, and more. For Charmed {Name}, this includes:
-* list or summary of app-specific features
-
-For information about how to deploy, integrate, and manage this charm, see the Official [platform-engineering-charm-template Documentation](external link).
+For information about how to deploy, integrate, and manage this charm, see the [Dovecot charm documentation](https://github.com/canonical/mailserver-operators/tree/main/docs).
 
 ## Get started
-<!--If the charm already contains a relevant how-to guide or tutorial in its documentation,
-use this section to link the documentation. You don’t need to duplicate documentation here.
-If the tutorial is more complex than getting started, then provide brief descriptions of the
-steps needed for the simplest possible deployment. Make sure to include software and hardware
-prerequisites.
 
-This section could be structured in the following way:
-
-### Set up
-<Steps for setting up the environment (e.g. via Multipass)>
+See the [basic deployment tutorial](https://github.com/canonical/mailserver-operators/blob/main/docs/tutorial/basic-deployment.rst) for a step-by-step walkthrough.
 
 ### Deploy
-<Steps for deploying the charm>
 
--->
+```bash
+juju deploy dovecot-charm \
+  --config mailname=mail.example.com \
+  --config postmaster-address=postmaster@example.com \
+  --config primary-unit=dovecot-charm/0
+```
 
 ### Basic operations
-<!--Brief walkthrough of performing standard configurations or operations.
 
-Use this section is to emphasize features or capabilities of the charm.
-Link to any relevant how-to guides here.
+**Clear stuck mail from the Postfix queue:**
 
-Use this section to provide information on important actions, required configurations, or
-other operations the user should know about. You don’t need to list every action or configuration.
-Link the Charmhub documentation for actions and configurations if you write about them.
+```bash
+# Clear only deferred messages (default)
+juju run dovecot-charm/0 clear-queue
 
-You may also want to link to the `charmcraft.yaml` file here.
--->
+# Clear all queued messages
+juju run dovecot-charm/0 clear-queue queue=all
+```
 
-## Integrations (optional)
-<!-- Information about particularly relevant interfaces, endpoints or libraries related to the
-charm. For example, peer relation endpoints required by other charms for integration.
+**Adjust the mail sync schedule** (default: every 30 minutes):
 
-Otherwise, include a link the Charmhub documentation on integrations.
---> 
+```bash
+juju config dovecot-charm sync-schedule="*/15 * * * *"
+```
+
+See [`charmcraft.yaml`](dovecot-charm/charmcraft.yaml) for all available configuration options.
+
+## Integrations
+
+The charm uses a **`replicas`** peer relation to synchronise mail between units in a multi-unit deployment. The primary unit is designated with the `primary-unit` configuration option.
 
 ## Learn more
-<!-- 
-Provide a list of resources, including the official documentation, developer documentation,
-an official website for the software and a troubleshooting guide. Note that this list is not
-exhaustive or always relevant for every charm. If there is no official troubleshooting guide,
-include a link to the relevant Matrix channel.
--->
 
-* [Read more]() <!--Link to the charm's official documentation-->
-* [Developer documentation]() <!--Link to any developer documentation (could be upstream)-->
-* [Official webpage]() <!--(Optional) Link to official upstream webpage/blog/marketing content--> 
-* [Troubleshooting]() <!--(Optional) Link to a page or section about troubleshooting/FAQ-->
+* [Dovecot charm documentation](https://github.com/canonical/mailserver-operators/tree/main/docs)
+* [Dovecot upstream documentation](https://doc.dovecot.org/)
+* [Dovecot official webpage](https://www.dovecot.org/)
+* [Troubleshooting](https://github.com/canonical/mailserver-operators/blob/main/docs/how-to/troubleshoot.rst)
 
 ## Project and community
-* [Issues]() <!--Link to GitHub issues (if applicable)-->
-* [Contributing]() <!--Link to any contribution guides, preferably for the source code--> 
-* [Matrix]() <!--Link to contact info (if applicable), e.g. Matrix channel-->
-* [Launchpad]() <!--Link to Launchpad (if applicable)-->
 
-## Licensing and trademark (optional)
+* [Issues](https://github.com/canonical/mailserver-operators/issues)
+* [Contributing](CONTRIBUTING.md)
+* [Matrix](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
 
+## License
+
+The Dovecot charm is free software, distributed under the Apache Software License, version 2.0. See [LICENSE](LICENSE) for more details.

@@ -1,26 +1,28 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+# Project metadata (PEP 621)
 [project]
-name = "mailserver-monorepo"
+name = "dovecot-charm"
 version = "0.0.0"
-description = "A group of related mail server charms."
-readme = "README.md"
+description = "Dovecot IMAP/POP3 mail server charm"
 requires-python = ">=3.12"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
-  "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-  "ops==3.7.0",
+    "ops==3.6.0",
+    "charmhelpers>=1.2.1",
+    "charmlibs-apt==1.0.0",
+    "jinja2",
+    "pydantic[email]>=2.12.5",
+    "charmlibs-systemd==1.0.0",
 ]
 
 [dependency-groups]
-fmt = [
-  "ruff",
-]
+fmt = ["ruff"]
 lint = [
   "codespell",
   "jubilant==1.8.0",
@@ -32,18 +34,9 @@ lint = [
   "types-pyyaml",
   "types-requests",
 ]
-unit = [
-  "coverage[toml]",
-  "ops[testing]",
-  "pytest",
-]
-coverage-report = [
-  "coverage[toml]",
-  "pytest",
-]
-static = [
-  "bandit[toml]",
-]
+unit = ["coverage[toml]", "ops[testing]", "pytest"]
+coverage-report = ["coverage[toml]", "pytest"]
+static = ["bandit[toml]"]
 integration = [
   "allure-pytest>=2.8.18",
   "allure-pytest-collection-report @ git+https://github.com/canonical/data-platform-workflows@v24.0.0#subdirectory=python/pytest_plugins/allure_pytest_collection_report",
@@ -55,7 +48,7 @@ integration = [
 package = false
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py312"
 line-length = 99
 
 # enable ruff linters:
@@ -72,7 +65,23 @@ line-length = 99
 #  UP pyupgrade
 # RUF Ruff-specific rules
 # E/W pycodestyle
-lint.select = [ "A", "B", "C", "CPY", "D", "E", "F", "I", "N", "RUF", "S", "SIM", "TC", "UP", "W" ]
+lint.select = [
+  "A",
+  "B",
+  "C",
+  "CPY",
+  "D",
+  "E",
+  "F",
+  "I",
+  "N",
+  "RUF",
+  "S",
+  "SIM",
+  "TC",
+  "UP",
+  "W",
+]
 lint.ignore = [
   "B904",
   "D107",
@@ -98,7 +107,19 @@ lint.ignore = [
   "UP035",
   "UP045",
 ]
-lint.per-file-ignores."tests/*" = [ "B011", "D100", "D101", "D102", "D103", "D104", "D212", "D415", "D417", "S" ]
+lint.per-file-ignores."tests/*" = [
+  "B011",
+  "D100",
+  "D101",
+  "D102",
+  "D103",
+  "D104",
+  "D205",
+  "D212",
+  "D415",
+  "D417",
+  "S",
+]
 lint.flake8-copyright.author = "Canonical Ltd."
 lint.flake8-copyright.min-file-size = 1
 lint.flake8-copyright.notice-rgx = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+"
@@ -108,39 +129,16 @@ lint.pydocstyle.convention = "google"
 [tool.codespell]
 skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage,htmlcov,uv.lock,grafana_dashboards"
 
+[tool.pytest.ini_options]
+minversion = "6.0"
+log_cli_level = "INFO"
+pythonpath = ["lib", "src"]
+
 [tool.coverage.run]
 branch = true
 
-# Formatting tools configuration
-[tool.black]
-line-length = 99
-target-version = ["py38"]
-
 [tool.coverage.report]
-fail_under = 90
 show_missing = true
-
-# Linting tools configuration
-[tool.flake8]
-max-line-length = 99
-max-doc-length = 99
-max-complexity = 10
-exclude = [".git", "__pycache__", ".tox", "build", "dist", "*.egg_info", "venv"]
-select = ["E", "W", "F", "C", "N", "R", "D", "H"]
-# Ignore W503, E501 because using black creates errors with this
-# Ignore D107 Missing docstring in __init__
-ignore = ["W503", "E501", "D107"]
-# D100, D101, D102, D103: Ignore missing docstrings in tests
-per-file-ignores = [
-    "tests/*:D100,D101,D102,D103,D104,D205,D212,D415",
-    "dovecot-charm/tests/*:D100,D101,D102,D103,D104,D205,D212,D415",
-]
-docstring-convention = "google"
-
-[tool.isort]
-line_length = 99
-profile = "black"
-skip = ["dovecot-charm/lib"]
 
 [tool.mypy]
 check_untyped_defs = true
@@ -150,22 +148,11 @@ ignore_missing_imports = true
 namespace_packages = true
 
 [[tool.mypy.overrides]]
-module = [
-    'dovecot_charm/tests.*',
-    "tests.*",
-]
+module = "tests.*"
 disallow_untyped_defs = false
 
-[tool.pylint]
-disable = "wrong-import-order,duplicate-code"
+[tool.bandit]
+exclude_dirs = ["/venv/"]
 
-[tool.pytest.ini_options]
-minversion = "6.0"
-log_cli_level = "INFO"
-pythonpath = [
-    "dovecot-charm/lib",
-    "dovecot-charm/src",
-]
-
-[tool.ruff.mccabe]
-max-complexity = 10
+[tool.bandit.assert_used]
+skips = ["*/*test.py", "*/test_*.py", "*tests/*.py"]

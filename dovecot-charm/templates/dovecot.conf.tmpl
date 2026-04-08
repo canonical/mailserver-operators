@@ -1,0 +1,144 @@
+log_timestamp = "%Y-%m-%d %H:%M:%S "
+valid_chroot_dirs = {{ dovecot_chroot }}
+mail_location = maildir:{{ mail_root }}/%u/Maildir
+first_valid_uid = 1000
+last_valid_uid = 60000
+default_process_limit = 100
+default_client_limit = 1000
+default_vsz_limit = 256M
+auth_verbose = yes
+auth_verbose_passwords = no
+
+# TODO: change to ssl = required once TLS relation is added (pr/5-tls)
+ssl = yes
+ssl_cert = </etc/dovecot/private/dovecot.pem
+ssl_key = </etc/dovecot/private/dovecot.key
+## SSL ciphers to use, the default is:
+##ssl_cipher_list = ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH
+## To disable non-EC DH, use:
+##ssl_cipher_list = ALL:!DH:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH
+#ssl_cipher_list = EECDH+AESGCM+AES128:EECDH+AESGCM+AES256:EECDH+AES128+SHA:EECDH+AES256+SHA:EDH+aRSA+AES128+SHA:EDH+aRSA+AES256+SHA:kRSA+aRSA+AES128+SHA:kRSA+aRSA+AES256+SHA
+#ssl_min_protocol = TLSv1.2
+#ssl_prefer_server_ciphers = yes
+
+postmaster_address = {{ postmaster_address }}
+
+# Enable managesieve protocol:
+protocols = $protocols sieve
+
+protocol lda {
+  mail_plugins = $mail_plugins sieve
+  lda_mailbox_autocreate = yes
+  lda_mailbox_autosubscribe = yes
+  lda_original_recipient_header = X-Original-To
+}
+
+protocol lmtp {
+  mail_plugins = $mail_plugins sieve
+}
+
+protocol imap {
+  # Maximum number of IMAP connections allowed for a user from each IP address.
+  mail_max_userip_connections = 30
+}
+
+service imap {
+  service_count = 1
+  client_limit = 1
+  process_limit = 1000
+  vsz_limit = 1G
+}
+
+service pop3 {
+  service_count = 1
+  client_limit = 1
+  process_limit = 1000
+  vsz_limit = 1G
+}
+
+service managesieve {
+  service_count = 1
+  client_limit = 1
+  process_limit = 1000
+}
+
+service imap-login {
+  chroot = login
+  service_count = 1
+  process_limit = 1500
+  process_min_avail = 10
+  vsz_limit = 64M
+}
+
+service pop3-login {
+  chroot = login
+  service_count = 1
+  process_limit = 1500
+  process_min_avail = 5
+  vsz_limit = 64M
+}
+
+service managesieve-login {
+  inet_listener sieve {
+    port = 4190
+  }
+  service_count = 1
+  process_limit = 1500
+  process_min_avail = 5
+  vsz_limit = 64M
+}
+
+# dovecot: config: Warning: service auth { client_limit=1000 } is lower than required under max. load (4700)
+# dovecot: config: Warning: service anvil { client_limit=1000 } is lower than required under max. load (4603)
+service auth {
+  client_limit = 5000
+}
+
+service anvil {
+  client_limit = 5000
+}
+
+plugin {
+  sieve_user_log = {{ mail_root  }}/%u/sieve.log
+  sieve_extensions = +editheader
+  # For versions v0.3.0 and beyond 0 means that redirect is prohibited.
+  sieve_max_redirects = 0
+  # days between notifications to the same recipient
+  sieve_vacation_min_period = 1d
+  sieve_vacation_default_period = 3d
+  sieve_vacation_max_period = 30d
+}
+
+# OpenMetrics exporter (built-in since Dovecot 2.3.11)
+service stats {
+  inet_listener http {
+    address = 0.0.0.0
+    port = 9900
+  }
+}
+
+# Recommended metrics for observability
+metric auth_success {
+  filter = event=auth_request_finished AND success=yes
+}
+
+metric auth_failure {
+  filter = event=auth_request_finished AND success=no
+}
+
+metric imap_command {
+  filter = event=imap_command_finished
+  group_by = cmd_name tagged_reply_state
+}
+
+metric mail_delivery {
+  filter = event=mail_delivery_finished
+}
+
+metric mail_user_session {
+  filter = event=mail_user_session_finished
+}
+
+metric smtp_submit {
+  filter = event=smtp_submit_finished
+}
