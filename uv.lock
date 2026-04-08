@@ -276,6 +276,81 @@ wheels = [
 ]
 
 [[package]]
+name = "mailserver-monorepo"
+version = "0.0.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "ops" },
+]
+
+[package.dev-dependencies]
+coverage-report = [
+    { name = "coverage" },
+    { name = "pytest" },
+]
+fmt = [
+    { name = "ruff" },
+]
+integration = [
+    { name = "allure-pytest" },
+    { name = "allure-pytest-collection-report" },
+    { name = "jubilant" },
+    { name = "pytest" },
+]
+lint = [
+    { name = "codespell" },
+    { name = "jubilant" },
+    { name = "mypy" },
+    { name = "pep8-naming" },
+    { name = "pytest" },
+    { name = "requests" },
+    { name = "ruff" },
+    { name = "types-pyyaml" },
+    { name = "types-requests" },
+]
+static = [
+    { name = "bandit" },
+]
+unit = [
+    { name = "coverage" },
+    { name = "ops", extra = ["testing"] },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "ops", specifier = "==3.7.0" }]
+
+[package.metadata.requires-dev]
+coverage-report = [
+    { name = "coverage", extras = ["toml"] },
+    { name = "pytest" },
+]
+fmt = [{ name = "ruff" }]
+integration = [
+    { name = "allure-pytest", specifier = ">=2.8.18" },
+    { name = "allure-pytest-collection-report", git = "https://github.com/canonical/data-platform-workflows?subdirectory=python%2Fpytest_plugins%2Fallure_pytest_collection_report&rev=v24.0.0" },
+    { name = "jubilant", specifier = "==1.8.0" },
+    { name = "pytest" },
+]
+lint = [
+    { name = "codespell" },
+    { name = "jubilant", specifier = "==1.8.0" },
+    { name = "mypy" },
+    { name = "pep8-naming" },
+    { name = "pytest" },
+    { name = "requests" },
+    { name = "ruff" },
+    { name = "types-pyyaml" },
+    { name = "types-requests" },
+]
+static = [{ name = "bandit", extras = ["toml"] }]
+unit = [
+    { name = "coverage", extras = ["toml"] },
+    { name = "ops", extras = ["testing"] },
+    { name = "pytest" },
+]
+
+[[package]]
 name = "markdown-it-py"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -420,81 +495,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8d/59/c32862134635ba231d45f1711035550dc38246396c27269a4cde4bfe18d2/pep8_naming-0.15.1.tar.gz", hash = "sha256:f6f4a499aba2deeda93c1f26ccc02f3da32b035c8b2db9696b730ef2c9639d29", size = 17640, upload-time = "2025-05-05T20:43:12.555Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a6/78/25281540f1121acaa78926f599a17ce102b8971bc20b096fa7fb6b5b59c1/pep8_naming-0.15.1-py3-none-any.whl", hash = "sha256:eb63925e7fd9e028c7f7ee7b1e413ec03d1ee5de0e627012102ee0222c273c86", size = 9561, upload-time = "2025-05-05T20:43:11.626Z" },
-]
-
-[[package]]
-name = "platform-engineering-charm-template"
-version = "0.0.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "ops" },
-]
-
-[package.dev-dependencies]
-coverage-report = [
-    { name = "coverage" },
-    { name = "pytest" },
-]
-fmt = [
-    { name = "ruff" },
-]
-integration = [
-    { name = "allure-pytest" },
-    { name = "allure-pytest-collection-report" },
-    { name = "jubilant" },
-    { name = "pytest" },
-]
-lint = [
-    { name = "codespell" },
-    { name = "jubilant" },
-    { name = "mypy" },
-    { name = "pep8-naming" },
-    { name = "pytest" },
-    { name = "requests" },
-    { name = "ruff" },
-    { name = "types-pyyaml" },
-    { name = "types-requests" },
-]
-static = [
-    { name = "bandit" },
-]
-unit = [
-    { name = "coverage" },
-    { name = "ops", extra = ["testing"] },
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "ops", specifier = "==3.7.0" }]
-
-[package.metadata.requires-dev]
-coverage-report = [
-    { name = "coverage", extras = ["toml"] },
-    { name = "pytest" },
-]
-fmt = [{ name = "ruff" }]
-integration = [
-    { name = "allure-pytest", specifier = ">=2.8.18" },
-    { name = "allure-pytest-collection-report", git = "https://github.com/canonical/data-platform-workflows?subdirectory=python%2Fpytest_plugins%2Fallure_pytest_collection_report&rev=v24.0.0" },
-    { name = "jubilant", specifier = "==1.8.0" },
-    { name = "pytest" },
-]
-lint = [
-    { name = "codespell" },
-    { name = "jubilant", specifier = "==1.8.0" },
-    { name = "mypy" },
-    { name = "pep8-naming" },
-    { name = "pytest" },
-    { name = "requests" },
-    { name = "ruff" },
-    { name = "types-pyyaml" },
-    { name = "types-requests" },
-]
-static = [{ name = "bandit", extras = ["toml"] }]
-unit = [
-    { name = "coverage", extras = ["toml"] },
-    { name = "ops", extras = ["testing"] },
-    { name = "pytest" },
 ]
 
 [[package]]
