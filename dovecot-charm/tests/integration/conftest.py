@@ -70,10 +70,11 @@ def dovecot_charm(
 
     logging.info("Waiting for active status...")
     juju.wait(
-    lambda status: status.apps[APP_NAME].is_active,
-    timeout=10 * 60,
+        lambda status: status.apps[APP_NAME].is_active,
+        timeout=10 * 60,
     )
     return APP_NAME
+
 
 @pytest.fixture(scope="module")
 def dovecot_charm_manual(
@@ -104,7 +105,7 @@ def dovecot_charm_manual(
 
     logging.info("Waiting for blocked status...")
     juju.wait(
-    lambda status: status.apps[charm_name].is_blocked,
-    timeout=10 * 60,
+        lambda status: status.apps[charm_name].is_blocked,
+        timeout=10 * 60,
     )
     return charm_name

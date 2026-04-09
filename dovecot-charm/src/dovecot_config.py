@@ -2,7 +2,7 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Dovecot IMAP/POP3 mail server charm."""
+"""Dovecot IMAP/POP3 mail server charm configuration."""
 
 import logging
 from typing import TYPE_CHECKING
@@ -43,6 +43,14 @@ class DovecotConfig(BaseModel):
     mailname: str = Field(..., min_length=1, description="Mailname for the server")
     postmaster_address: EmailStr = Field(..., description="Postmaster email address")
     primary_unit: str = Field(..., min_length=1, description="Name of the primary unit")
+    manage_luks: bool = Field(
+        False,
+        description=(
+            "Enable automatic LUKS encryption management for attached block storage. "
+            "When enabled, the charm will create a keyfile, format the storage with LUKS, create an ext4 filesystem, "
+            "and manage mounting and crypttab/fstab entries."
+        ),
+    )
 
     @field_validator("primary_unit", mode="after")
     @classmethod
@@ -63,6 +71,7 @@ class DovecotConfig(BaseModel):
                     "mailname": config.get("mailname"),
                     "postmaster_address": config.get("postmaster-address"),
                     "primary_unit": config.get("primary-unit"),
+                    "manage_luks": config.get("manage-luks", False),
                 },
                 context={"charm": charm},
             )

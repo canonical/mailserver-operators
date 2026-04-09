@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 import dataclasses
 from subprocess import CalledProcessError  # nosec
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, call, mock_open, patch
 
 import ops.testing
 import pytest
@@ -164,8 +164,8 @@ def test_storage_detaching_unmount_and_close(ctx, base_state):
         patch("charm.subprocess.run") as mock_run,
     ):
         ctx.run(ctx.on.storage_detaching(storage), state_in)
-    mock_run.assert_any_call(["umount", "/srv/mail"], check=True)
-    mock_run.assert_any_call(["cryptsetup", "luksClose", "mail-data"], check=True)
+    mock_run.assert_any_call(["/usr/bin/umount", "/srv/mail"], check=True)
+    mock_run.assert_any_call(["/usr/sbin/cryptsetup", "luksClose", "mail-data"], check=True)
 
 
 def test_storage_detaching_not_mounted(ctx, base_state):
@@ -193,21 +193,4 @@ def test_storage_detaching_luks_disabled_skips_close(ctx, base_state):
         patch("charm.subprocess.run") as mock_run,
     ):
         ctx.run(ctx.on.storage_detaching(storage), state_in)
-    mock_run.assert_called_once_with(["umount", "/srv/mail"], check=True)
-
-
-# --- Update-status tests ---
-
-
-def test_update_status_luks_disabled_mounted(ctx, base_state):
-    state_in = dataclasses.replace(base_state, config={**base_state.config, "manage-luks": False})
-    with patch("charm.os.path.ismount", return_value=True):
-        state_out = ctx.run(ctx.on.update_status(), state_in)
-    assert state_out.unit_status == ActiveStatus()
-
-
-def test_update_status_luks_disabled_not_mounted(ctx, base_state):
-    state_in = dataclasses.replace(base_state, config={**base_state.config, "manage-luks": False})
-    with patch("charm.os.path.ismount", return_value=False):
-        state_out = ctx.run(ctx.on.update_status(), state_in)
-    assert state_out.unit_status == BlockedStatus("mail-data not mounted; manage-luks disabled")
+    assert call(["/usr/bin/umount", "/srv/mail"], check=True) not in mock_run.call_args_list

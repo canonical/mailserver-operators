@@ -21,6 +21,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 
 from dovecot_config import DovecotConfig, DovecotConfigInvalidError
+from tools import configure_file
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,10 @@ REQUIRED_PACKAGES = [
 
 HOSTNAME_FILE = "/etc/hostname"
 MAILNAME_FILE = "/etc/mailname"
+LUKS_ENCRYPTION_FILE = "/etc/dovecot-charm.key"
 
+MAPPER_NAME = "mail-data"
+MAPPER_PATH = f"/dev/mapper/{MAPPER_NAME}"
 PEER_RELATION_NAME = "replicas"
 
 
@@ -188,7 +192,7 @@ class DovecotCharm(CharmBase):
                 ["/usr/bin/doveconf", "-c", DOVECOT_CONF_TARGET],
                 check=True,
                 capture_output=True,
-            )  # nosec B603
+            )
             return True
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to validate dovecot configuration: {e}")
@@ -217,7 +221,7 @@ class DovecotCharm(CharmBase):
                 ["/usr/sbin/postconf", "-e", 'mailbox_command=/usr/bin/procmail -a "$EXTENSION"'],
                 check=True,
                 capture_output=True,
-            )  # nosec B603
+            )
             systemd.service_reload("postfix", restart_on_failure=True)
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to configure postfix: {e}")
@@ -241,7 +245,7 @@ class DovecotCharm(CharmBase):
 
         try:
             # The command and arguments are fixed literals with no user-controlled input.
-            result = subprocess.run(command, check=True, capture_output=True, text=True)  # nosec B603
+            result = subprocess.run(command, check=True, capture_output=True, text=True)
             event.set_results({"status": "success", "output": result.stdout})
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to clear Postfix queue: {e.stderr}")
@@ -249,23 +253,21 @@ class DovecotCharm(CharmBase):
 
     def _on_get_encryption_key_action(self, event):
         """Return the generated LUKS key when automatic LUKS management is enabled."""
-        keyfile = "/etc/dovecot-charm.key"
-
         if not self._manage_luks:
             event.fail("Cannot retrieve key: manage-luks is disabled")
             return
 
-        if not os.path.exists(keyfile):
+        if not os.path.exists(LUKS_ENCRYPTION_FILE):
             event.fail("Cannot retrieve key: encryption key is not available yet")
             return
 
         try:
-            with open(keyfile, "rb") as f:
+            with open(LUKS_ENCRYPTION_FILE, "rb") as f:
                 key_hex = f.read().hex()
             event.set_results({"status": "success", "encoding": "hex", "key": key_hex})
         except OSError as e:
             logger.exception(f"Failed to read encryption key: {e}")
-            event.fail("Cannot retrieve key: failed to read keyfile")
+            event.fail(f"Cannot retrieve key: failed to read keyfile: {e}")
 
     @property
     def _manage_luks(self):
@@ -278,7 +280,9 @@ class DovecotCharm(CharmBase):
 
     def _on_mail_data_storage_attached(self, event):
         """Handle storage attached event."""
-        if not self._manage_luks:
+        if not (dovecot_config := self._get_dovecot_config()):
+            return
+        if not dovecot_config.manage_luks:
             if self._mail_storage_mounted():
                 self.unit.status = ActiveStatus()
             else:
@@ -287,7 +291,7 @@ class DovecotCharm(CharmBase):
             return
 
         if shutil.which("cryptsetup") is None:
-            logger.info("cryptsetup not installed, deferring storage setup")
+            logger.warning("cryptsetup not installed, deferring storage setup")
             event.defer()
             return
 
@@ -309,20 +313,21 @@ class DovecotCharm(CharmBase):
     def _on_mail_data_storage_detaching(self, event):
         """Handle storage detaching event."""
         try:
-            if self._manage_luks and self._mail_storage_mounted():
-                subprocess.run(["umount", MAIL_ROOT], check=True)  # noqa: S607
+            if not (dovecot_config := self._get_dovecot_config()):
+                logger.warning(
+                    "Cannot determine if manage-luks is enabled during storage detachment"
+                )
+                return
+            if dovecot_config.manage_luks and self._mail_storage_mounted():
+                subprocess.run(["/usr/bin/umount", MAIL_ROOT], check=True)
 
             if os.path.exists("/dev/mapper/mail-data"):
-                subprocess.run(["cryptsetup", "luksClose", "mail-data"], check=True)  # noqa: S607
+                subprocess.run(["/usr/sbin/cryptsetup", "luksClose", "mail-data"], check=True)
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to detach storage: {e}")
 
     def _setup_luks_storage(self, dev_path):  # noqa: C901
         """Set up LUKS encryption on device using keyfile."""
-        keyfile = "/etc/dovecot-charm.key"
-        mapper_name = "mail-data"
-        mapper_path = f"/dev/mapper/{mapper_name}"
-
         if not os.path.exists(dev_path):
             raise RuntimeError(f"Device {dev_path} does not exist")
 
@@ -330,20 +335,26 @@ class DovecotCharm(CharmBase):
         if not stat.S_ISBLK(mode):
             raise RuntimeError(f"{dev_path} is not a valid block device")
 
-        if not os.path.exists(keyfile):
-            logger.info(f"Generating keyfile at {keyfile}...")
+        if not os.path.exists(LUKS_ENCRYPTION_FILE):
+            logger.info(f"Generating keyfile at {LUKS_ENCRYPTION_FILE}...")
             subprocess.run(
-                ["dd", "if=/dev/urandom", f"of={keyfile}", "bs=512", "count=8"],  # noqa: S607
+                [
+                    "/usr/bin/dd",
+                    "if=/dev/urandom",
+                    f"of={LUKS_ENCRYPTION_FILE}",
+                    "bs=512",
+                    "count=8",
+                ],
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            os.chmod(keyfile, 0o400)
+            os.chmod(LUKS_ENCRYPTION_FILE, 0o400)
             logger.info("Keyfile generated successfully")
 
         try:
             subprocess.run(
-                ["cryptsetup", "isLuks", dev_path],  # noqa: S607
+                ["/usr/sbin/cryptsetup", "isLuks", dev_path],
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -352,69 +363,73 @@ class DovecotCharm(CharmBase):
         except subprocess.CalledProcessError:
             logger.info(f"Formatting {dev_path} as LUKS with keyfile...")
             subprocess.run(
-                ["cryptsetup", "luksFormat", dev_path, "--key-file", keyfile, "--batch-mode"],  # noqa: S607
+                [
+                    "/usr/sbin/cryptsetup",
+                    "luksFormat",
+                    dev_path,
+                    "--key-file",
+                    LUKS_ENCRYPTION_FILE,
+                    "--batch-mode",
+                ],
                 check=True,
                 capture_output=True,
             )
             logger.info("LUKS format completed")
 
-        if not os.path.exists(mapper_path):
+        if not os.path.exists(MAPPER_PATH):
             logger.info(f"Opening LUKS device {dev_path}...")
             subprocess.run(
-                ["cryptsetup", "open", dev_path, mapper_name, "--key-file", keyfile],  # noqa: S607
+                [
+                    "/usr/sbin/cryptsetup",
+                    "open",
+                    dev_path,
+                    MAPPER_NAME,
+                    "--key-file",
+                    LUKS_ENCRYPTION_FILE,
+                ],
                 check=True,
                 capture_output=True,
             )
-            logger.info(f"LUKS device opened as {mapper_path}")
+            logger.info(f"LUKS device opened as {MAPPER_PATH}")
 
-            subprocess.run(["dmsetup", "mknodes"], check=True, capture_output=True)  # noqa: S607
+            subprocess.run(["/usr/sbin/dmsetup", "mknodes"], check=True, capture_output=True)
             logger.info("Device mapper nodes refreshed")
 
         has_fs = False
         try:
             result = subprocess.run(
-                ["blkid", mapper_path],  # noqa: S607
+                ["/usr/sbin/blkid", MAPPER_PATH],
                 check=True,
                 capture_output=True,
                 text=True,
             )
             if 'TYPE="ext4"' in result.stdout:
                 has_fs = True
-                logger.info(f"{mapper_path} already has ext4 filesystem")
+                logger.info(f"{MAPPER_PATH} already has ext4 filesystem")
         except subprocess.CalledProcessError:
-            logger.info(f"{mapper_path} has no filesystem")
+            logger.info(f"{MAPPER_PATH} has no filesystem")
 
         if not has_fs:
-            logger.info(f"Formatting {mapper_path} as ext4...")
-            subprocess.run(["mkfs.ext4", "-m", "0", mapper_path], check=True, capture_output=True)  # noqa: S607
+            logger.info(f"Formatting {MAPPER_PATH} as ext4...")
+            subprocess.run(
+                ["/usr/sbin/mkfs.ext4", "-m", "0", MAPPER_PATH], check=True, capture_output=True
+            )
             logger.info("ext4 filesystem created")
 
-        self._configure_file(
-            "/etc/crypttab", f"{mapper_name} {dev_path} {keyfile} luks,discard,noauto\n"
+        configure_file(
+            "/etc/crypttab",
+            f"{MAPPER_NAME} {dev_path} {LUKS_ENCRYPTION_FILE} luks,discard,noauto\n",
         )
-        self._configure_file("/etc/fstab", f"{mapper_path} {MAIL_ROOT} ext4 defaults,noauto 0 2\n")
+        configure_file("/etc/fstab", f"{MAPPER_PATH} {MAIL_ROOT} ext4 defaults,noauto 0 2\n")
 
         if not os.path.exists(MAIL_ROOT):
             os.makedirs(MAIL_ROOT)
 
         if not self._mail_storage_mounted():
-            logger.info(f"Mounting {mapper_path} to {MAIL_ROOT}...")
-            subprocess.run(["mount", mapper_path, MAIL_ROOT], check=True)  # noqa: S607
-            os.chmod(MAIL_ROOT, 0o1777)  # noqa: S103
+            logger.info(f"Mounting {MAPPER_PATH} to {MAIL_ROOT}...")
+            subprocess.run(["/usr/bin/mount", MAPPER_PATH, MAIL_ROOT], check=True)
+            os.chmod(MAIL_ROOT, 0o1777)  # noqa: S103 # nosec B103
             logger.info(f"Successfully mounted to {MAIL_ROOT}")
-
-    def _configure_file(self, path, entry):
-        """Add an entry to a config file if it doesn't already exist."""
-        if os.path.exists(path):
-            with open(path) as f:
-                if entry in f.read():
-                    logger.info(f"Entry already exists in {path}")
-                    return
-
-        logger.info(f"Adding entry to {path}")
-        with open(path, "a") as f:
-            f.write(entry)
-        logger.info(f"{path} configured")
 
 
 if __name__ == "__main__":  # pragma: nocover
