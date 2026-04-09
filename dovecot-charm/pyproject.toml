@@ -20,6 +20,7 @@ dependencies = [
     "pydantic[email]>=2.12.5",
     "cryptography>=46.0.6",
     "charmlibs-systemd==1.0.0",
+    "charmlibs-interfaces-tls-certificates>=1.8.1",
 ]
 
 [dependency-groups]

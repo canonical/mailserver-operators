@@ -14,15 +14,15 @@ import jinja2
 import ops
 from charmhelpers.core import host
 from charmlibs import apt, systemd
-from ops.charm import CharmBase
-from ops.main import main
-from ops.model import BlockedStatus, MaintenanceStatus
-
 from charmlibs.interfaces.tls_certificates import (
     CertificateAvailableEvent,
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
 )
+from ops.charm import CharmBase
+from ops.main import main
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+
 from constants import (
     DOVECOT_CONF_TARGET,
     DOVECOT_CONF_TEMPLATE,

@@ -7,10 +7,6 @@ base: ubuntu@24.04
 platforms:
   amd64:
 
-charm-libs:
-  - lib: tls-certificates-interface.tls_certificates
-    version: "4"
-
 name: dovecot-charm
 
 summary: Dovecot IMAP/POP3 mail server charm
