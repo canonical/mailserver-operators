@@ -35,7 +35,7 @@ The following major and minor features were added in this release.
 Added end-to-end mail delivery integration test suite
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Added an integration test suite that verifies the full mail delivery pipeline end to end. Tests confirm that messages sent locally using Postfix are delivered through Procmail into Dovecot and are then retrievable over IMAP. The suite connects to a deployed Dovecot unit, sends a test message, and asserts that the message appears in the recipient's INBOX within a configurable timeout.
+Added an integration test suite that verifies the full mail delivery pipeline end to end. Tests confirm that messages sent locally using Postfix are delivered through Procmail into Dovecot and are then retrievable over IMAP. The suite connects to a deployed Dovecot unit, sends a test message, and asserts that the message appears in the recipient's inbox within a fixed timeout.
 
 Relevant links:
 
