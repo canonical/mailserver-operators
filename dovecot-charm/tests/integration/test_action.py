@@ -90,3 +90,22 @@ def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
     logging.info(f"Action output: {result.results.get('output')}")
     time.sleep(15)
     _assert_queue_empty(juju, unit_name)
+
+
+def test_get_encryption_key_action(juju: jubilant.Juju, dovecot_charm: str):
+    """Test retrieving generated encryption key when auto LUKS mode is enabled."""
+    unit_name = f"{dovecot_charm}/0"
+
+    logging.info("Running get-encryption-key action...")
+    result = juju.run(unit_name, "get-encryption-key")
+    assert result.status == "completed"
+
+    key = result.results.get("key")
+    assert key, "Expected key to be returned"
+    assert result.results.get("encoding") == "hex"
+
+    expected_key = juju.exec(
+        "od -An -tx1 -v /etc/dovecot-charm.key | tr -d ' \\n'",
+        unit=unit_name,
+    )
+    assert key == expected_key.stdout.strip()

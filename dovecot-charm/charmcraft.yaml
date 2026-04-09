@@ -82,3 +82,5 @@ actions:
         description: The queue to clear (deferred or all).
         default: deferred
         enum: [deferred, all]
+  get-encryption-key:
+    description: Retrieve the generated storage encryption key when automatic LUKS mode is enabled.

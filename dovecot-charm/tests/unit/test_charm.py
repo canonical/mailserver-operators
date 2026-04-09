@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 import dataclasses
 from subprocess import CalledProcessError  # nosec
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import ops.testing
 import pytest
@@ -69,6 +69,40 @@ def test_clear_queue_failure(ctx, base_state):
             base_state,
         )
     assert "postsuper" in exc_info.value.message
+
+
+def test_get_encryption_key_success(ctx, base_state):
+    state_in = dataclasses.replace(base_state, config={**base_state.config, "manage-luks": True})
+    with (
+        patch("charm.os.path.exists", return_value=True),
+        patch("builtins.open", mock_open(read_data=b"\x01\x02\x0f")),
+    ):
+        ctx.run(ctx.on.action("get-encryption-key"), state_in)
+
+    assert ctx.action_results == {
+        "status": "success",
+        "encoding": "hex",
+        "key": "01020f",
+    }
+
+
+def test_get_encryption_key_fails_when_manage_luks_disabled(ctx, base_state):
+    state_in = dataclasses.replace(base_state, config={**base_state.config, "manage-luks": False})
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(ctx.on.action("get-encryption-key"), state_in)
+
+    assert "manage-luks is disabled" in exc_info.value.message
+
+
+def test_get_encryption_key_fails_when_keyfile_missing(ctx, base_state):
+    state_in = dataclasses.replace(base_state, config={**base_state.config, "manage-luks": True})
+    with (
+        patch("charm.os.path.exists", return_value=False),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(ctx.on.action("get-encryption-key"), state_in)
+
+    assert "encryption key is not available yet" in exc_info.value.message
 
 
 # --- Storage handler tests ---

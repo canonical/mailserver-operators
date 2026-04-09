@@ -71,6 +71,10 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.upgrade_charm, self._reconcile)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
         self.framework.observe(
+            self.on.get_encryption_key_action,
+            self._on_get_encryption_key_action,
+        )
+        self.framework.observe(
             self.on.mail_data_storage_attached, self._on_mail_data_storage_attached
         )
         self.framework.observe(
@@ -242,6 +246,26 @@ class DovecotCharm(CharmBase):
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to clear Postfix queue: {e.stderr}")
             event.fail(f"Failed to run postsuper: {e.stderr}")
+
+    def _on_get_encryption_key_action(self, event):
+        """Return the generated LUKS key when automatic LUKS management is enabled."""
+        keyfile = "/etc/dovecot-charm.key"
+
+        if not self._manage_luks:
+            event.fail("Cannot retrieve key: manage-luks is disabled")
+            return
+
+        if not os.path.exists(keyfile):
+            event.fail("Cannot retrieve key: encryption key is not available yet")
+            return
+
+        try:
+            with open(keyfile, "rb") as f:
+                key_hex = f.read().hex()
+            event.set_results({"status": "success", "encoding": "hex", "key": key_hex})
+        except OSError as e:
+            logger.exception(f"Failed to read encryption key: {e}")
+            event.fail("Cannot retrieve key: failed to read keyfile")
 
     @property
     def _manage_luks(self):

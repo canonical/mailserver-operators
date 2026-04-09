@@ -57,6 +57,7 @@ def dovecot_charm(
             "mailname": "example.com",
             "postmaster-address": "postmaster@example.com",
             "primary-unit": f"{APP_NAME}/0",
+            "manage-luks": True,
         }
         charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
         juju.deploy(
@@ -68,5 +69,42 @@ def dovecot_charm(
         )
 
     logging.info("Waiting for active status...")
-    juju.wait(jubilant.all_active, timeout=10 * 60)
+    juju.wait(
+    lambda status: status.apps[APP_NAME].is_active,
+    timeout=10 * 60,
+    )
     return APP_NAME
+
+@pytest.fixture(scope="module")
+def dovecot_charm_manual(
+    charm: str,
+    juju: jubilant.Juju,
+) -> str:
+    """Build and deploy the charm."""
+    charm_name = f"{APP_NAME}-manual"
+    logging.info(f"Checking for existing application {charm_name}...")
+
+    if not juju.status().apps.get(charm_name):
+        logging.info(f"Application {charm_name} not found, proceeding with deployment.")
+
+        config = {
+            "mailname": "example.com",
+            "postmaster-address": "postmaster@example.com",
+            "primary-unit": f"{charm_name}/0",
+            "manage-luks": False,
+        }
+        charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
+        juju.deploy(
+            charm_path,
+            app=charm_name,
+            config=config,
+            constraints={"virt-type": "virtual-machine"},
+            trust=True,
+        )
+
+    logging.info("Waiting for blocked status...")
+    juju.wait(
+    lambda status: status.apps[charm_name].is_blocked,
+    timeout=10 * 60,
+    )
+    return charm_name
