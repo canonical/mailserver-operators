@@ -243,18 +243,24 @@ class DovecotCharm(CharmBase):
             logger.exception(f"Failed to clear Postfix queue: {e.stderr}")
             event.fail(f"Failed to run postsuper: {e.stderr}")
 
+    @property
+    def _manage_luks(self):
+        """Return True if the charm should manage LUKS encryption."""
+        return bool(self.config.get("manage-luks", True))
+
     def _mail_storage_mounted(self):
         """Return True if mail storage is mounted."""
         return os.path.ismount(MAIL_ROOT)
 
     def _on_mail_data_storage_attached(self, event):
         """Handle storage attached event."""
-        if self._mail_storage_mounted():
-            self.unit.status = ActiveStatus()
-        else:
-            self.unit.status = BlockedStatus("mail-data not mounted")
-            event.defer()
-            # return
+        if not self._manage_luks:
+            if self._mail_storage_mounted():
+                self.unit.status = ActiveStatus()
+            else:
+                self.unit.status = BlockedStatus("mail-data not mounted; manage-luks disabled")
+                event.defer()
+            return
 
         if shutil.which("cryptsetup") is None:
             logger.info("cryptsetup not installed, deferring storage setup")
@@ -279,7 +285,7 @@ class DovecotCharm(CharmBase):
     def _on_mail_data_storage_detaching(self, event):
         """Handle storage detaching event."""
         try:
-            if self._mail_storage_mounted():
+            if self._manage_luks and self._mail_storage_mounted():
                 subprocess.run(["umount", MAIL_ROOT], check=True)  # noqa: S607
 
             if os.path.exists("/dev/mapper/mail-data"):
@@ -359,7 +365,9 @@ class DovecotCharm(CharmBase):
             subprocess.run(["mkfs.ext4", "-m", "0", mapper_path], check=True, capture_output=True)  # noqa: S607
             logger.info("ext4 filesystem created")
 
-        self._configure_file("/etc/crypttab", f"{mapper_name} {dev_path} {keyfile} luks,discard,noauto\n")
+        self._configure_file(
+            "/etc/crypttab", f"{mapper_name} {dev_path} {keyfile} luks,discard,noauto\n"
+        )
         self._configure_file("/etc/fstab", f"{mapper_path} {MAIL_ROOT} ext4 defaults,noauto 0 2\n")
 
         if not os.path.exists(MAIL_ROOT):

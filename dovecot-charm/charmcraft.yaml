@@ -47,6 +47,13 @@ config:
         Used to identify outgoing mail and should match your server's hostname.
       default: ""
       type: string
+    manage-luks:
+      description: |
+        Enable automatic LUKS encryption management for attached block storage.
+        When enabled, the charm will create a keyfile, format the storage with LUKS,
+        create an ext4 filesystem, and manage mounting and crypttab/fstab entries.
+      default: false
+      type: boolean
     postmaster-address:
       description: |
         Email address of the postmaster or mail system administrator.

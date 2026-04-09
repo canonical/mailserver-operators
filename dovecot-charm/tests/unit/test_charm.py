@@ -1,11 +1,12 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
-
+import dataclasses
 from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
 
 import ops.testing
 import pytest
+from ops.testing import ActiveStatus, BlockedStatus
 
 
 def test_open_ports(ctx, base_state):
