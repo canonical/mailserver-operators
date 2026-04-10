@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Dovecot IMAP/POP3 mail server charm configuration."""
+"""Dovecot charm configuration."""
 
 import logging
 from typing import TYPE_CHECKING

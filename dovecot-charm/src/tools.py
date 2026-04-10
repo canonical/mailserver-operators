@@ -5,20 +5,18 @@
 """Helpful tools for the charm."""
 
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 
 
 def configure_file(path, entry):
     """Add an entry to a config file if it doesn't already exist."""
-    if os.path.exists(path):
-        with open(path) as f:
-            if entry in f.read():
-                logger.info(f"Entry already exists in {path}")
-                return
+    with open(path, "a+") as f:
+        f.seek(0)
+        if entry in f.read():
+            logger.info(f"Entry already exists in {path}")
+            return
 
-    logger.info(f"Adding entry to {path}")
-    with open(path, "a") as f:
+        logger.info(f"Adding entry to {path}")
         f.write(entry)
     logger.info(f"{path} configured")
