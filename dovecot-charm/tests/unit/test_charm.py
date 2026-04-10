@@ -3,6 +3,7 @@
 from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
 
+import ops
 import ops.testing
 import pytest
 
@@ -10,8 +11,8 @@ import pytest
 def test_open_ports(ctx, base_state):
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot"),
-        patch("charm.DovecotCharm._setup_procmail"),
+        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
+        patch("charm.DovecotCharm._setup_procmail", return_value=True),
         patch("storage.handle_mail_storage_attached"),
         patch("storage.handle_mail_storage_detaching"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
@@ -20,6 +21,48 @@ def test_open_ports(ctx, base_state):
 
     expected = {ops.testing.TCPPort(p) for p in [143, 993, 110, 995, 4190, 9900]}
     assert state_out.opened_ports == expected
+
+
+def test_configure_sets_active_on_success(ctx, base_state):
+    with (
+        patch("charm.DovecotCharm._install"),
+        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
+        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+        patch("storage.handle_mail_storage_attached"),
+        patch("storage.handle_mail_storage_detaching"),
+        patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
+    ):
+        state_out = ctx.run(ctx.on.config_changed(), base_state)
+
+    assert isinstance(state_out.unit_status, ops.ActiveStatus)
+
+
+def test_configure_blocks_when_dovecot_setup_fails(ctx, base_state):
+    with (
+        patch("charm.DovecotCharm._install"),
+        patch("charm.DovecotCharm._setup_dovecot", return_value=False),
+        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+        patch("storage.handle_mail_storage_attached"),
+        patch("storage.handle_mail_storage_detaching"),
+        patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
+    ):
+        state_out = ctx.run(ctx.on.config_changed(), base_state)
+
+    assert not isinstance(state_out.unit_status, ops.ActiveStatus)
+
+
+def test_configure_blocks_when_procmail_setup_fails(ctx, base_state):
+    with (
+        patch("charm.DovecotCharm._install"),
+        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
+        patch("charm.DovecotCharm._setup_procmail", return_value=False),
+        patch("storage.handle_mail_storage_attached"),
+        patch("storage.handle_mail_storage_detaching"),
+        patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
+    ):
+        state_out = ctx.run(ctx.on.config_changed(), base_state)
+
+    assert not isinstance(state_out.unit_status, ops.ActiveStatus)
 
 
 # --- Clear-queue action tests ---

@@ -127,9 +127,12 @@ class DovecotCharm(CharmBase):
 
     def _configure(self, dovecot_config: DovecotConfig):
         """Perform basic configuration."""
-        self._setup_dovecot(dovecot_config)
-        self._setup_procmail()
+        if not self._setup_dovecot(dovecot_config):
+            return
+        if not self._setup_procmail():
+            return
         self._open_ports()
+        self.unit.status = ops.ActiveStatus()
 
     def _open_ports(self):
         """Open mail ports."""
@@ -140,7 +143,7 @@ class DovecotCharm(CharmBase):
         self.unit.open_port("tcp", 4190)
         self.unit.open_port("tcp", 9900)
 
-    def _setup_dovecot(self, dovecot_config: DovecotConfig):
+    def _setup_dovecot(self, dovecot_config: DovecotConfig) -> bool:
         """Set up and configure dovecot."""
         self.unit.status = MaintenanceStatus("Setting up and configuring dovecot")
         template_context = {
@@ -156,9 +159,10 @@ class DovecotCharm(CharmBase):
             self.unit.status = BlockedStatus(
                 "Invalid Dovecot configuration, check logs for details"
             )
-            return
+            return False
         systemd.service_reload("dovecot", restart_on_failure=True)
         self.unit.status = MaintenanceStatus("Dovecot configuration updated")
+        return True
 
     def _validate_dovecot_config(self, config: DovecotConfig) -> bool:
         """Validate the Dovecot configuration."""
@@ -174,7 +178,7 @@ class DovecotCharm(CharmBase):
             logger.exception(f"Failed to validate dovecot configuration: {e}")
             return False
 
-    def _setup_procmail(self):
+    def _setup_procmail(self) -> bool:
         """Set up and configure procmail default file."""
         self.unit.status = MaintenanceStatus("Setting up and configuring procmail")
 
@@ -202,7 +206,8 @@ class DovecotCharm(CharmBase):
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to configure postfix: {e}")
             self.unit.status = BlockedStatus(f"Failed to configure postfix: {e.stderr}")
-            return
+            return False
+        return True
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""
