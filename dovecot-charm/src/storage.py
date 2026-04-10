@@ -9,7 +9,7 @@ import shutil
 import stat
 import subprocess  # nosec
 
-from ops.model import ActiveStatus, BlockedStatus
+from ops.model import BlockedStatus
 
 from constants import LUKS_ENCRYPTION_FILE, MAIL_ROOT, MAPPER_NAME, MAPPER_PATH
 from tools import configure_file
@@ -22,40 +22,46 @@ def _mail_storage_mounted():
     return os.path.ismount(MAIL_ROOT)
 
 
-def handle_mail_storage_attached(charm):
-    """Handle storage attached event."""
+def handle_mail_storage_attached(charm) -> bool:
+    """Handle storage attached event.
+
+    Returns True if it is safe to proceed with charm configuration, False if
+    the unit has been placed in a blocked state and configuration should be
+    skipped.
+    """
     if not (dovecot_config := charm._get_dovecot_config()):
-        return
+        return False
 
     if not dovecot_config.manage_luks:
         if _mail_storage_mounted():
-            charm.unit.status = ActiveStatus()
-        else:
-            charm.unit.status = BlockedStatus("mail-data not mounted; manage-luks disabled")
-        return
+            return True
+        charm.unit.status = BlockedStatus("mail-data not mounted; manage-luks disabled")
+        return False
 
     if shutil.which("cryptsetup") is None:
         logger.warning("cryptsetup not installed, deferring storage setup")
-        return
+        return True
 
     storages = charm.model.storages["mail-data"]
     if not storages:
         logger.error("Storage attached but no location found")
-        return
+        return True
     dev_path = storages[0].location
     if not dev_path:
         logger.error("Storage attached but no location found")
-        return
+        return True
 
     try:
         setup_luks_storage(charm, dev_path)
-        charm.unit.status = ActiveStatus()
+        return True
     except subprocess.CalledProcessError as e:
         logger.exception(f"Failed to setup LUKS storage: {e}")
         charm.unit.status = BlockedStatus("Failed to setup LUKS storage")
+        return False
     except RuntimeError as e:
         logger.exception(f"Storage validation failed: {e}")
         charm.unit.status = BlockedStatus(str(e))
+        return False
 
 
 def handle_mail_storage_detaching(charm):

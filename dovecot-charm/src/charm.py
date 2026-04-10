@@ -110,7 +110,8 @@ class DovecotCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Configuring charm")
         if not (dovecot_config := self._get_dovecot_config()):
             return
-        handle_mail_storage_attached(self)
+        if not handle_mail_storage_attached(self):
+            return
         handle_mail_storage_detaching(self)
         if not shutil.which("doveconf"):
             logger.warning("Dovecot not installed yet, deferring configuration")
