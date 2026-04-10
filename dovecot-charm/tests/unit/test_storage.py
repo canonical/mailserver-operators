@@ -5,7 +5,6 @@ from unittest.mock import call, mock_open, patch
 
 import ops.testing
 import pytest
-from ops.testing import ActiveStatus, BlockedStatus
 
 
 def test_get_encryption_key_success(ctx, base_state):
@@ -48,14 +47,14 @@ def test_get_encryption_key_fails_when_keyfile_missing(ctx, base_state):
 def test_storage_attached_defer_if_cryptsetup_missing(ctx, base_state):
     storage = ops.testing.Storage("mail-data")
     state_in = dataclasses.replace(base_state, storages={storage})
-    with(
+    with (
         patch("charm.DovecotCharm._install"),
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
         patch("storage.shutil.which", return_value=None),
         patch("storage.setup_luks_storage") as mock_setup_luks,
     ):
-        state_out = ctx.run(ctx.on.storage_attached(storage), state_in)
+        ctx.run(ctx.on.storage_attached(storage), state_in)
     # When cryptsetup is missing, event is deferred — status not changed to Active
     mock_setup_luks.assert_not_called()
 
