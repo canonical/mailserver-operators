@@ -59,6 +59,7 @@ def test_luks_storage_manual(juju: jubilant.Juju, dovecot_charm_manual: str):
     """Test manual LUKS setup with pre-formatted LUKS device."""
     luks_device_name = "mail-data"
     luks_passphrase = token_hex(16)
+    unit_name = f"{dovecot_charm_manual}/0"
 
     # Wait for unit to start and storage to attach (but not active - it will be blocked until we set up LUKS)
     logging.info("Waiting for unit and storage to be attached...")
@@ -70,17 +71,22 @@ def test_luks_storage_manual(juju: jubilant.Juju, dovecot_charm_manual: str):
         try:
             status = juju.status()
             # Check if storage is attached
-            if not status.storage or "mail-data/0" not in status.storage.storage:
+            if not status.storage or not getattr(status.storage, "storage", None):
                 logging.info("Waiting for storage to attach...")
                 attempts += 1
                 time.sleep(5)
                 continue
 
-            storage_info = status.storage.storage["mail-data/0"]
-            if storage_location := storage_info.attachments.units.get(f"{dovecot_charm_manual}/0"):
-                dev_path = storage_location.location
-                logging.info(f"Found attached storage at {dev_path}")
-            else:
+            for storage_id, storage_info in status.storage.storage.items():
+                if not storage_id.startswith("mail-data/"):
+                    continue
+
+                if storage_location := storage_info.attachments.units.get(unit_name):
+                    dev_path = storage_location.location
+                    logging.info(f"Found attached storage at {dev_path} from {storage_id}")
+                    break
+
+            if dev_path is None:
                 logging.info("Storage not yet attached to unit...")
                 attempts += 1
                 time.sleep(5)
@@ -89,57 +95,55 @@ def test_luks_storage_manual(juju: jubilant.Juju, dovecot_charm_manual: str):
             attempts += 1
             time.sleep(5)
 
-    if not dev_path or not f"{dovecot_charm_manual}/0":
+    if not dev_path:
         pytest.fail(
-            f"Could not find storage device after {max_attempts} attempts. dev_path={dev_path}, unit_name={f'{dovecot_charm_manual}/0'}"
+            f"Could not find storage device after {max_attempts} attempts. dev_path={dev_path}, unit_name={unit_name}"
         )
 
-    logging.info(f"Using device: {dev_path} on unit: {f'{dovecot_charm_manual}/0'}")
+    logging.info(f"Using device: {dev_path} on unit: {unit_name}")
 
     # Format device with LUKS manually
     logging.info(f"Formatting {dev_path} with LUKS...")
     format_cmd = f"echo -n '{luks_passphrase}' | cryptsetup luksFormat {dev_path} --batch-mode -"
-    juju.exec(format_cmd, unit=f"{dovecot_charm_manual}/0")
+    juju.exec(format_cmd, unit=unit_name)
 
     # Open the LUKS device
     logging.info(f"Opening LUKS device as {luks_device_name}...")
     open_cmd = f"echo -n '{luks_passphrase}' | cryptsetup luksOpen {dev_path} {luks_device_name} -"
-    juju.exec(open_cmd, unit=f"{dovecot_charm_manual}/0")
+    juju.exec(open_cmd, unit=unit_name)
 
     # Create ext4 filesystem
     logging.info("Creating ext4 filesystem...")
-    juju.exec(f"mkfs.ext4 -F /dev/mapper/{luks_device_name}", unit=f"{dovecot_charm_manual}/0")
+    juju.exec(f"mkfs.ext4 -F /dev/mapper/{luks_device_name}", unit=unit_name)
 
     # Create mount point and mount
     logging.info("Mounting encrypted device...")
-    juju.exec("mkdir -p /srv/mail", unit=f"{dovecot_charm_manual}/0")
-    juju.exec(f"mount /dev/mapper/{luks_device_name} /srv/mail", unit=f"{dovecot_charm_manual}/0")
+    juju.exec("mkdir -p /srv/mail", unit=unit_name)
+    juju.exec(f"mount /dev/mapper/{luks_device_name} /srv/mail", unit=unit_name)
 
     # Configure crypttab and fstab for persistent mounting
     logging.info("Configuring crypttab...")
     juju.exec(
         f"echo '{luks_device_name} {dev_path} none luks' >> /etc/crypttab",
-        unit=f"{dovecot_charm_manual}/0",
+        unit=unit_name,
     )
 
     logging.info("Configuring fstab...")
     juju.exec(
         f"echo '/dev/mapper/{luks_device_name} /srv/mail ext4 defaults 0 2' >> /etc/fstab",
-        unit=f"{dovecot_charm_manual}/0",
+        unit=unit_name,
     )
 
     # Now that storage is properly set up, trigger charm reconciliation and wait for active
     logging.info("Triggering charm reconciliation...")
-    juju.config(dovecot_charm_manual, {"primary-unit": f"{dovecot_charm_manual}/0"})
+    juju.config(dovecot_charm_manual, {"mailname": "example1.com"})
 
     logging.info("Waiting for charm to become active...")
     juju.wait(jubilant.all_active, timeout=300)
 
     # Verify LUKS device status
     logging.info("Verifying LUKS device is properly configured...")
-    cryptsetup_status = juju.exec(
-        f"cryptsetup status {luks_device_name}", unit=f"{dovecot_charm_manual}/0"
-    )
+    cryptsetup_status = juju.exec(f"cryptsetup status {luks_device_name}", unit=unit_name)
     logging.info(f"Cryptsetup status: {cryptsetup_status.stdout}")
     assert (
         "active" in cryptsetup_status.stdout.lower()
@@ -148,15 +152,15 @@ def test_luks_storage_manual(juju: jubilant.Juju, dovecot_charm_manual: str):
 
     # Verify mount point
     logging.info("Verifying mount point...")
-    mount_output = juju.exec("mount | grep /srv/mail", unit=f"{dovecot_charm_manual}/0")
+    mount_output = juju.exec("mount | grep /srv/mail", unit=unit_name)
     logging.info(f"Mount: {mount_output}")
     assert f"/dev/mapper/{luks_device_name}" in mount_output.stdout
     assert "/srv/mail" in mount_output.stdout
 
     # Test write access to verify filesystem is properly mounted
     logging.info("Testing write access to mounted filesystem...")
-    juju.exec("touch /srv/mail/test_manual_luks_write", unit=f"{dovecot_charm_manual}/0")
-    juju.exec("rm /srv/mail/test_manual_luks_write", unit=f"{dovecot_charm_manual}/0")
+    juju.exec("touch /srv/mail/test_manual_luks_write", unit=unit_name)
+    juju.exec("rm /srv/mail/test_manual_luks_write", unit=unit_name)
 
     # Verify crypttab configuration
     logging.info("Verifying crypttab configuration...")

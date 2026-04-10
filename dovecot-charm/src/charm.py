@@ -110,6 +110,8 @@ class DovecotCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Configuring charm")
         if not (dovecot_config := self._get_dovecot_config()):
             return
+        handle_mail_storage_attached(self)
+        handle_mail_storage_detaching(self)
         if not shutil.which("doveconf"):
             logger.warning("Dovecot not installed yet, deferring configuration")
             return
@@ -128,8 +130,6 @@ class DovecotCharm(CharmBase):
         self._setup_dovecot(dovecot_config)
         self._setup_procmail()
         self._open_ports()
-        handle_mail_storage_attached(self)
-        handle_mail_storage_detaching(self)
 
     def _open_ports(self):
         """Open mail ports."""
