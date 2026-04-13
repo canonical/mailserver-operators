@@ -6,6 +6,7 @@ import time
 
 import jubilant
 
+
 def _seed_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
     """Queue a test message and wait until Postfix reports a non-empty queue."""
     juju.exec(
@@ -17,7 +18,7 @@ def _seed_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
         unit=unit_name,
     )
     juju.exec(
-        'sudo postmap /etc/postfix/header_checks && sudo postfix reload',
+        "sudo postmap /etc/postfix/header_checks && sudo postfix reload",
         unit=unit_name,
     )
 

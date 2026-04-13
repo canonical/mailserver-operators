@@ -53,9 +53,7 @@ def dovecot_charm(
     if not juju.status().apps.get(APP_NAME):
         logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
 
-        secret_id = juju.cli(
-            "add-secret", "dovecot-luks-key", "key=s3cr3tpassphrase"
-        ).strip()
+        secret_id = juju.cli("add-secret", "dovecot-luks-key", "key=s3cr3tpassphrase").strip()
         logging.info(f"Created LUKS secret: {secret_id}")
 
         config = {

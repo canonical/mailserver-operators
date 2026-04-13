@@ -5,11 +5,9 @@ from unittest.mock import call, patch
 
 import ops
 import ops.testing
-import pytest
+
 
 # --- Storage handler tests ---
-
-
 def test_storage_attached_defer_if_cryptsetup_missing(ctx, base_state):
     storage = ops.testing.Storage("mail-data")
     state_in = dataclasses.replace(base_state, storages={storage})
