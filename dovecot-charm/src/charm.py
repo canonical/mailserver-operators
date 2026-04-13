@@ -21,7 +21,7 @@ from charmlibs.interfaces.tls_certificates import (
 )
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.model import BlockedStatus, MaintenanceStatus
 
 from constants import (
     DOVECOT_CONF_TARGET,
