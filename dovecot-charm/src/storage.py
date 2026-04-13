@@ -11,7 +11,7 @@ import subprocess  # nosec
 
 from ops.model import BlockedStatus
 
-from constants import LUKS_ENCRYPTION_FILE, MAIL_ROOT, MAPPER_NAME, MAPPER_PATH
+from constants import MAIL_ROOT, MAPPER_NAME, MAPPER_PATH
 from tools import configure_file
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ def handle_mail_storage_attached(charm) -> bool:
         return True
 
     try:
-        setup_luks_storage(charm, dev_path)
+        setup_luks_storage(dovecot_config.luks_key, dev_path)
         return True
     except subprocess.CalledProcessError as e:
         logger.exception(f"Failed to setup LUKS storage: {e}")
@@ -82,8 +82,8 @@ def handle_mail_storage_detaching(charm):
         logger.exception(f"Failed to detach storage: {e}")
 
 
-def setup_luks_storage(charm, dev_path):  # noqa: C901
-    """Set up LUKS encryption on device using keyfile."""
+def setup_luks_storage(key: str, dev_path):  # noqa: C901
+    """Set up LUKS encryption on device using key passed via stdin."""
     if not os.path.exists(dev_path):
         raise RuntimeError(f"Device {dev_path} does not exist")
 
@@ -91,25 +91,7 @@ def setup_luks_storage(charm, dev_path):  # noqa: C901
     if not stat.S_ISBLK(mode):
         raise RuntimeError(f"{dev_path} is not a valid block device")
 
-    if not os.path.exists(LUKS_ENCRYPTION_FILE):
-        logger.info(f"Generating keyfile at {LUKS_ENCRYPTION_FILE}...")
-        try:
-            subprocess.run(
-                [
-                    "/usr/bin/dd",
-                    "if=/dev/urandom",
-                    f"of={LUKS_ENCRYPTION_FILE}",
-                    "bs=512",
-                    "count=8",
-                ],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            os.chmod(LUKS_ENCRYPTION_FILE, 0o400)
-            logger.info("Keyfile generated successfully")
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to generate encryption keyfile: {e}") from e
+    key_bytes = key.encode()
 
     try:
         subprocess.run(
@@ -120,7 +102,7 @@ def setup_luks_storage(charm, dev_path):  # noqa: C901
         )
         logger.info(f"{dev_path} is already a LUKS device")
     except subprocess.CalledProcessError:
-        logger.info(f"Formatting {dev_path} as LUKS with keyfile...")
+        logger.info(f"Formatting {dev_path} as LUKS...")
         try:
             subprocess.run(
                 [
@@ -128,9 +110,10 @@ def setup_luks_storage(charm, dev_path):  # noqa: C901
                     "luksFormat",
                     dev_path,
                     "--key-file",
-                    LUKS_ENCRYPTION_FILE,
+                    "-",
                     "--batch-mode",
                 ],
+                input=key_bytes,
                 check=True,
                 capture_output=True,
             )
@@ -148,8 +131,9 @@ def setup_luks_storage(charm, dev_path):  # noqa: C901
                     dev_path,
                     MAPPER_NAME,
                     "--key-file",
-                    LUKS_ENCRYPTION_FILE,
+                    "-",
                 ],
+                input=key_bytes,
                 check=True,
                 capture_output=True,
             )
@@ -187,10 +171,6 @@ def setup_luks_storage(charm, dev_path):  # noqa: C901
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to format filesystem on {MAPPER_PATH}: {e}") from e
 
-    configure_file(
-        "/etc/crypttab",
-        f"{MAPPER_NAME} {dev_path} {LUKS_ENCRYPTION_FILE} luks,discard,auto\n",
-    )
     configure_file("/etc/fstab", f"{MAPPER_PATH} {MAIL_ROOT} ext4 defaults,auto 0 2\n")
 
     if not os.path.exists(MAIL_ROOT):

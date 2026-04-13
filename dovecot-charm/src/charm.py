@@ -5,7 +5,6 @@
 """Dovecot charm."""
 
 import logging
-import os
 import shutil
 import subprocess  # nosec
 import typing
@@ -24,7 +23,6 @@ from constants import (
     DOVECOT_CONF_TEMPLATE,
     ENCRYPTED_MOUNTPOINT,
     HOSTNAME_FILE,
-    LUKS_ENCRYPTION_FILE,
     MAIL_ROOT,
     MAILNAME_FILE,
     PEER_RELATION_NAME,
@@ -50,10 +48,6 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._reconcile)
         self.framework.observe(self.on.upgrade_charm, self._reconcile)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
-        self.framework.observe(
-            self.on.get_encryption_key_action,
-            self.get_luks_encryption_key,
-        )
         self.framework.observe(self.on.mail_data_storage_attached, self._reconcile)
         self.framework.observe(self.on.mail_data_storage_detaching, self._reconcile)
 
@@ -232,26 +226,6 @@ class DovecotCharm(CharmBase):
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to clear Postfix queue: {e.stderr}")
             event.fail(f"Failed to run postsuper: {e.stderr}")
-
-    def get_luks_encryption_key(self, event):
-        """Return the generated LUKS key when automatic LUKS management is enabled."""
-        if not (dovecot_config := self._get_dovecot_config()):
-            return
-        if not dovecot_config.manage_luks:
-            event.fail("Cannot retrieve key: manage-luks is disabled")
-            return
-
-        if not os.path.exists(LUKS_ENCRYPTION_FILE):
-            event.fail("Cannot retrieve key: encryption key is not available yet")
-            return
-
-        try:
-            with open(LUKS_ENCRYPTION_FILE, "rb") as f:
-                key_hex = f.read().hex()
-            event.set_results({"status": "success", "encoding": "hex", "key": key_hex})
-        except OSError as e:
-            logger.exception(f"Failed to read encryption key: {e}")
-            event.fail(f"Cannot retrieve key: failed to read keyfile: {e}")
 
 
 if __name__ == "__main__":  # pragma: nocover

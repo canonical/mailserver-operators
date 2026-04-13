@@ -46,10 +46,24 @@ class DovecotConfig(BaseModel):
         False,
         description=(
             "Enable automatic LUKS encryption management for attached block storage. "
-            "When enabled, the charm will create a keyfile, format the storage with LUKS, create an ext4 filesystem, "
-            "and manage mounting and crypttab/fstab entries."
+            "When enabled, the charm will format the storage with LUKS using the key "
+            "supplied via luks-key, create an ext4 filesystem, and manage mounting "
+            "and fstab entries."
         ),
     )
+    luks_key: str = Field(
+        "",
+        description="LUKS passphrase from the luks-key secret. Required when manage_luks is true.",
+    )
+
+    @field_validator("luks_key", mode="after")
+    @classmethod
+    def _validate_luks_key(cls, value: str, info: ValidationInfo) -> str:
+        """Require luks_key when manage_luks is enabled."""
+        manage_luks = info.data.get("manage_luks", False)
+        if manage_luks and not value:
+            raise ValueError("luks-key secret must be set when manage-luks is enabled")
+        return value
 
     @field_validator("primary_unit", mode="after")
     @classmethod
@@ -64,13 +78,23 @@ class DovecotConfig(BaseModel):
     def from_charm(cls, charm: "DovecotCharm") -> "DovecotConfig":
         """Create a DovecotConfig instance from charm configuration."""
         config = charm.model.config
+        manage_luks = config.get("manage-luks", False)
+        luks_key = ""
+        if manage_luks:
+            secret_id = config.get("luks-key", "")
+            if secret_id:
+                try:
+                    luks_key = charm.model.get_secret(id=secret_id).get_content()["key"]
+                except Exception as e:
+                    logger.exception(f"Failed to retrieve luks-key secret: {e}")
         try:
             return cls.model_validate(
                 {
                     "mailname": config.get("mailname"),
                     "postmaster_address": config.get("postmaster-address"),
                     "primary_unit": config.get("primary-unit"),
-                    "manage_luks": config.get("manage-luks", False),
+                    "manage_luks": manage_luks,
+                    "luks_key": luks_key,
                 },
                 context={"charm": charm},
             )

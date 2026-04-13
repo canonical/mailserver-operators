@@ -1,46 +1,11 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 import dataclasses
-from unittest.mock import call, mock_open, patch
+from unittest.mock import call, patch
 
 import ops
 import ops.testing
 import pytest
-
-
-def test_get_encryption_key_success(ctx, base_state):
-    state_in = dataclasses.replace(base_state, config={**base_state.config, "manage-luks": True})
-    with (
-        patch("charm.os.path.exists", return_value=True),
-        patch("builtins.open", mock_open(read_data=b"\x01\x02\x0f")),
-    ):
-        ctx.run(ctx.on.action("get-encryption-key"), state_in)
-
-    assert ctx.action_results == {
-        "status": "success",
-        "encoding": "hex",
-        "key": "01020f",
-    }
-
-
-def test_get_encryption_key_fails_when_manage_luks_disabled(ctx, base_state):
-    state_in = dataclasses.replace(base_state, config={**base_state.config, "manage-luks": False})
-    with pytest.raises(ops.testing.ActionFailed) as exc_info:
-        ctx.run(ctx.on.action("get-encryption-key"), state_in)
-
-    assert "manage-luks is disabled" in exc_info.value.message
-
-
-def test_get_encryption_key_fails_when_keyfile_missing(ctx, base_state):
-    state_in = dataclasses.replace(base_state, config={**base_state.config, "manage-luks": True})
-    with (
-        patch("charm.os.path.exists", return_value=False),
-        pytest.raises(ops.testing.ActionFailed) as exc_info,
-    ):
-        ctx.run(ctx.on.action("get-encryption-key"), state_in)
-
-    assert "encryption key is not available yet" in exc_info.value.message
-
 
 # --- Storage handler tests ---
 
@@ -112,6 +77,41 @@ def test_storage_attached_manage_luks_disabled_mounted_is_active(ctx, base_state
         state_out = ctx.run(ctx.on.storage_attached(storage), state_in)
     mock_run.assert_not_called()
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
+
+
+def test_storage_attached_manage_luks_blocks_without_luks_key(ctx, base_state):
+    storage = ops.testing.Storage("mail-data")
+    state_in = dataclasses.replace(
+        base_state,
+        config={k: v for k, v in base_state.config.items() if k != "luks-key"},
+        secrets=set(),
+        storages={storage},
+    )
+    with (
+        patch("charm.DovecotCharm._install"),
+        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
+        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+    ):
+        state_out = ctx.run(ctx.on.storage_attached(storage), state_in)
+    assert isinstance(state_out.unit_status, ops.BlockedStatus)
+
+
+def test_storage_attached_calls_setup_luks_with_key(ctx, base_state):
+    storage = ops.testing.Storage("mail-data")
+    state_in = dataclasses.replace(base_state, storages={storage})
+    with (
+        patch("charm.DovecotCharm._install"),
+        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
+        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+        patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
+        patch("storage.shutil.which", return_value="/usr/sbin/cryptsetup"),
+        patch("ops._main._Dispatcher.run_any_legacy_hook"),
+        patch("storage.setup_luks_storage") as mock_setup_luks,
+    ):
+        ctx.run(ctx.on.storage_attached(storage), state_in)
+    mock_setup_luks.assert_called_once()
+    key_arg = mock_setup_luks.call_args[0][0]
+    assert key_arg == "deadbeef"
 
 
 # --- Storage detaching tests ---

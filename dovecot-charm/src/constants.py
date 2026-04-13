@@ -36,7 +36,6 @@ REQUIRED_PACKAGES = [
 
 HOSTNAME_FILE = "/etc/hostname"
 MAILNAME_FILE = "/etc/mailname"
-LUKS_ENCRYPTION_FILE = "/etc/dovecot-charm.key"
 
 MAPPER_NAME = "mail-data"
 MAPPER_PATH = f"/dev/mapper/{MAPPER_NAME}"

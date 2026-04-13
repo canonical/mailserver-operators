@@ -53,11 +53,17 @@ def dovecot_charm(
     if not juju.status().apps.get(APP_NAME):
         logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
 
+        secret_id = juju.cli(
+            "add-secret", "dovecot-luks-key", "key=s3cr3tpassphrase"
+        ).strip()
+        logging.info(f"Created LUKS secret: {secret_id}")
+
         config = {
             "mailname": "example.com",
             "postmaster-address": "postmaster@example.com",
             "primary-unit": f"{APP_NAME}/0",
             "manage-luks": True,
+            "luks-key": secret_id,
         }
         charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
         juju.deploy(
@@ -68,6 +74,7 @@ def dovecot_charm(
             trust=True,
         )
 
+    juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
     logging.info("Waiting for active status...")
     juju.wait(
         lambda status: status.apps[APP_NAME].is_active,

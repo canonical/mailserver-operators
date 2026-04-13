@@ -10,20 +10,13 @@ import pytest
 
 
 def test_luks_storage_automatic(juju: jubilant.Juju, dovecot_charm: str):
-    """Test automatic LUKS setup with keyfile."""
+    """Test automatic LUKS setup with user-supplied secret key."""
     status = juju.status()
     unit_name = next(iter(status.apps[dovecot_charm].units.keys()))
     logging.info(f"Targeting unit: {unit_name}")
 
     logging.info("Waiting for charm to be active with storage attached...")
     juju.wait(jubilant.all_active, timeout=600)
-
-    logging.info("Verifying keyfile exists...")
-    keyfile_check = juju.exec("ls", "-l", "/etc/dovecot-charm.key", unit=unit_name)
-    logging.info(f"Keyfile: {keyfile_check}")
-
-    perms = juju.exec("stat", "-c", "'%a'", "/etc/dovecot-charm.key", unit=unit_name)
-    assert perms.stdout.strip() == "400", f"Keyfile permissions should be 400, got {perms.stdout}"
 
     logging.info("Verifying LUKS setup...")
     juju.exec("ls -l /dev/mapper/mail-data", unit=unit_name)
@@ -36,13 +29,6 @@ def test_luks_storage_automatic(juju: jubilant.Juju, dovecot_charm: str):
 
     juju.exec("touch /srv/mail/test_storage_write", unit=unit_name)
     juju.exec("rm /srv/mail/test_storage_write", unit=unit_name)
-
-    logging.info("Verifying crypttab configuration...")
-    crypttab = juju.exec("cat /etc/crypttab", unit=unit_name)
-    assert "mail-data" in crypttab.stdout
-    assert "/etc/dovecot-charm.key" in crypttab.stdout
-    assert "luks" in crypttab.stdout
-    logging.info(f"crypttab: {crypttab.stdout}")
 
     logging.info("Verifying fstab configuration...")
     fstab = juju.exec("cat /etc/fstab", unit=unit_name)
@@ -161,14 +147,6 @@ def test_luks_storage_manual(juju: jubilant.Juju, dovecot_charm_manual: str):
     logging.info("Testing write access to mounted filesystem...")
     juju.exec("touch /srv/mail/test_manual_luks_write", unit=unit_name)
     juju.exec("rm /srv/mail/test_manual_luks_write", unit=unit_name)
-
-    # Verify crypttab configuration
-    logging.info("Verifying crypttab configuration...")
-    crypttab = juju.exec("cat /etc/crypttab", unit=f"{dovecot_charm_manual}/0")
-    assert luks_device_name in crypttab.stdout
-    assert dev_path in crypttab.stdout
-    assert "luks" in crypttab.stdout
-    logging.info(f"crypttab configured correctly: {crypttab.stdout}")
 
     # Verify fstab configuration
     logging.info("Verifying fstab configuration...")
