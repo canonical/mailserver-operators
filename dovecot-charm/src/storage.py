@@ -12,7 +12,7 @@ import subprocess  # nosec
 from ops.model import BlockedStatus
 
 from constants import MAIL_ROOT, MAPPER_NAME, MAPPER_PATH
-from tools import configure_file
+from utils import configure_file
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +22,11 @@ def _mail_storage_mounted():
     return os.path.ismount(MAIL_ROOT)
 
 
-def handle_mail_storage_attached(charm) -> bool:
-    """Handle storage attached event.
+def is_mail_storage_attached(charm) -> bool:
+    """Check if mail storage is attached and set up LUKS if necessary.
 
-    Returns True if it is safe to proceed with charm configuration, False if
+    Returns:
+        bool: Returns True if it is safe to proceed with charm configuration, False if
     the unit has been placed in a blocked state and configuration should be
     skipped.
     """
@@ -64,8 +65,8 @@ def handle_mail_storage_attached(charm) -> bool:
         return False
 
 
-def handle_mail_storage_detaching(charm):
-    """Handle storage detaching."""
+def is_mail_storage_detaching(charm):
+    """Check if mail storage is detaching and unmount/close if necessary."""
     sss = charm.model.storages.get("mail-data")
     if sss:
         return
@@ -83,7 +84,26 @@ def handle_mail_storage_detaching(charm):
 
 
 def setup_luks_storage(key: str, dev_path):  # noqa: C901
-    """Set up LUKS encryption on device using key passed via stdin."""
+    """Set up LUKS encryption on a block device using the supplied passphrase.
+
+    If the device is not yet a LUKS container it is formatted with luksFormat.
+    The container is then opened (if not already mapped), an ext4 filesystem is
+    created inside it (if absent), an fstab entry is written, and the filesystem
+    is mounted at MAIL_ROOT.
+
+    Args:
+        key: Plaintext passphrase used as the LUKS key.  Passed to cryptsetup
+            via stdin so it is never written to disk or exposed in /proc.
+        dev_path: Path to the block device to encrypt (e.g. ``/dev/sdb``).
+
+    Raises:
+        RuntimeError: If ``dev_path`` does not exist or is not a block device.
+        RuntimeError: If luksFormat fails to format the device as a LUKS container.
+        RuntimeError: If cryptsetup open fails to map the LUKS container.
+        RuntimeError: If dmsetup mknodes fails to refresh device-mapper nodes after opening.
+        RuntimeError: If mkfs.ext4 fails to create a filesystem on the mapped device.
+        RuntimeError: If mounting the mapped device to MAIL_ROOT fails.
+    """
     if not os.path.exists(dev_path):
         raise RuntimeError(f"Device {dev_path} does not exist")
 
@@ -93,15 +113,18 @@ def setup_luks_storage(key: str, dev_path):  # noqa: C901
 
     key_bytes = key.encode()
 
-    try:
+    is_luks = (
         subprocess.run(
             ["/usr/sbin/cryptsetup", "isLuks", dev_path],
-            check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-        )
+        ).returncode
+        == 0
+    )
+
+    if is_luks:
         logger.info(f"{dev_path} is already a LUKS device")
-    except subprocess.CalledProcessError:
+    else:
         logger.info(f"Formatting {dev_path} as LUKS...")
         try:
             subprocess.run(

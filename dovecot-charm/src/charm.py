@@ -32,7 +32,7 @@ from constants import (
     TEMPLATES_DIR,
 )
 from dovecot_config import DovecotConfig, DovecotConfigInvalidError
-from storage import handle_mail_storage_attached, handle_mail_storage_detaching
+from storage import is_mail_storage_attached, is_mail_storage_detaching
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +60,12 @@ class DovecotCharm(CharmBase):
             loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True
         )
 
-    def get_units(self):
-        """Return a list of all units in the application."""
+    def get_units(self) -> typing.List[str]:
+        """Return a list of all units in the application.
+
+        Returns:
+            List[str]: List of unit names.
+        """
         peer_relation = typing.cast(ops.Relation, self.model.get_relation(PEER_RELATION_NAME))
         if not peer_relation:
             logger.warning(
@@ -79,8 +83,12 @@ class DovecotCharm(CharmBase):
         relation_data = event.relation.data[self.unit]
         relation_data["unit-name"] = self.unit.name
 
-    def _get_dovecot_config(self):
-        """Return the DovecotConfig if all required config options are set, false otherwise."""
+    def _get_dovecot_config(self) -> typing.Optional[DovecotConfig]:
+        """Craft the DovecotConfig from charm configuration and validate it.
+
+        Returns:
+            Optional[DovecotConfig]: The DovecotConfig if valid, None otherwise.
+        """
         try:
             return DovecotConfig.from_charm(self)
         except DovecotConfigInvalidError as exc:
@@ -89,7 +97,7 @@ class DovecotCharm(CharmBase):
             self.unit.status = BlockedStatus(
                 f"Invalid charm configuration, check logs for details: {msg}"
             )
-            return False
+            return None
 
     def _on_install(self, event):
         """Handle install event."""
@@ -104,9 +112,9 @@ class DovecotCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Configuring charm")
         if not (dovecot_config := self._get_dovecot_config()):
             return
-        if not handle_mail_storage_attached(self):
+        if not is_mail_storage_attached(self):
             return
-        handle_mail_storage_detaching(self)
+        is_mail_storage_detaching(self)
         if not shutil.which("doveconf"):
             logger.warning("Dovecot not installed yet, deferring configuration")
             return
@@ -139,7 +147,11 @@ class DovecotCharm(CharmBase):
         self.unit.open_port("tcp", 9900)
 
     def _setup_dovecot(self, dovecot_config: DovecotConfig) -> bool:
-        """Set up and configure dovecot."""
+        """Set up and configure dovecot.
+
+        Returns:
+            bool: True if configuration was successful, False if it failed and unit status has been set to Blocked.
+        """
         self.unit.status = MaintenanceStatus("Setting up and configuring dovecot")
         template_context = {
             "dovecot_chroot": ENCRYPTED_MOUNTPOINT,
@@ -160,7 +172,11 @@ class DovecotCharm(CharmBase):
         return True
 
     def _validate_dovecot_config(self, config: DovecotConfig) -> bool:
-        """Validate the Dovecot configuration."""
+        """Validate the Dovecot configuration.
+
+        Returns:
+            bool: True if configuration is valid, False otherwise.
+        """
         try:
             # The command and arguments are fixed literals with no user-controlled input.
             subprocess.run(
@@ -174,7 +190,11 @@ class DovecotCharm(CharmBase):
             return False
 
     def _setup_procmail(self) -> bool:
-        """Set up and configure procmail default file."""
+        """Set up and configure procmail default file.
+
+        Returns:
+            bool: True if configuration was successful, False if it failed and unit status has been set to Blocked.
+        """
         self.unit.status = MaintenanceStatus("Setting up and configuring procmail")
 
         # Ensure mail_root exists with permissions for delivery
