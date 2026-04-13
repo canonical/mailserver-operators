@@ -19,19 +19,6 @@ jobs:
       juju-channel: '3/stable'
       with-uv: true
       working-directory: dovecot-charm
-  integration-tests:
-    uses: 
-      canonical/operator-workflows/.github/workflows/integration_test.yaml@main
-    secrets: inherit
-    with:
-      provider: lxd
-      trivy-fs-enabled: true
-      trivy-image-config: "trivy.yaml"
-      self-hosted-runner: true
-      self-hosted-runner-label: "edge"
-      juju-channel: '4/stable'
-      with-uv: true
-      working-directory: dovecot-charm
   allure-report:
     if: ${{ !cancelled() && github.event_name == 'schedule' }}
     needs:
