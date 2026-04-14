@@ -190,6 +190,7 @@ class DovecotCharm(CharmBase):
             "mail_root": MAIL_ROOT,
             "mailname": dovecot_config.mailname,
             "postmaster_address": dovecot_config.postmaster_address,
+            "tls_enabled": (self.tls_cert_dir / f"{dovecot_config.mailname}.pem").exists(),
         }
         template = self.jinja.get_template(DOVECOT_CONF_TEMPLATE)
         contents = template.render(template_context)

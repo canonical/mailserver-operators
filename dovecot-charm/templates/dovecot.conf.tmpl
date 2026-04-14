@@ -10,9 +10,13 @@ auth_verbose = yes
 auth_verbose_passwords = no
 
 # TODO: change to ssl = required once TLS relation is added (pr/5-tls)
+{% if tls_enabled %}
 ssl = required
 ssl_cert = </etc/dovecot/private/{{ mailname }}.pem
 ssl_key = </etc/dovecot/private/{{ mailname }}.key
+{% else %}
+ssl = yes
+{% endif %}
 # SSL ciphers to use, the default is:
 #ssl_cipher_list = ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH
 # To disable non-EC DH, use:
