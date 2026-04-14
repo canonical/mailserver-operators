@@ -8,14 +8,38 @@ import os
 import shutil
 import stat
 import subprocess  # nosec
+from pathlib import Path
 
 from ops.model import ModelError
 
-from constants import MAIL_ROOT, MAPPER_NAME, MAPPER_PATH
+from constants import MAIL_ROOT, MAPPER_NAME, MAPPER_PATH, STORAGE_DEV_PATH_FILE
 from exceptions import StorageError
 from utils import configure_file
 
 logger = logging.getLogger(__name__)
+
+
+def _save_storage_dev_path(dev_path) -> None:
+    """Persist *dev_path* to disk so it survives a VM reboot.
+
+    The file is written to STORAGE_DEV_PATH_FILE.  Parent directories are
+    created if they do not yet exist.
+    """
+    path = Path(STORAGE_DEV_PATH_FILE)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(dev_path))
+    logger.info(f"Saved storage device path to {STORAGE_DEV_PATH_FILE}")
+
+
+def _load_storage_dev_path() -> str | None:
+    """Return the previously-saved block-device path, or *None* if not found."""
+    path = Path(STORAGE_DEV_PATH_FILE)
+    if path.exists():
+        dev_path = path.read_text().strip()
+        if dev_path:
+            logger.info(f"Loaded storage device path from {STORAGE_DEV_PATH_FILE}: {dev_path}")
+            return dev_path
+    return None
 
 
 def _mail_storage_mounted():
@@ -48,11 +72,22 @@ def ensure_storage_ready(charm) -> None:
     try:
         dev_path = storages[0].location
     except ModelError:
-        logger.warning("Storage location not yet available, deferring LUKS setup")
-        return
+        # Storage is not yet re-provisioned by Juju (common on VM reboot after
+        # the start hook fires before storage-attached).  Fall back to the path
+        # we saved at the previous storage-attached event.
+        dev_path = _load_storage_dev_path()
+        if not dev_path:
+            logger.warning(
+                "Storage location not yet available and no saved path, deferring LUKS setup"
+            )
+            return
+        logger.info(f"Using saved storage device path for LUKS recovery: {dev_path}")
     if not dev_path:
         logger.warning("Storage location empty, deferring LUKS setup")
         return
+
+    # Persist the path so future reboots can recover without storage-get.
+    _save_storage_dev_path(dev_path)
 
     try:
         setup_luks_storage(dovecot_config.luks_key, dev_path)

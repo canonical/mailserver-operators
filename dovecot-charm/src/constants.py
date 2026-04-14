@@ -40,3 +40,8 @@ MAILNAME_FILE = "/etc/mailname"
 MAPPER_NAME = "mail-data"
 MAPPER_PATH = f"/dev/mapper/{MAPPER_NAME}"
 PEER_RELATION_NAME = "replicas"
+
+# State file that persists the block-device path across reboots so that the
+# start hook can re-open LUKS without relying on `storage-get` (which fails
+# when Juju has not yet re-provisioned the storage after a VM restart).
+STORAGE_DEV_PATH_FILE = "/var/lib/dovecot-charm/storage-dev-path"
