@@ -1,5 +1,6 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
+import dataclasses
 from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
 
