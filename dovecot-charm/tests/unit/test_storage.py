@@ -104,6 +104,7 @@ def test_storage_attached_calls_setup_luks_with_key(ctx, base_state):
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
         patch("storage.shutil.which", return_value="/usr/sbin/cryptsetup"),
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
+        patch("storage._is_luks_device", return_value=True),
         patch("storage._save_storage_dev_path"),
         patch("storage.setup_luks_storage") as mock_setup_luks,
     ):
@@ -124,6 +125,7 @@ def test_storage_attached_saves_dev_path(ctx, base_state):
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
         patch("storage.shutil.which", return_value="/usr/sbin/cryptsetup"),
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
+        patch("storage._is_luks_device", return_value=True),
         patch("storage.setup_luks_storage"),
         patch("storage._save_storage_dev_path") as mock_save,
     ):
@@ -151,8 +153,8 @@ def test_start_uses_saved_dev_path_when_model_error(ctx, base_state):
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
         patch.object(type(OpsStorage(None, None, None)), "location", location_prop),
         patch("storage._load_storage_dev_path", return_value="/dev/loop0") as mock_load,
-        # Device is present at start hook time (it was set up before start fires)
-        patch("storage.os.path.exists", return_value=True),
+        # Device is a LUKS container (fully attached and ready)
+        patch("storage._is_luks_device", return_value=True),
         patch("storage._save_storage_dev_path"),
         patch("storage.setup_luks_storage") as mock_setup_luks,
     ):
@@ -188,8 +190,8 @@ def test_start_defers_when_model_error_and_no_saved_path(ctx, base_state):
     mock_setup_luks.assert_not_called()
 
 
-def test_start_defers_when_saved_device_not_yet_present(ctx, base_state):
-    """If saved path exists but device file not yet present, defer gracefully."""
+def test_start_defers_when_device_not_yet_luks(ctx, base_state):
+    """If saved path exists but isLuks fails (loop not attached), defer gracefully."""
     from unittest.mock import PropertyMock
 
     from ops.model import ModelError
@@ -208,8 +210,8 @@ def test_start_defers_when_saved_device_not_yet_present(ctx, base_state):
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
         patch.object(type(OpsStorage(None, None, None)), "location", location_prop),
         patch("storage._load_storage_dev_path", return_value="/dev/disk/by-uuid/aabbccdd"),
-        # Device symlink not yet created (loop not yet attached)
-        patch("storage.os.path.exists", return_value=False),
+        # Loop not yet attached — isLuks returns False
+        patch("storage._is_luks_device", return_value=False),
         patch("storage.setup_luks_storage") as mock_setup_luks,
     ):
         ctx.run(ctx.on.start(), state_in)
@@ -229,6 +231,7 @@ def test_storage_detaching_unmount_and_close(ctx, base_state):
         patch("charm.DovecotCharm._setup_procmail"),
         patch("storage._mail_storage_mounted", return_value=True),
         patch("storage.os.path.exists", return_value=True),
+        patch("storage._is_luks_device", return_value=False),
         patch("storage._save_storage_dev_path"),
         patch("storage.subprocess.run") as mock_run,
     ):
