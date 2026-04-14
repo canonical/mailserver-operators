@@ -3,6 +3,7 @@
 
 import logging
 import typing
+from secrets import token_hex
 
 import jubilant
 import pytest
@@ -49,11 +50,12 @@ def dovecot_charm(
 ) -> str:
     """Build and deploy the charm."""
     logging.info(f"Checking for existing application {APP_NAME}...")
+    luks_key = token_hex(16)
 
     if not juju.status().apps.get(APP_NAME):
         logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
 
-        secret_id = juju.cli("add-secret", "dovecot-luks-key", "key=s3cr3tpassphrase").strip()
+        secret_id = juju.cli("add-secret", "dovecot-luks-key", f"key={luks_key}").strip()
         logging.info(f"Created LUKS secret: {secret_id}")
 
         config = {
