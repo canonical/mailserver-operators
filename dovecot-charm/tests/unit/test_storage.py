@@ -151,6 +151,8 @@ def test_start_uses_saved_dev_path_when_model_error(ctx, base_state):
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
         patch.object(type(OpsStorage(None, None, None)), "location", location_prop),
         patch("storage._load_storage_dev_path", return_value="/dev/loop0") as mock_load,
+        # Device is present at start hook time (it was set up before start fires)
+        patch("storage.os.path.exists", return_value=True),
         patch("storage._save_storage_dev_path"),
         patch("storage.setup_luks_storage") as mock_setup_luks,
     ):
@@ -180,6 +182,34 @@ def test_start_defers_when_model_error_and_no_saved_path(ctx, base_state):
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
         patch.object(type(OpsStorage(None, None, None)), "location", location_prop),
         patch("storage._load_storage_dev_path", return_value=None),
+        patch("storage.setup_luks_storage") as mock_setup_luks,
+    ):
+        ctx.run(ctx.on.start(), state_in)
+    mock_setup_luks.assert_not_called()
+
+
+def test_start_defers_when_saved_device_not_yet_present(ctx, base_state):
+    """If saved path exists but device file not yet present, defer gracefully."""
+    from unittest.mock import PropertyMock
+
+    from ops.model import ModelError
+    from ops.model import Storage as OpsStorage
+
+    storage = ops.testing.Storage("mail-data")
+    state_in = dataclasses.replace(base_state, storages={storage})
+
+    location_prop = PropertyMock(side_effect=ModelError("storage not provisioned"))
+    with (
+        patch("charm.DovecotCharm._install"),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
+        patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
+        patch("storage.shutil.which", return_value="/usr/sbin/cryptsetup"),
+        patch("ops._main._Dispatcher.run_any_legacy_hook"),
+        patch.object(type(OpsStorage(None, None, None)), "location", location_prop),
+        patch("storage._load_storage_dev_path", return_value="/dev/disk/by-uuid/aabbccdd"),
+        # Device symlink not yet created (loop not yet attached)
+        patch("storage.os.path.exists", return_value=False),
         patch("storage.setup_luks_storage") as mock_setup_luks,
     ):
         ctx.run(ctx.on.start(), state_in)

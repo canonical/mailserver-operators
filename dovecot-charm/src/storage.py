@@ -86,6 +86,12 @@ def ensure_storage_ready(charm) -> None:
         logger.warning("Storage location empty, deferring LUKS setup")
         return
 
+    # If the device path doesn't exist yet (e.g. loop device not yet attached
+    # at start hook time), defer — storage-attached will re-trigger reconcile.
+    if not os.path.exists(dev_path):
+        logger.warning(f"Device {dev_path} not yet present, deferring LUKS setup")
+        return
+
     # Persist the path so future reboots can recover without storage-get.
     _save_storage_dev_path(dev_path)
 
