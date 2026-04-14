@@ -9,6 +9,8 @@ import shutil
 import stat
 import subprocess  # nosec
 
+from ops.model import ModelError
+
 from constants import MAIL_ROOT, MAPPER_NAME, MAPPER_PATH
 from exceptions import StorageError
 from utils import configure_file
@@ -41,11 +43,15 @@ def ensure_storage_ready(charm) -> None:
 
     storages = charm.model.storages["mail-data"]
     if not storages:
-        logger.error("Storage attached but no location found")
+        logger.warning("Storage not yet provisioned, deferring LUKS setup")
         return
-    dev_path = storages[0].location
+    try:
+        dev_path = storages[0].location
+    except ModelError:
+        logger.warning("Storage location not yet available, deferring LUKS setup")
+        return
     if not dev_path:
-        logger.error("Storage attached but no location found")
+        logger.warning("Storage location empty, deferring LUKS setup")
         return
 
     try:
