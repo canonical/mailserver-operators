@@ -1,6 +1,7 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import contextlib
 import logging
 import time
 from secrets import token_hex
@@ -176,10 +177,8 @@ def test_data_persists_across_restart(juju: jubilant.Juju, dovecot_charm: str):
 
     # Reboot — SSH connection drops before command returns, all three are expected
     logging.info("Rebooting unit...")
-    try:
+    with contextlib.suppress(jubilant.CLIError, jubilant.TaskError, TimeoutError):
         juju.exec("sudo reboot", unit=unit_name)
-    except (jubilant.CLIError, jubilant.TaskError, TimeoutError):
-        pass
 
     # Wait for charm to re-settle after reboot
     logging.info("Waiting for charm to re-settle...")
