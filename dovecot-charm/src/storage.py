@@ -78,8 +78,13 @@ def _resolve_dev_path(charm) -> str | None:
         logger.warning("Storage location empty, deferring LUKS setup")
         return None
 
-    # UUID symlinks / loop devices may not exist yet at start-hook time.
-    # storage-attached will re-trigger reconcile once the device appears.
+    # Resolve symlinks (e.g. /dev/disk/by-uuid/... -> /dev/loop0) so the
+    # saved path is the concrete device node that exists immediately on boot,
+    # before udev recreates by-uuid links.
+    dev_path = os.path.realpath(dev_path)
+
+    # Concrete device node may not exist yet at start-hook time if the loop
+    # hasn't been attached by Juju.  storage-attached will re-trigger reconcile.
     if not os.path.exists(dev_path):
         logger.warning(f"Device {dev_path} not yet present, deferring LUKS setup")
         return None
