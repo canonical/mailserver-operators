@@ -184,6 +184,20 @@ def test_data_persists_across_restart(juju: jubilant.Juju, dovecot_charm: str):
     logging.info("Waiting for charm to re-settle...")
     juju.wait(jubilant.all_active, timeout=600)
 
+    # start hook defers (device not yet present), then storage-attached fires and
+    # does the LUKS open + mount.  Poll until /srv/mail is mounted.
+    logging.info("Waiting for /srv/mail to be mounted post-reboot...")
+    deadline = time.monotonic() + 120
+    mounted = False
+    while time.monotonic() < deadline:
+        try:
+            juju.exec("mountpoint -q /srv/mail", unit=unit_name)
+            mounted = True
+            break
+        except (jubilant.CLIError, jubilant.TaskError):
+            time.sleep(5)
+    assert mounted, "/srv/mail was not mounted within 120s of active status"
+
     # Assert storage still mounted
     mount_output = juju.exec("mount | grep /srv/mail", unit=unit_name)
     assert "/dev/mapper/mail-data" in mount_output.stdout
