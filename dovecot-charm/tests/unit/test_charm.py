@@ -1,5 +1,6 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
+import dataclasses
 from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
 
@@ -7,14 +8,16 @@ import ops
 import ops.testing
 import pytest
 
+from exceptions import ConfigurationError
+
 
 def test_open_ports(ctx, base_state):
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
-        patch("charm.DovecotCharm._setup_procmail", return_value=True),
-        patch("storage.is_mail_storage_attached"),
-        patch("storage.is_mail_storage_detaching"),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
+        patch("storage.ensure_storage_ready"),
+        patch("storage.teardown_detaching_storage"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
@@ -26,10 +29,10 @@ def test_open_ports(ctx, base_state):
 def test_configure_sets_active_on_success(ctx, base_state):
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
-        patch("charm.DovecotCharm._setup_procmail", return_value=True),
-        patch("storage.is_mail_storage_attached"),
-        patch("storage.is_mail_storage_detaching"),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
+        patch("storage.ensure_storage_ready"),
+        patch("storage.teardown_detaching_storage"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
@@ -40,29 +43,39 @@ def test_configure_sets_active_on_success(ctx, base_state):
 def test_configure_blocks_when_dovecot_setup_fails(ctx, base_state):
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=False),
-        patch("charm.DovecotCharm._setup_procmail", return_value=True),
-        patch("storage.is_mail_storage_attached"),
-        patch("storage.is_mail_storage_detaching"),
+        patch(
+            "charm.DovecotCharm._setup_dovecot",
+            side_effect=ConfigurationError(
+                "Invalid Dovecot configuration, check logs for details"
+            ),
+        ),
+        patch("charm.DovecotCharm._setup_procmail"),
+        patch("storage.ensure_storage_ready"),
+        patch("storage.teardown_detaching_storage"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
 
-    assert not isinstance(state_out.unit_status, ops.ActiveStatus)
+    assert isinstance(state_out.unit_status, ops.BlockedStatus)
+    assert "Invalid Dovecot configuration" in state_out.unit_status.message
 
 
 def test_configure_blocks_when_procmail_setup_fails(ctx, base_state):
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
-        patch("charm.DovecotCharm._setup_procmail", return_value=False),
-        patch("storage.is_mail_storage_attached"),
-        patch("storage.is_mail_storage_detaching"),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch(
+            "charm.DovecotCharm._setup_procmail",
+            side_effect=ConfigurationError("Failed to configure postfix: error"),
+        ),
+        patch("storage.ensure_storage_ready"),
+        patch("storage.teardown_detaching_storage"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
 
-    assert not isinstance(state_out.unit_status, ops.ActiveStatus)
+    assert isinstance(state_out.unit_status, ops.BlockedStatus)
+    assert "postfix" in state_out.unit_status.message
 
 
 # --- Clear-queue action tests ---

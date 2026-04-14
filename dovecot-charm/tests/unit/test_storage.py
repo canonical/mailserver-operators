@@ -13,8 +13,8 @@ def test_storage_attached_defer_if_cryptsetup_missing(ctx, base_state):
     state_in = dataclasses.replace(base_state, storages={storage})
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
-        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
         patch("storage.shutil.which", return_value=None),
         patch("storage.setup_luks_storage") as mock_setup_luks,
     ):
@@ -28,8 +28,8 @@ def test_storage_attached_setup_luks_not_called_when_cryptsetup_missing(ctx, bas
     state_in = dataclasses.replace(base_state, storages={storage})
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
-        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
         patch("storage.shutil.which", return_value=None),
         patch("storage.setup_luks_storage") as mock_setup_luks,
     ):
@@ -46,8 +46,8 @@ def test_storage_attached_manage_luks_disabled_unmounted_is_blocked(ctx, base_st
     )
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
-        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
         patch("storage._mail_storage_mounted", return_value=False),
         patch("storage.subprocess.run") as mock_run,
     ):
@@ -66,8 +66,8 @@ def test_storage_attached_manage_luks_disabled_mounted_is_active(ctx, base_state
     )
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
-        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
         patch("storage._mail_storage_mounted", return_value=True),
         patch("storage.subprocess.run") as mock_run,
@@ -87,8 +87,8 @@ def test_storage_attached_manage_luks_blocks_without_luks_key(ctx, base_state):
     )
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
-        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
     ):
         state_out = ctx.run(ctx.on.storage_attached(storage), state_in)
     assert isinstance(state_out.unit_status, ops.BlockedStatus)
@@ -99,8 +99,8 @@ def test_storage_attached_calls_setup_luks_with_key(ctx, base_state):
     state_in = dataclasses.replace(base_state, storages={storage})
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
-        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
         patch("storage.shutil.which", return_value="/usr/sbin/cryptsetup"),
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
@@ -121,8 +121,8 @@ def test_storage_detaching_unmount_and_close(ctx, base_state):
 
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
-        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
         patch("storage._mail_storage_mounted", return_value=True),
         patch("storage.os.path.exists", return_value=True),
         patch("storage.subprocess.run") as mock_run,
@@ -137,8 +137,8 @@ def test_storage_detaching_not_mounted(ctx, base_state):
     state_in = dataclasses.replace(base_state, storages={storage})
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
-        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
         patch("storage.shutil.which", return_value=None),
         patch("storage._mail_storage_mounted", return_value=False),
         patch("storage.os.path.exists", return_value=False),
@@ -157,8 +157,8 @@ def test_storage_detaching_luks_disabled_skips_close(ctx, base_state):
     )
     with (
         patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot", return_value=True),
-        patch("charm.DovecotCharm._setup_procmail", return_value=True),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
         patch("storage.shutil.which", return_value=None),
         patch("storage._mail_storage_mounted", return_value=True),
         patch("storage.os.path.exists", return_value=True),

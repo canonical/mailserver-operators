@@ -9,9 +9,8 @@ import shutil
 import stat
 import subprocess  # nosec
 
-from ops.model import BlockedStatus
-
 from constants import MAIL_ROOT, MAPPER_NAME, MAPPER_PATH
+from exceptions import StorageError
 from utils import configure_file
 
 logger = logging.getLogger(__name__)
@@ -22,51 +21,45 @@ def _mail_storage_mounted():
     return os.path.ismount(MAIL_ROOT)
 
 
-def is_mail_storage_attached(charm) -> bool:
-    """Check if mail storage is attached and set up LUKS if necessary.
+def ensure_storage_ready(charm) -> None:
+    """Ensure mail storage is attached and LUKS-mounted if required.
 
-    Returns:
-        bool: Returns True if it is safe to proceed with charm configuration, False if
-    the unit has been placed in a blocked state and configuration should be
-    skipped.
+    Raises:
+        StorageError: If storage is not ready and charm should enter Blocked.
     """
     if not (dovecot_config := charm._get_dovecot_config()):
-        return False
+        return
 
     if not dovecot_config.manage_luks:
         if _mail_storage_mounted():
-            return True
-        charm.unit.status = BlockedStatus("mail-data not mounted; manage-luks disabled")
-        return False
+            return
+        raise StorageError("mail-data not mounted; manage-luks disabled")
 
     if shutil.which("cryptsetup") is None:
         logger.warning("cryptsetup not installed, deferring storage setup")
-        return True
+        return
 
     storages = charm.model.storages["mail-data"]
     if not storages:
         logger.error("Storage attached but no location found")
-        return True
+        return
     dev_path = storages[0].location
     if not dev_path:
         logger.error("Storage attached but no location found")
-        return True
+        return
 
     try:
         setup_luks_storage(dovecot_config.luks_key, dev_path)
-        return True
     except subprocess.CalledProcessError as e:
         logger.exception(f"Failed to setup LUKS storage: {e}")
-        charm.unit.status = BlockedStatus("Failed to setup LUKS storage")
-        return False
+        raise StorageError("Failed to setup LUKS storage") from e
     except RuntimeError as e:
         logger.exception(f"Storage validation failed: {e}")
-        charm.unit.status = BlockedStatus(str(e))
-        return False
+        raise StorageError(str(e)) from e
 
 
-def is_mail_storage_detaching(charm):
-    """Check if mail storage is detaching and unmount/close if necessary."""
+def teardown_detaching_storage(charm) -> None:
+    """Unmount and close LUKS device if storage is detaching."""
     sss = charm.model.storages.get("mail-data")
     if sss:
         return
@@ -83,13 +76,12 @@ def is_mail_storage_detaching(charm):
         logger.exception(f"Failed to detach storage: {e}")
 
 
-def setup_luks_storage(key: str, dev_path):  # noqa: C901
+def setup_luks_storage(key: str, dev_path) -> None:
     """Set up LUKS encryption on a block device using the supplied passphrase.
 
-    If the device is not yet a LUKS container it is formatted with luksFormat.
-    The container is then opened (if not already mapped), an ext4 filesystem is
-    created inside it (if absent), an fstab entry is written, and the filesystem
-    is mounted at MAIL_ROOT.
+    Idempotent: if MAIL_ROOT is already mounted, returns immediately.
+    Otherwise validates the device, ensures a LUKS container exists and is
+    open, ensures an ext4 filesystem exists inside it, and mounts it.
 
     Args:
         key: Plaintext passphrase used as the LUKS key.  Passed to cryptsetup
@@ -97,22 +89,39 @@ def setup_luks_storage(key: str, dev_path):  # noqa: C901
         dev_path: Path to the block device to encrypt (e.g. ``/dev/sdb``).
 
     Raises:
-        RuntimeError: If ``dev_path`` does not exist or is not a block device.
-        RuntimeError: If luksFormat fails to format the device as a LUKS container.
-        RuntimeError: If cryptsetup open fails to map the LUKS container.
-        RuntimeError: If dmsetup mknodes fails to refresh device-mapper nodes after opening.
-        RuntimeError: If mkfs.ext4 fails to create a filesystem on the mapped device.
-        RuntimeError: If mounting the mapped device to MAIL_ROOT fails.
+        RuntimeError: If any step fails — see individual helpers for details.
+    """
+    if _mail_storage_mounted():
+        logger.info("mail-data already mounted, skipping LUKS setup")
+        return
+    key_bytes = key.encode()
+    _validate_block_device(dev_path)
+    _ensure_luks_container(key_bytes, dev_path)
+    _ensure_filesystem()
+    _ensure_mounted()
+
+
+def _validate_block_device(dev_path) -> None:
+    """Confirm dev_path exists and is a block device.
+
+    Raises:
+        RuntimeError: If dev_path does not exist or is not a block device.
     """
     if not os.path.exists(dev_path):
         raise RuntimeError(f"Device {dev_path} does not exist")
-
-    mode = os.stat(dev_path).st_mode
-    if not stat.S_ISBLK(mode):
+    if not stat.S_ISBLK(os.stat(dev_path).st_mode):
         raise RuntimeError(f"{dev_path} is not a valid block device")
 
-    key_bytes = key.encode()
 
+def _ensure_luks_container(key_bytes: bytes, dev_path) -> None:
+    """Ensure dev_path is a LUKS container and is open at MAPPER_PATH.
+
+    Formats with luksFormat if not already a LUKS device.
+    Opens with cryptsetup open if MAPPER_PATH does not yet exist.
+
+    Raises:
+        RuntimeError: If luksFormat or cryptsetup open fails.
+    """
     is_luks = (
         subprocess.run(
             ["/usr/sbin/cryptsetup", "isLuks", dev_path],
@@ -148,14 +157,7 @@ def setup_luks_storage(key: str, dev_path):  # noqa: C901
         logger.info(f"Opening LUKS device {dev_path}...")
         try:
             subprocess.run(
-                [
-                    "/usr/sbin/cryptsetup",
-                    "open",
-                    dev_path,
-                    MAPPER_NAME,
-                    "--key-file",
-                    "-",
-                ],
+                ["/usr/sbin/cryptsetup", "open", dev_path, MAPPER_NAME, "--key-file", "-"],
                 input=key_bytes,
                 check=True,
                 capture_output=True,
@@ -164,11 +166,21 @@ def setup_luks_storage(key: str, dev_path):  # noqa: C901
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to open LUKS device {dev_path}: {e}") from e
 
-        try:
-            subprocess.run(["/usr/sbin/dmsetup", "mknodes"], check=True, capture_output=True)
-            logger.info("Device mapper nodes refreshed")
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to refresh device mapper nodes: {e}") from e
+
+def _ensure_filesystem() -> None:
+    """Ensure MAPPER_PATH contains an ext4 filesystem.
+
+    Runs dmsetup mknodes first to guarantee device nodes are visible.
+    Creates an ext4 filesystem if one is not already present.
+
+    Raises:
+        RuntimeError: If dmsetup mknodes or mkfs.ext4 fails.
+    """
+    try:
+        subprocess.run(["/usr/sbin/dmsetup", "mknodes"], check=True, capture_output=True)
+        logger.info("Device mapper nodes refreshed")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to refresh device mapper nodes: {e}") from e
 
     has_fs = False
     try:
@@ -194,16 +206,22 @@ def setup_luks_storage(key: str, dev_path):  # noqa: C901
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to format filesystem on {MAPPER_PATH}: {e}") from e
 
-    configure_file("/etc/fstab", f"{MAPPER_PATH} {MAIL_ROOT} ext4 defaults,auto 0 2\n")
+
+def _ensure_mounted() -> None:
+    """Write fstab entry and mount MAPPER_PATH at MAIL_ROOT.
+
+    Raises:
+        RuntimeError: If mount fails.
+    """
+    configure_file("/etc/fstab", f"{MAPPER_PATH} {MAIL_ROOT} ext4 defaults,noauto,nofail 0 2\n")
 
     if not os.path.exists(MAIL_ROOT):
         os.makedirs(MAIL_ROOT)
 
-    if not _mail_storage_mounted():
-        logger.info(f"Mounting {MAPPER_PATH} to {MAIL_ROOT}...")
-        try:
-            subprocess.run(["/usr/bin/mount", MAPPER_PATH, MAIL_ROOT], check=True)
-            os.chmod(MAIL_ROOT, 0o1777)  # noqa: S103 # nosec B103
-            logger.info(f"Successfully mounted to {MAIL_ROOT}")
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to mount {MAPPER_PATH} to {MAIL_ROOT}: {e}") from e
+    logger.info(f"Mounting {MAPPER_PATH} to {MAIL_ROOT}...")
+    try:
+        subprocess.run(["/usr/bin/mount", MAPPER_PATH, MAIL_ROOT], check=True)
+        os.chmod(MAIL_ROOT, 0o1777)  # noqa: S103 # nosec B103
+        logger.info(f"Successfully mounted to {MAIL_ROOT}")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to mount {MAPPER_PATH} to {MAIL_ROOT}: {e}") from e

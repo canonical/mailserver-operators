@@ -32,7 +32,8 @@ from constants import (
     TEMPLATES_DIR,
 )
 from dovecot_config import DovecotConfig, DovecotConfigInvalidError
-from storage import is_mail_storage_attached, is_mail_storage_detaching
+from exceptions import CharmBlockedError, ConfigurationError
+from storage import ensure_storage_ready, teardown_detaching_storage
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ class DovecotCharm(CharmBase):
         # Events
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._reconcile)
-        self.framework.observe(self.on.upgrade_charm, self._reconcile)
+        self.framework.observe(self.on.upgrade_charm, self._on_install)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
         self.framework.observe(self.on.mail_data_storage_attached, self._reconcile)
         self.framework.observe(self.on.mail_data_storage_detaching, self._reconcile)
@@ -83,42 +84,51 @@ class DovecotCharm(CharmBase):
         relation_data = event.relation.data[self.unit]
         relation_data["unit-name"] = self.unit.name
 
-    def _get_dovecot_config(self) -> typing.Optional[DovecotConfig]:
+    def _get_dovecot_config(self) -> DovecotConfig:
         """Craft the DovecotConfig from charm configuration and validate it.
 
         Returns:
-            Optional[DovecotConfig]: The DovecotConfig if valid, None otherwise.
+            DovecotConfig: The validated configuration.
+
+        Raises:
+            ConfigurationError: If configuration is invalid.
         """
         try:
             return DovecotConfig.from_charm(self)
         except DovecotConfigInvalidError as exc:
             logger.exception(f"Configuration validation error: {exc}")
             msg = ", ".join([str(*err["loc"]) for err in exc.errors()])
-            self.unit.status = BlockedStatus(
+            raise ConfigurationError(
                 f"Invalid charm configuration, check logs for details: {msg}"
-            )
-            return None
+            ) from exc
 
     def _on_install(self, event):
         """Handle install event."""
         self.unit.status = MaintenanceStatus("Installing packages")
-        if not self._get_dovecot_config():
-            return
         self._install()
         self._reconcile(event)
 
     def _reconcile(self, event):
-        """Reconcile charm state for install, upgrade, and config-changed events."""
+        """Reconcile charm state for install, upgrade, config-changed, and storage events."""
         self.unit.status = MaintenanceStatus("Configuring charm")
-        if not (dovecot_config := self._get_dovecot_config()):
+        try:
+            dovecot_config = self._get_dovecot_config()
+            ensure_storage_ready(self)
+            teardown_detaching_storage(self)
+        except CharmBlockedError as e:
+            self.unit.status = BlockedStatus(str(e))
             return
-        if not is_mail_storage_attached(self):
-            return
-        is_mail_storage_detaching(self)
         if not shutil.which("doveconf"):
             logger.warning("Dovecot not installed yet, deferring configuration")
             return
-        self._configure(dovecot_config)
+        try:
+            self._setup_dovecot(dovecot_config)
+            self._setup_procmail()
+        except ConfigurationError as e:
+            self.unit.status = BlockedStatus(str(e))
+            return
+        self._open_ports()
+        self.unit.status = ops.ActiveStatus()
 
     def _install(self):
         """Perform basic installation."""
@@ -127,15 +137,6 @@ class DovecotCharm(CharmBase):
         apt.add_package(REQUIRED_PACKAGES)
         shutil.copy(HOSTNAME_FILE, MAILNAME_FILE)
         self.unit.status = MaintenanceStatus("Charm installation done")
-
-    def _configure(self, dovecot_config: DovecotConfig):
-        """Perform basic configuration."""
-        if not self._setup_dovecot(dovecot_config):
-            return
-        if not self._setup_procmail():
-            return
-        self._open_ports()
-        self.unit.status = ops.ActiveStatus()
 
     def _open_ports(self):
         """Open mail ports."""
@@ -146,11 +147,11 @@ class DovecotCharm(CharmBase):
         self.unit.open_port("tcp", 4190)
         self.unit.open_port("tcp", 9900)
 
-    def _setup_dovecot(self, dovecot_config: DovecotConfig) -> bool:
+    def _setup_dovecot(self, dovecot_config: DovecotConfig) -> None:
         """Set up and configure dovecot.
 
-        Returns:
-            bool: True if configuration was successful, False if it failed and unit status has been set to Blocked.
+        Raises:
+            ConfigurationError: If dovecot configuration validation fails.
         """
         self.unit.status = MaintenanceStatus("Setting up and configuring dovecot")
         template_context = {
@@ -163,13 +164,9 @@ class DovecotCharm(CharmBase):
         contents = template.render(template_context)
         host.write_file(DOVECOT_CONF_TARGET, contents, perms=0o644)
         if not self._validate_dovecot_config(dovecot_config):
-            self.unit.status = BlockedStatus(
-                "Invalid Dovecot configuration, check logs for details"
-            )
-            return False
+            raise ConfigurationError("Invalid Dovecot configuration, check logs for details")
         systemd.service_reload("dovecot", restart_on_failure=True)
         self.unit.status = MaintenanceStatus("Dovecot configuration updated")
-        return True
 
     def _validate_dovecot_config(self, config: DovecotConfig) -> bool:
         """Validate the Dovecot configuration.
@@ -189,11 +186,11 @@ class DovecotCharm(CharmBase):
             logger.exception(f"Failed to validate dovecot configuration: {e}")
             return False
 
-    def _setup_procmail(self) -> bool:
+    def _setup_procmail(self) -> None:
         """Set up and configure procmail default file.
 
-        Returns:
-            bool: True if configuration was successful, False if it failed and unit status has been set to Blocked.
+        Raises:
+            ConfigurationError: If postfix configuration fails.
         """
         self.unit.status = MaintenanceStatus("Setting up and configuring procmail")
 
@@ -220,9 +217,7 @@ class DovecotCharm(CharmBase):
             systemd.service_reload("postfix", restart_on_failure=True)
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to configure postfix: {e}")
-            self.unit.status = BlockedStatus(f"Failed to configure postfix: {e.stderr}")
-            return False
-        return True
+            raise ConfigurationError(f"Failed to configure postfix: {e.stderr}") from e
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""

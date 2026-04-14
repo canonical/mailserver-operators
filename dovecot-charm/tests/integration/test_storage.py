@@ -162,3 +162,39 @@ def test_luks_storage_manual(juju: jubilant.Juju, dovecot_charm_manual: str):
     # Cleanup
     logging.info("Cleaning up deployment...")
     juju.remove_application(dovecot_charm_manual)
+
+
+def test_data_persists_across_restart(juju: jubilant.Juju, dovecot_charm: str):
+    """Data written to /srv/mail survives a VM reboot and charm re-settle."""
+    unit_name = f"{dovecot_charm}/0"
+    sentinel = "/srv/mail/persistence_test_sentinel"
+
+    # Write sentinel file and confirm it exists before reboot
+    juju.exec(f"touch {sentinel}", unit=unit_name)
+    juju.exec(f"test -f {sentinel}", unit=unit_name)
+    logging.info(f"Sentinel written: {sentinel}")
+
+    # Reboot — SSH connection drops before command returns, all three are expected
+    logging.info("Rebooting unit...")
+    try:
+        juju.exec("sudo reboot", unit=unit_name)
+    except (jubilant.CLIError, jubilant.TaskError, TimeoutError):
+        pass
+
+    # Wait for charm to re-settle after reboot
+    logging.info("Waiting for charm to re-settle...")
+    juju.wait(jubilant.all_active, timeout=600)
+
+    # Assert storage still mounted
+    mount_output = juju.exec("mount | grep /srv/mail", unit=unit_name)
+    assert "/dev/mapper/mail-data" in mount_output.stdout
+    assert "/srv/mail" in mount_output.stdout
+    logging.info(f"Mount verified: {mount_output.stdout.strip()}")
+
+    # Assert LUKS container still open
+    juju.exec("cryptsetup status mail-data", unit=unit_name)
+    logging.info("LUKS container open after reboot")
+
+    # Assert sentinel still present — data survived
+    juju.exec(f"test -f {sentinel}", unit=unit_name)
+    logging.info("Sentinel file present after reboot — data persisted")
