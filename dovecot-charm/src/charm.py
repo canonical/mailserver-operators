@@ -46,6 +46,7 @@ class DovecotCharm(CharmBase):
 
         # Events
         self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.start, self._reconcile)
         self.framework.observe(self.on.config_changed, self._reconcile)
         self.framework.observe(self.on.upgrade_charm, self._on_install)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)

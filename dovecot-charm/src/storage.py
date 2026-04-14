@@ -26,9 +26,9 @@ def ensure_storage_ready(charm) -> None:
 
     Raises:
         StorageError: If storage is not ready and charm should enter Blocked.
+        ConfigurationError: Propagated from _get_dovecot_config if config invalid.
     """
-    if not (dovecot_config := charm._get_dovecot_config()):
-        return
+    dovecot_config = charm._get_dovecot_config()
 
     if not dovecot_config.manage_luks:
         if _mail_storage_mounted():
