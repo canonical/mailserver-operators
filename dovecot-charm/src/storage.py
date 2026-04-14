@@ -47,6 +47,46 @@ def _mail_storage_mounted():
     return os.path.ismount(MAIL_ROOT)
 
 
+def _resolve_dev_path(charm) -> str | None:
+    """Return the block-device path for the mail-data storage, or *None* to defer.
+
+    Tries ``storages[0].location`` first.  On ``ModelError`` (storage not yet
+    re-provisioned after a VM reboot) falls back to the path persisted at the
+    last ``storage-attached`` event.  Returns *None* in any of these cases:
+
+    * No storage object present yet.
+    * ``ModelError`` and no saved path.
+    * Device file not yet present on disk (loop not yet attached).
+    """
+    storages = charm.model.storages.get("mail-data")
+    if not storages:
+        logger.warning("Storage not yet provisioned, deferring LUKS setup")
+        return None
+
+    try:
+        dev_path = str(storages[0].location)
+    except ModelError:
+        dev_path = _load_storage_dev_path()
+        if not dev_path:
+            logger.warning(
+                "Storage location not yet available and no saved path, deferring LUKS setup"
+            )
+            return None
+        logger.info(f"Using saved storage device path for LUKS recovery: {dev_path}")
+
+    if not dev_path:
+        logger.warning("Storage location empty, deferring LUKS setup")
+        return None
+
+    # UUID symlinks / loop devices may not exist yet at start-hook time.
+    # storage-attached will re-trigger reconcile once the device appears.
+    if not os.path.exists(dev_path):
+        logger.warning(f"Device {dev_path} not yet present, deferring LUKS setup")
+        return None
+
+    return dev_path
+
+
 def ensure_storage_ready(charm) -> None:
     """Ensure mail storage is attached and LUKS-mounted if required.
 
@@ -65,31 +105,8 @@ def ensure_storage_ready(charm) -> None:
         logger.warning("cryptsetup not installed, deferring storage setup")
         return
 
-    storages = charm.model.storages["mail-data"]
-    if not storages:
-        logger.warning("Storage not yet provisioned, deferring LUKS setup")
-        return
-    try:
-        dev_path = storages[0].location
-    except ModelError:
-        # Storage is not yet re-provisioned by Juju (common on VM reboot after
-        # the start hook fires before storage-attached).  Fall back to the path
-        # we saved at the previous storage-attached event.
-        dev_path = _load_storage_dev_path()
-        if not dev_path:
-            logger.warning(
-                "Storage location not yet available and no saved path, deferring LUKS setup"
-            )
-            return
-        logger.info(f"Using saved storage device path for LUKS recovery: {dev_path}")
-    if not dev_path:
-        logger.warning("Storage location empty, deferring LUKS setup")
-        return
-
-    # If the device path doesn't exist yet (e.g. loop device not yet attached
-    # at start hook time), defer — storage-attached will re-trigger reconcile.
-    if not os.path.exists(dev_path):
-        logger.warning(f"Device {dev_path} not yet present, deferring LUKS setup")
+    dev_path = _resolve_dev_path(charm)
+    if dev_path is None:
         return
 
     # Persist the path so future reboots can recover without storage-get.
