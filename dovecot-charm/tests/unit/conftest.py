@@ -20,7 +20,7 @@ def base_state():
             "mailname": "example.com",
             "postmaster-address": "admin@example.com",
             "primary-unit": "dovecot-charm/0",
-            "manage-luks": True,
+            "luks-auto-provisioning": True,
             "luks-key": luks_secret.id,
         },
         secrets={luks_secret},

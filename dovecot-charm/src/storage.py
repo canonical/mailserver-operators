@@ -13,7 +13,7 @@ from pathlib import Path
 from ops.model import ModelError
 
 from constants import MAIL_ROOT, MAPPER_NAME, MAPPER_PATH, STORAGE_DEV_PATH_FILE
-from exceptions import StorageError
+from exceptions import StorageError, StorageSetupError
 from utils import configure_file
 
 logger = logging.getLogger(__name__)
@@ -118,10 +118,10 @@ def ensure_storage_ready(charm) -> None:
     """
     dovecot_config = charm._get_dovecot_config()
 
-    if not dovecot_config.manage_luks:
+    if not dovecot_config.luks_auto_provisioning:
         if _mail_storage_mounted():
             return
-        raise StorageError("mail-data not mounted; manage-luks disabled")
+        raise StorageError("mail-data not mounted; luks-auto-provisioning disabled")
 
     if shutil.which("cryptsetup") is None:
         logger.warning("cryptsetup not installed, deferring storage setup")
@@ -139,7 +139,7 @@ def ensure_storage_ready(charm) -> None:
     except subprocess.CalledProcessError as e:
         logger.exception(f"Failed to setup LUKS storage: {e}")
         raise StorageError("Failed to setup LUKS storage") from e
-    except RuntimeError as e:
+    except StorageSetupError as e:
         logger.exception(f"Storage validation failed: {e}")
         raise StorageError(str(e)) from e
 
@@ -151,9 +151,9 @@ def teardown_detaching_storage(charm) -> None:
         return
     try:
         if not (dovecot_config := charm._get_dovecot_config()):
-            logger.warning("Cannot determine if manage-luks is enabled during storage detachment")
+            logger.warning("Cannot determine if luks-auto-provisioning is enabled during storage detachment")
             return
-        if dovecot_config.manage_luks and _mail_storage_mounted():
+        if dovecot_config.luks_auto_provisioning and _mail_storage_mounted():
             subprocess.run(["/usr/bin/umount", MAIL_ROOT], check=True)
 
         if os.path.exists("/dev/mapper/mail-data"):
@@ -175,7 +175,7 @@ def setup_luks_storage(key: str, dev_path) -> None:
         dev_path: Path to the block device to encrypt (e.g. ``/dev/sdb``).
 
     Raises:
-        RuntimeError: If any step fails — see individual helpers for details.
+        StorageSetupError: If any step fails — see individual helpers for details.
     """
     if _mail_storage_mounted():
         logger.info("mail-data already mounted, skipping LUKS setup")
@@ -191,12 +191,12 @@ def _validate_block_device(dev_path) -> None:
     """Confirm dev_path exists and is a block device.
 
     Raises:
-        RuntimeError: If dev_path does not exist or is not a block device.
+        StorageSetupError: If dev_path does not exist or is not a block device.
     """
     if not os.path.exists(dev_path):
-        raise RuntimeError(f"Device {dev_path} does not exist")
+        raise StorageSetupError(f"Device {dev_path} does not exist")
     if not stat.S_ISBLK(os.stat(dev_path).st_mode):
-        raise RuntimeError(f"{dev_path} is not a valid block device")
+        raise StorageSetupError(f"{dev_path} is not a valid block device")
 
 
 def _ensure_luks_container(key_bytes: bytes, dev_path) -> None:
@@ -206,7 +206,7 @@ def _ensure_luks_container(key_bytes: bytes, dev_path) -> None:
     Opens with cryptsetup open if MAPPER_PATH does not yet exist.
 
     Raises:
-        RuntimeError: If luksFormat or cryptsetup open fails.
+        StorageSetupError: If luksFormat or cryptsetup open fails.
     """
     is_luks = (
         subprocess.run(
@@ -237,7 +237,7 @@ def _ensure_luks_container(key_bytes: bytes, dev_path) -> None:
             )
             logger.info("LUKS format completed")
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to format {dev_path} as LUKS: {e}") from e
+            raise StorageSetupError(f"Failed to format {dev_path} as LUKS: {e}") from e
 
     if not os.path.exists(MAPPER_PATH):
         logger.info(f"Opening LUKS device {dev_path}...")
@@ -250,7 +250,7 @@ def _ensure_luks_container(key_bytes: bytes, dev_path) -> None:
             )
             logger.info(f"LUKS device opened as {MAPPER_PATH}")
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to open LUKS device {dev_path}: {e}") from e
+            raise StorageSetupError(f"Failed to open LUKS device {dev_path}: {e}") from e
 
 
 def _ensure_filesystem() -> None:
@@ -260,13 +260,13 @@ def _ensure_filesystem() -> None:
     Creates an ext4 filesystem if one is not already present.
 
     Raises:
-        RuntimeError: If dmsetup mknodes or mkfs.ext4 fails.
+        StorageSetupError: If dmsetup mknodes or mkfs.ext4 fails.
     """
     try:
         subprocess.run(["/usr/sbin/dmsetup", "mknodes"], check=True, capture_output=True)
         logger.info("Device mapper nodes refreshed")
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Failed to refresh device mapper nodes: {e}") from e
+        raise StorageSetupError(f"Failed to refresh device mapper nodes: {e}") from e
 
     has_fs = False
     try:
@@ -290,14 +290,14 @@ def _ensure_filesystem() -> None:
             )
             logger.info("ext4 filesystem created")
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to format filesystem on {MAPPER_PATH}: {e}") from e
+            raise StorageSetupError(f"Failed to format filesystem on {MAPPER_PATH}: {e}") from e
 
 
 def _ensure_mounted() -> None:
     """Write fstab entry and mount MAPPER_PATH at MAIL_ROOT.
 
     Raises:
-        RuntimeError: If mount fails.
+        StorageSetupError: If mount fails.
     """
     configure_file("/etc/fstab", f"{MAPPER_PATH} {MAIL_ROOT} ext4 defaults,noauto,nofail 0 2\n")
 
@@ -310,4 +310,4 @@ def _ensure_mounted() -> None:
         os.chmod(MAIL_ROOT, 0o1777)  # noqa: S103 # nosec B103
         logger.info(f"Successfully mounted to {MAIL_ROOT}")
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Failed to mount {MAPPER_PATH} to {MAIL_ROOT}: {e}") from e
+        raise StorageSetupError(f"Failed to mount {MAPPER_PATH} to {MAIL_ROOT}: {e}") from e

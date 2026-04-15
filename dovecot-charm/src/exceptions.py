@@ -19,6 +19,12 @@ class StorageError(CharmBlockedError):
     pass
 
 
+class StorageSetupError(Exception):
+    """Raised for expected failures during LUKS/device/filesystem setup."""
+
+    pass
+
+
 class ConfigurationError(CharmBlockedError):
     """Raised when charm or service configuration is invalid or fails."""
 

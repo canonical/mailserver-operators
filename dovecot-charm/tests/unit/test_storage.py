@@ -37,11 +37,11 @@ def test_storage_attached_setup_luks_not_called_when_cryptsetup_missing(ctx, bas
     mock_setup_luks.assert_not_called()
 
 
-def test_storage_attached_manage_luks_disabled_unmounted_is_blocked(ctx, base_state):
+def test_storage_attached_luks_auto_provisioning_disabled_unmounted_is_blocked(ctx, base_state):
     storage = ops.testing.Storage("mail-data")
     state_in = dataclasses.replace(
         base_state,
-        config={**base_state.config, "manage-luks": False},
+        config={**base_state.config, "luks-auto-provisioning": False},
         storages={storage},
     )
     with (
@@ -57,11 +57,11 @@ def test_storage_attached_manage_luks_disabled_unmounted_is_blocked(ctx, base_st
     assert "mail-data not mounted" in state_out.unit_status.message
 
 
-def test_storage_attached_manage_luks_disabled_mounted_is_active(ctx, base_state):
+def test_storage_attached_luks_auto_provisioning_disabled_mounted_is_active(ctx, base_state):
     storage = ops.testing.Storage("mail-data")
     state_in = dataclasses.replace(
         base_state,
-        config={**base_state.config, "manage-luks": False},
+        config={**base_state.config, "luks-auto-provisioning": False},
         storages={storage},
     )
     with (
@@ -77,7 +77,7 @@ def test_storage_attached_manage_luks_disabled_mounted_is_active(ctx, base_state
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
 
 
-def test_storage_attached_manage_luks_blocks_without_luks_key(ctx, base_state):
+def test_storage_attached_luks_auto_provisioning_blocks_without_luks_key(ctx, base_state):
     storage = ops.testing.Storage("mail-data")
     state_in = dataclasses.replace(
         base_state,
@@ -260,7 +260,7 @@ def test_storage_detaching_luks_disabled_skips_close(ctx, base_state):
     storage = ops.testing.Storage("mail-data")
     state_in = dataclasses.replace(
         base_state,
-        config={**base_state.config, "manage-luks": False},
+        config={**base_state.config, "luks-auto-provisioning": False},
         storages={storage},
     )
     with (

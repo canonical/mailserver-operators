@@ -36,7 +36,7 @@ flowchart TD
     M_PROCMAIL(["● Maintenance\nSetting up and configuring procmail"])
 
     B_CONFIG(["✖ Blocked\nInvalid charm configuration\n(mailname / postmaster-address /\nprimary-unit / luks-key)\nraised: ConfigurationError"])
-    B_LUKS_DISABLED(["✖ Blocked\nmail-data not mounted;\nmanage-luks disabled\nraised: StorageError"])
+    B_LUKS_DISABLED(["✖ Blocked\nmail-data not mounted;\nluks-auto-provisioning disabled\nraised: StorageError"])
     B_LUKS_FAILED(["✖ Blocked\nFailed to setup LUKS storage\nraised: StorageError"])
     B_LUKS_RT(["✖ Blocked\n<RuntimeError message>\n(device missing / not block /\nluksFormat / open /\ndmsetup / mkfs / mount)\nraised: StorageError"])
     B_DOVECONF(["✖ Blocked\nInvalid Dovecot configuration\nraised: ConfigurationError"])
@@ -113,12 +113,12 @@ flowchart TD
 
     S3["ensure_storage_ready(charm)\nstorage.py"]
 
-    S3A{"manage_luks = False"}
+    S3A{"luks_auto_provisioning = False"}
     S3A_MT{"_mail_storage_mounted()\nos.path.ismount('/srv/mail')"}
-    S3A_RAISE["raises StorageError\n'mail-data not mounted;\nmanage-luks disabled'"]
+    S3A_RAISE["raises StorageError\n'mail-data not mounted;\nluks-auto-provisioning disabled'"]
     S3A_OK["return (proceed)"]
 
-    S3B{"manage_luks = True\nshutil.which('cryptsetup')"}
+    S3B{"luks_auto_provisioning = True\nshutil.which('cryptsetup')"}
     S3B_NONE["None → log warning\nreturn (defer silently)"]
 
     S3C{"storages / dev_path\nvalid?"}
@@ -131,7 +131,7 @@ flowchart TD
     S3D_OK["return (LUKS ready)"]
 
     S3E["teardown_detaching_storage(charm)"]
-    S3E_STEPS["if storages present → return (no-op)\nif storages gone:\n  manage_luks + mounted → umount\n  mapper exists → luksClose\nCalledProcessError → log only"]
+    S3E_STEPS["if storages present → return (no-op)\nif storages gone:\n  luks_auto_provisioning + mounted → umount\n  mapper exists → luksClose\nCalledProcessError → log only"]
 
     CATCH1["except CharmBlockedError as e\nunit.status = Blocked(str(e))\nreturn"]
 
@@ -171,7 +171,7 @@ flowchart TD
     S3A_MT -->|"not mounted"| S3A_RAISE
     S3A_MT -->|"mounted"| S3A_OK
 
-    S3A -->|"False (manage_luks=True)"| S3B
+    S3A -->|"False (luks_auto_provisioning=True)"| S3B
     S3B -->|"None"| S3B_NONE
     S3B -->|"found"| S3C
     S3C -->|"invalid"| S3C_BAD

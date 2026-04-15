@@ -42,7 +42,7 @@ class DovecotConfig(BaseModel):
     mailname: str = Field(..., min_length=1, description="Mailname for the server")
     postmaster_address: EmailStr = Field(..., description="Postmaster email address")
     primary_unit: str = Field(..., min_length=1, description="Name of the primary unit")
-    manage_luks: bool = Field(
+    luks_auto_provisioning: bool = Field(
         False,
         description=(
             "Enable automatic LUKS encryption management for attached block storage. "
@@ -53,16 +53,16 @@ class DovecotConfig(BaseModel):
     )
     luks_key: str = Field(
         "",
-        description="LUKS passphrase from the luks-key secret. Required when manage_luks is true.",
+        description="LUKS passphrase from the luks-key secret. Required when luks_auto_provisioning is true.",
     )
 
     @field_validator("luks_key", mode="after")
     @classmethod
     def _validate_luks_key(cls, value: str, info: ValidationInfo) -> str:
-        """Require luks_key when manage_luks is enabled."""
-        manage_luks = info.data.get("manage_luks", False)
-        if manage_luks and not value:
-            raise ValueError("luks-key secret must be set when manage-luks is enabled")
+        """Require luks_key when luks_auto_provisioning is enabled."""
+        luks_auto_provisioning = info.data.get("luks_auto_provisioning", False)
+        if luks_auto_provisioning and not value:
+            raise ValueError("luks-key secret must be set when luks-auto-provisioning is enabled")
         return value
 
     @field_validator("primary_unit", mode="after")
@@ -78,9 +78,9 @@ class DovecotConfig(BaseModel):
     def from_charm(cls, charm: "DovecotCharm") -> "DovecotConfig":
         """Create a DovecotConfig instance from charm configuration."""
         config = charm.model.config
-        manage_luks = config.get("manage-luks", False)
+        luks_auto_provisioning = config.get("luks-auto-provisioning", False)
         luks_key = ""
-        if manage_luks:
+        if luks_auto_provisioning:
             secret_id = config.get("luks-key", "")
             if secret_id:
                 try:
@@ -93,7 +93,7 @@ class DovecotConfig(BaseModel):
                     "mailname": config.get("mailname"),
                     "postmaster_address": config.get("postmaster-address"),
                     "primary_unit": config.get("primary-unit"),
-                    "manage_luks": manage_luks,
+                    "luks_auto_provisioning": luks_auto_provisioning,
                     "luks_key": luks_key,
                 },
                 context={"charm": charm},

@@ -35,7 +35,7 @@ The following major and minor features were added in this release.
 Added LUKS encrypted block storage support
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Added support for LUKS-encrypted block storage for mail data. When a ``mail-data`` storage is attached and the ``manage-luks`` configuration option is enabled, the charm automatically formats the device with LUKS encryption using a randomly generated keyfile, opens the device via ``cryptsetup``, creates an ext4 filesystem, and mounts it at ``/srv/mail``. Persistent configuration is written to ``/etc/crypttab`` and ``/etc/fstab`` to survive reboots. When ``manage-luks`` is disabled, the charm monitors the mount point directly and sets the unit status accordingly. Storage detach events cleanly unmount the filesystem and close the LUKS device.
+Added support for LUKS-encrypted block storage for mail data. When a ``mail-data`` storage is attached and the ``luks-auto-provisioning`` configuration option is enabled, the charm automatically formats the device with LUKS encryption using a randomly generated keyfile, opens the device via ``cryptsetup``, creates an ext4 filesystem, and mounts it at ``/srv/mail``. Persistent configuration is written to ``/etc/crypttab`` and ``/etc/fstab`` to survive reboots. When ``luks-auto-provisioning`` is disabled, the charm monitors the mount point directly and sets the unit status accordingly. Storage detach events cleanly unmount the filesystem and close the LUKS device.
 
 Relevant links:
 

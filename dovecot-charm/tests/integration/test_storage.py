@@ -10,7 +10,7 @@ import jubilant
 import pytest
 
 
-def test_luks_storage_automatic(juju: jubilant.Juju, dovecot_charm: str):
+def test_luks_storage_auto_provisioning(juju: jubilant.Juju, dovecot_charm: str):
     """Test automatic LUKS setup with user-supplied secret key."""
     status = juju.status()
     unit_name = next(iter(status.apps[dovecot_charm].units.keys()))
@@ -42,11 +42,11 @@ def test_luks_storage_automatic(juju: jubilant.Juju, dovecot_charm: str):
     logging.info("Automatic LUKS storage verification passed.")
 
 
-def test_luks_storage_manual(juju: jubilant.Juju, dovecot_charm_manual: str):
+def test_luks_storage_manual_provisioning(juju: jubilant.Juju, dovecot_charm_manual_storage: str):
     """Test manual LUKS setup with pre-formatted LUKS device."""
     luks_device_name = "mail-data"
     luks_passphrase = token_hex(16)
-    unit_name = f"{dovecot_charm_manual}/0"
+    unit_name = f"{dovecot_charm_manual_storage}/0"
 
     # Wait for unit to start and storage to attach (but not active - it will be blocked until we set up LUKS)
     logging.info("Waiting for unit and storage to be attached...")
@@ -123,7 +123,7 @@ def test_luks_storage_manual(juju: jubilant.Juju, dovecot_charm_manual: str):
 
     # Now that storage is properly set up, trigger charm reconciliation and wait for active
     logging.info("Triggering charm reconciliation...")
-    juju.config(dovecot_charm_manual, {"mailname": "example1.com"})
+    juju.config(dovecot_charm_manual_storage, {"mailname": "example1.com"})
 
     logging.info("Waiting for charm to become active...")
     juju.wait(jubilant.all_active, timeout=300)
@@ -151,7 +151,7 @@ def test_luks_storage_manual(juju: jubilant.Juju, dovecot_charm_manual: str):
 
     # Verify fstab configuration
     logging.info("Verifying fstab configuration...")
-    fstab = juju.exec("cat /etc/fstab", unit=f"{dovecot_charm_manual}/0")
+    fstab = juju.exec("cat /etc/fstab", unit=f"{dovecot_charm_manual_storage}/0")
     assert f"/dev/mapper/{luks_device_name}" in fstab.stdout
     assert "/srv/mail" in fstab.stdout
     logging.info(
@@ -162,7 +162,7 @@ def test_luks_storage_manual(juju: jubilant.Juju, dovecot_charm_manual: str):
 
     # Cleanup
     logging.info("Cleaning up deployment...")
-    juju.remove_application(dovecot_charm_manual)
+    juju.remove_application(dovecot_charm_manual_storage)
 
 
 def test_data_persists_across_restart(juju: jubilant.Juju, dovecot_charm: str):

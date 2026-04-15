@@ -47,19 +47,20 @@ config:
         Used to identify outgoing mail and should match your server's hostname.
       default: ""
       type: string
-    manage-luks:
+    luks-auto-provisioning:
       description: |
         Enable automatic LUKS encryption management for attached block storage.
         When enabled, the charm will format the storage with LUKS using the key
         supplied via luks-key, create an ext4 filesystem, and manage mounting
-        and fstab entries. Requires luks-key to be set.
+        and fstab entries. Requires luks-key to be set. The charm will not format
+        the storage if it detects an existing filesystem.
       default: false
       type: boolean
     luks-key:
       description: |
         Juju secret ID containing the LUKS encryption key for block storage.
         The secret must have a field named "key" whose value is used as the
-        LUKS passphrase. Required when manage-luks is true.
+        LUKS passphrase. Required when luks-auto-provisioning is true.
         Example: juju add-secret my-luks-key key=<passphrase>
       default: ""
       type: secret

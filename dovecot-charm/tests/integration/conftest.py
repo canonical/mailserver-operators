@@ -60,7 +60,7 @@ def dovecot_charm(
             "mailname": "example.com",
             "postmaster-address": "postmaster@example.com",
             "primary-unit": f"{APP_NAME}/0",
-            "manage-luks": True,
+            "luks-auto-provisioning": True,
             "luks-key": secret_id,
         }
         charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
@@ -82,7 +82,7 @@ def dovecot_charm(
 
 
 @pytest.fixture(scope="module")
-def dovecot_charm_manual(
+def dovecot_charm_manual_storage(
     charm: str,
     juju: jubilant.Juju,
 ) -> str:
@@ -97,7 +97,7 @@ def dovecot_charm_manual(
             "mailname": "example.com",
             "postmaster-address": "postmaster@example.com",
             "primary-unit": f"{charm_name}/0",
-            "manage-luks": False,
+            "luks-auto-provisioning": False,
         }
         charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
         juju.deploy(
