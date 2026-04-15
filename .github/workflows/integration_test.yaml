@@ -19,6 +19,13 @@ jobs:
       juju-channel: '3/stable'
       with-uv: true
       working-directory: dovecot-charm
+      modules: |
+        [
+          "test_action.py",
+          "test_config.py",
+          "test_mail.py",
+          "test_storage.py",
+        ]
   allure-report:
     if: ${{ !cancelled() && github.event_name == 'schedule' }}
     needs:
