@@ -15,6 +15,7 @@ def ctx():
 @pytest.fixture
 def base_state():
     luks_secret = ops.testing.Secret({"key": "deadbeef"})
+    storage = ops.testing.Storage("mail-data")
     return ops.testing.State(
         config={
             "mailname": "example.com",
@@ -24,4 +25,5 @@ def base_state():
             "luks-key": luks_secret.id,
         },
         secrets={luks_secret},
+        storages={storage},
     )

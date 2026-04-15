@@ -15,8 +15,8 @@ def test_open_ports(ctx, base_state):
         patch("charm.DovecotCharm._install"),
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
-        patch("storage.ensure_storage_ready"),
-        patch("storage.teardown_detaching_storage"),
+        patch("charm.ensure_storage_ready"),
+        patch("charm.teardown_detaching_storage"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
@@ -30,8 +30,8 @@ def test_configure_sets_active_on_success(ctx, base_state):
         patch("charm.DovecotCharm._install"),
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
-        patch("storage.ensure_storage_ready"),
-        patch("storage.teardown_detaching_storage"),
+        patch("charm.ensure_storage_ready"),
+        patch("charm.teardown_detaching_storage"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
@@ -49,8 +49,8 @@ def test_configure_blocks_when_dovecot_setup_fails(ctx, base_state):
             ),
         ),
         patch("charm.DovecotCharm._setup_procmail"),
-        patch("storage.ensure_storage_ready"),
-        patch("storage.teardown_detaching_storage"),
+        patch("charm.ensure_storage_ready"),
+        patch("charm.teardown_detaching_storage"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
@@ -67,8 +67,8 @@ def test_configure_blocks_when_procmail_setup_fails(ctx, base_state):
             "charm.DovecotCharm._setup_procmail",
             side_effect=ConfigurationError("Failed to configure postfix: error"),
         ),
-        patch("storage.ensure_storage_ready"),
-        patch("storage.teardown_detaching_storage"),
+        patch("charm.ensure_storage_ready"),
+        patch("charm.teardown_detaching_storage"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)

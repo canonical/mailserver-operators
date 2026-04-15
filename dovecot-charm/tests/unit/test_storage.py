@@ -259,3 +259,23 @@ def test_storage_detaching_luks_disabled_skips_close(ctx, base_state):
     ):
         ctx.run(ctx.on.storage_detaching(storage), state_in)
     assert call(["/usr/bin/umount", "/srv/mail"], check=True) not in mock_run.call_args_list
+
+
+def test_storage_detached_sets_blocked_status(ctx, base_state):
+    """When storage has fully detached the unit must enter BlockedStatus."""
+    storage = ops.testing.Storage("mail-data")
+    state_in = dataclasses.replace(base_state, storages={storage})
+    with (
+        patch("charm.DovecotCharm._install"),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
+        patch("storage._mail_storage_mounted", return_value=False),
+        patch("storage.os.path.exists", return_value=False),
+        patch("storage._is_luks_device", return_value=False),
+        patch("storage.subprocess.run"),
+        # Simulate the storage being gone when teardown_detaching_storage checks
+        patch("ops.model.StorageMapping.get", return_value=[]),
+    ):
+        state_out = ctx.run(ctx.on.storage_detaching(storage), state_in)
+    assert isinstance(state_out.unit_status, ops.BlockedStatus)
+    assert "storage is necessary" in state_out.unit_status.message

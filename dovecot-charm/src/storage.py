@@ -160,7 +160,12 @@ def ensure_storage_ready(charm, dovecot_config=None) -> None:
 
 
 def teardown_detaching_storage(charm) -> None:
-    """Unmount and close LUKS device if storage is detaching."""
+    """Unmount and close LUKS device if storage is detaching.
+
+    Raises:
+        StorageError: Always raised when storage has detached, to put the unit
+            into Blocked status indicating that mail storage is required.
+    """
     if charm.model.storages.get("mail-data"):
         return
     try:
@@ -172,6 +177,7 @@ def teardown_detaching_storage(charm) -> None:
             subprocess.run(["/usr/sbin/cryptsetup", "luksClose", MAPPER_NAME], check=True)
     except subprocess.CalledProcessError as e:
         logger.exception(f"Failed to detach storage: {e}")
+    raise StorageError("Mail storage (mail-data) detached; storage is necessary for operation")
 
 
 def setup_luks_storage(key: str, dev_path) -> None:
