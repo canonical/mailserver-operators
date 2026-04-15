@@ -52,8 +52,9 @@ config:
         Enable automatic LUKS encryption management for attached block storage.
         When enabled, the charm will format the storage with LUKS using the key
         supplied via luks-key, create an ext4 filesystem, and manage mounting
-        and fstab entries. Requires luks-key to be set. The charm will not format
-        the storage if it detects an existing filesystem.
+        and fstab entries. Requires luks-key to be set. This process may
+        overwrite existing data on the attached block device if it is not
+        already LUKS-encrypted and using an ext4 filesystem.
       default: false
       type: boolean
     luks-key:

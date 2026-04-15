@@ -8,7 +8,7 @@ changes:
 - title: Added LUKS encrypted block storage support for mail data
   author: alithethird
   type: major
-  description: Added support for automatic LUKS encryption of attached block storage for mail data, including keyfile generation, cryptsetup formatting, ext4 filesystem creation, mount management, and persistent crypttab/fstab configuration.
+  description: Added support for automatic LUKS encryption of attached block storage for mail data using the `luks-key` Juju secret, including cryptsetup formatting, ext4 filesystem creation, and mount/fstab management.
   urls:
     pr:
       - "https://github.com/canonical/mailserver-operators/pull/3"

@@ -118,14 +118,20 @@ def _resolve_dev_path(charm) -> str | None:
     return dev_path
 
 
-def ensure_storage_ready(charm) -> None:
+def ensure_storage_ready(charm, dovecot_config=None) -> None:
     """Ensure mail storage is attached and LUKS-mounted if required.
+
+    Args:
+        charm: The charm instance.
+        dovecot_config: Optional precomputed Dovecot config object. When provided,
+            this avoids re-reading and re-validating charm config.
 
     Raises:
         StorageError: If storage is not ready and charm should enter Blocked.
         ConfigurationError: Propagated from _get_dovecot_config if config invalid.
     """
-    dovecot_config = charm._get_dovecot_config()
+    if dovecot_config is None:
+        dovecot_config = charm._get_dovecot_config()
 
     if not dovecot_config.luks_auto_provisioning:
         if _mail_storage_mounted():
@@ -167,8 +173,8 @@ def teardown_detaching_storage(charm) -> None:
         if dovecot_config.luks_auto_provisioning and _mail_storage_mounted():
             subprocess.run(["/usr/bin/umount", MAIL_ROOT], check=True)
 
-        if os.path.exists("/dev/mapper/mail-data"):
-            subprocess.run(["/usr/sbin/cryptsetup", "luksClose", "mail-data"], check=True)
+        if os.path.exists(MAPPER_PATH):
+            subprocess.run(["/usr/sbin/cryptsetup", "luksClose", MAPPER_NAME], check=True)
     except subprocess.CalledProcessError as e:
         logger.exception(f"Failed to detach storage: {e}")
 
