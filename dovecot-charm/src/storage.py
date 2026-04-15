@@ -72,7 +72,13 @@ def _resolve_dev_path(charm) -> str | None:
 
     * No storage object present yet.
     * ``ModelError`` and no saved path.
-    * Device does not yet contain a LUKS header (loop image not yet attached).
+    * Reboot fallback path: device does not yet contain a LUKS header
+      (loop image not yet attached by Juju).
+
+    Note: the ``isLuks`` readiness probe is applied *only* on the reboot
+    fallback path, not when the path is obtained directly from the Juju
+    storage API.  On first deploy the device is blank (no LUKS header yet)
+    so probing would incorrectly defer the setup that formats the device.
     """
     storages = charm.model.storages.get("mail-data")
     if not storages:
@@ -81,27 +87,30 @@ def _resolve_dev_path(charm) -> str | None:
 
     try:
         dev_path = str(storages[0].location)
+        if dev_path:
+            # Direct path from the Juju storage API (first deploy / storage-attached
+            # hook): the device is real and ready; no isLuks probe needed.
+            return dev_path
     except ModelError:
-        dev_path = _load_storage_dev_path()
-        if not dev_path:
-            logger.warning(
-                "Storage location not yet available and no saved path, deferring LUKS setup"
-            )
-            return None
-        logger.info(f"Using saved storage device path for LUKS recovery: {dev_path}")
+        pass
 
+    # Reboot fallback: storages[0].location raised ModelError, meaning the
+    # storage has not yet been re-provisioned.  Use the path saved at the
+    # previous storage-attached event, but guard with isLuks to defer until
+    # Juju has re-attached the loop image.
+    dev_path = _load_storage_dev_path()
     if not dev_path:
-        logger.warning("Storage location empty, deferring LUKS setup")
+        logger.warning(
+            "Storage location not yet available and no saved path, deferring LUKS setup"
+        )
         return None
+    logger.info(f"Using saved storage device path for LUKS recovery: {dev_path}")
 
     # The device path from Juju is often a /dev/disk/by-uuid/... symlink.
     # That symlink (and the underlying loop device) may not be fully ready
     # at start-hook time even if os.path.exists() passes — the loop image
-    # may not yet be attached.  Use `cryptsetup isLuks` as the readiness
-    # probe: it succeeds only when the device is attached AND already contains
-    # a LUKS header.  On first deploy storage-attached fires before start so
-    # the device is always ready; on reboot this correctly defers until
-    # storage-attached re-fires after Juju re-attaches the loop.
+    # may not yet be attached.  cryptsetup isLuks succeeds only when the
+    # device is attached AND already contains a LUKS header.
     if not _is_luks_device(dev_path):
         logger.warning(f"Device {dev_path} not yet a LUKS device, deferring LUKS setup")
         return None
