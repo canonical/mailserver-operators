@@ -1,3 +1,5 @@
+.. vale off
+
 .. meta::
    :description: State diagrams showing the Dovecot charm's event handling, handler call chains, and all possible unit status outcomes.
 
@@ -18,6 +20,7 @@ Shows which Juju events trigger which handlers, and every possible
 ``unit.status`` outcome.  ``replicas.relation_created`` and ``clear_queue``
 produce no status changes.
 
+.. vale off
 .. mermaid::
 
    flowchart TD
@@ -120,6 +123,7 @@ The ``_resolve_dev_path`` sub-diagram reflects the two-path design:
   the last ``storage-attached`` event, then guards with ``_is_luks_device`` to
   defer until Juju has re-attached the loop image.
 
+.. vale off
 .. mermaid::
 
    flowchart TD

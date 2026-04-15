@@ -1,0 +1,2 @@
+# Exclude generated/diagram-heavy RST from prose linting
+docs/explanation/dovecot-charm-state-diagrams.rst
