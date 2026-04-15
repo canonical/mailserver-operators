@@ -34,6 +34,12 @@ class DovecotConfigInvalidError(Exception):
         return self._validation_error.errors()
 
 
+class DovecotConfigSecretError(Exception):
+    """Represents an error retrieving a secret for dovecot configuration."""
+
+    pass
+
+
 class DovecotConfig(BaseModel):
     """Pydantic model for validating charm configuration."""
 
@@ -86,7 +92,12 @@ class DovecotConfig(BaseModel):
                 try:
                     luks_key = charm.model.get_secret(id=secret_id).get_content()["key"]
                 except Exception as e:
-                    logger.exception(f"Failed to retrieve luks-key secret: {e}")
+                    msg = (
+                        f"Failed to retrieve luks-key secret (id={secret_id}): {e}. "
+                        "Ensure the secret exists and the charm has grant-secret permission."
+                    )
+                    logger.error(msg)
+                    raise DovecotConfigSecretError(msg) from e
         try:
             return cls.model_validate(
                 {

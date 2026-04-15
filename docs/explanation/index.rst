@@ -22,4 +22,5 @@ of foundational topics and concepts related to the __charm_name__ charm.
 
     Charm design overview <charm-design>
     Security overview <security>
+    Dovecot charm state diagrams <dovecot-charm-state-diagrams>
 

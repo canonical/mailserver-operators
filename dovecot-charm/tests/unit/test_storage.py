@@ -7,7 +7,6 @@ import ops
 import ops.testing
 
 
-# --- Storage handler tests ---
 def test_storage_attached_defer_if_cryptsetup_missing(ctx, base_state):
     storage = ops.testing.Storage("mail-data")
     state_in = dataclasses.replace(base_state, storages={storage})
@@ -20,20 +19,6 @@ def test_storage_attached_defer_if_cryptsetup_missing(ctx, base_state):
     ):
         ctx.run(ctx.on.storage_attached(storage), state_in)
     # When cryptsetup is missing, setup_luks_storage is not called
-    mock_setup_luks.assert_not_called()
-
-
-def test_storage_attached_setup_luks_not_called_when_cryptsetup_missing(ctx, base_state):
-    storage = ops.testing.Storage("mail-data")
-    state_in = dataclasses.replace(base_state, storages={storage})
-    with (
-        patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot"),
-        patch("charm.DovecotCharm._setup_procmail"),
-        patch("storage.shutil.which", return_value=None),
-        patch("storage.setup_luks_storage") as mock_setup_luks,
-    ):
-        ctx.run(ctx.on.storage_attached(storage), state_in)
     mock_setup_luks.assert_not_called()
 
 
