@@ -151,7 +151,9 @@ def teardown_detaching_storage(charm) -> None:
         return
     try:
         if not (dovecot_config := charm._get_dovecot_config()):
-            logger.warning("Cannot determine if luks-auto-provisioning is enabled during storage detachment")
+            logger.warning(
+                "Cannot determine if luks-auto-provisioning is enabled during storage detachment"
+            )
             return
         if dovecot_config.luks_auto_provisioning and _mail_storage_mounted():
             subprocess.run(["/usr/bin/umount", MAIL_ROOT], check=True)
