@@ -68,7 +68,6 @@ def dovecot_charm(
             charm_path,
             app=APP_NAME,
             config=config,
-            storage={"mail-data": "lvm,2G"},
             constraints={"virt-type": "virtual-machine"},
             trust=True,
         )
@@ -105,7 +104,6 @@ def dovecot_charm_manual_storage(
             charm_path,
             app=charm_name,
             config=config,
-            storage={"mail-data": "lvm,2G"},
             constraints={"virt-type": "virtual-machine"},
             trust=True,
         )
