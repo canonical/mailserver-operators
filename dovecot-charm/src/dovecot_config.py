@@ -91,7 +91,15 @@ class DovecotConfig(BaseModel):
             secret_id = config.get("luks-key", "")
             if secret_id:
                 try:
-                    luks_key = charm.model.get_secret(id=secret_id).get_content()["key"]
+                    content = charm.model.get_secret(id=secret_id).get_content()
+                    luks_key = content.get("key", "")
+                    if not luks_key:
+                        msg = (
+                            f"Secret (id={secret_id}) exists but does not contain a 'key' field. "
+                            "Ensure the secret was created with: juju add-secret ... key=<passphrase>"
+                        )
+                        logger.error(msg)
+                        raise DovecotConfigSecretError(msg)
                 except (SecretNotFoundError, ModelError) as e:
                     msg = (
                         f"Failed to retrieve luks-key secret (id={secret_id}): {e}. "

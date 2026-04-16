@@ -31,7 +31,7 @@ from constants import (
     REQUIRED_PACKAGES,
     TEMPLATES_DIR,
 )
-from dovecot_config import DovecotConfig, DovecotConfigInvalidError
+from dovecot_config import DovecotConfig, DovecotConfigInvalidError, DovecotConfigSecretError
 from exceptions import CharmBlockedError, ConfigurationError
 from storage import ensure_storage_ready, teardown_detaching_storage
 
@@ -102,6 +102,9 @@ class DovecotCharm(CharmBase):
             raise ConfigurationError(
                 f"Invalid charm configuration, check logs for details: {msg}"
             ) from exc
+        except DovecotConfigSecretError as exc:
+            logger.exception(f"Secret retrieval error: {exc}")
+            raise ConfigurationError(str(exc)) from exc
 
     def _on_install(self, event):
         """Handle install event."""
@@ -114,7 +117,7 @@ class DovecotCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Configuring charm")
         try:
             dovecot_config = self._get_dovecot_config()
-            ensure_storage_ready(self)
+            ensure_storage_ready(self, dovecot_config=dovecot_config)
             teardown_detaching_storage(self)
         except CharmBlockedError as e:
             self.unit.status = BlockedStatus(str(e))
@@ -181,6 +184,7 @@ class DovecotCharm(CharmBase):
                 ["/usr/bin/doveconf", "-c", DOVECOT_CONF_TARGET],
                 check=True,
                 capture_output=True,
+                text=True,
             )
             return True
         except subprocess.CalledProcessError as e:
@@ -214,6 +218,7 @@ class DovecotCharm(CharmBase):
                 ["/usr/sbin/postconf", "-e", 'mailbox_command=/usr/bin/procmail -a "$EXTENSION"'],
                 check=True,
                 capture_output=True,
+                text=True,
             )
             systemd.service_reload("postfix", restart_on_failure=True)
         except subprocess.CalledProcessError as e:

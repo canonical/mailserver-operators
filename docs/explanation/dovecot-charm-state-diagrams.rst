@@ -64,7 +64,7 @@ produce no status changes.
        EV_INSTALL      --> H_INSTALL
        EV_START        --> H_RECONCILE
        EV_CONFIG       --> H_RECONCILE
-       EV_UPGRADE      --> H_RECONCILE
+       EV_UPGRADE      --> H_INSTALL
        EV_STOR_ATT     --> H_RECONCILE
        EV_STOR_DET     --> H_RECONCILE
        EV_PEER         --> H_PEER
@@ -168,7 +168,7 @@ The ``_resolve_dev_path`` sub-diagram reflects the two-path design:
        S3D_OK["return (LUKS ready, /srv/mail mounted)"]
 
        S3E["teardown_detaching_storage(charm)"]
-       S3E_STEPS["if storages present → return (no-op)\nif storages gone:\n  luks_auto_provisioning + mounted → umount\n  mapper exists → luksClose\nCalledProcessError → log only (never raises)"]
+       S3E_STEPS["if storages present → return (no-op)\nif storages gone:\n  luks_auto_provisioning + mounted → umount\n  mapper exists → luksClose\nCalledProcessError → log only\nalways raises StorageError → Blocked"]
 
        CATCH1["except CharmBlockedError as e\nunit.status = Blocked(str(e))\nreturn"]
 
@@ -300,8 +300,9 @@ Notes
     ``_is_luks_device`` (``cryptsetup isLuks``) to defer until the loop image
     is re-attached by Juju and the existing LUKS header is readable.
 
-- **``teardown_detaching_storage``** never raises — ``CalledProcessError``
-  during umount/luksClose is logged and swallowed.  Not inside either try
+- **``teardown_detaching_storage``** swallows ``CalledProcessError`` during
+  umount/luksClose by logging it, but always raises ``StorageError`` when
+  storage is gone so the unit transitions to Blocked.  Not inside either try
   block.
 - **Silent hang**: if ``doveconf`` is absent, unit stays in
   ``Maintenance("Configuring charm")`` until the next event.
