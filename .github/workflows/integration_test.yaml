@@ -18,6 +18,7 @@ jobs:
       self-hosted-runner-label: "edge"
       juju-channel: '3/stable'
       with-uv: true
+      pre-run-script: dovecot-charm/tests/integration/setup_lvm_pool.sh
       working-directory: dovecot-charm
       modules: |
         [

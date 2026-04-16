@@ -184,8 +184,9 @@ def test_data_persists_across_restart(juju: jubilant.Juju, dovecot_charm: str):
     logging.info("Waiting for charm to re-settle...")
     juju.wait(jubilant.all_active, timeout=600)
 
-    # start hook defers (device not yet present), then storage-attached fires and
-    # does the LUKS open + mount.  Poll until /srv/mail is mounted.
+    # After reboot the Juju storage API may not yet be re-provisioned when the
+    # start hook fires; the charm defers and retries until LUKS open + mount
+    # succeeds.  Poll until /srv/mail is mounted.
     logging.info("Waiting for /srv/mail to be mounted post-reboot...")
     deadline = time.monotonic() + 120
     mounted = False
