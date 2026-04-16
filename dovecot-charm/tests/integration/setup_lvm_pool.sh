@@ -3,8 +3,8 @@
 # See LICENSE file for licensing details.
 #
 # Creates a Juju LVM storage pool for integration tests.
-# Runs after juju bootstrap and model creation, before integration tests.
-# The model is expected to already exist and be named "testing".
+# Runs after juju bootstrap, before integration tests.
+# Creates the "testing" model and registers the LVM pool in it.
 
 set -eux
 
@@ -17,6 +17,7 @@ sudo pvcreate "$LOOPDEV"
 sudo vgcreate juju-lvm-pool "$LOOPDEV"
 
 # Register the pool with Juju so storage requests can use pool name "lvm"
+juju add-model testing
 juju create-storage-pool lvm lvm volume-group=juju-lvm-pool --model testing
 
 # Verify the pool is visible
