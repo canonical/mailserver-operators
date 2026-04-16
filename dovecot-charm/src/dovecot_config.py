@@ -6,6 +6,7 @@
 import logging
 from typing import TYPE_CHECKING
 
+from ops import ModelError, SecretNotFoundError
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -91,7 +92,7 @@ class DovecotConfig(BaseModel):
             if secret_id:
                 try:
                     luks_key = charm.model.get_secret(id=secret_id).get_content()["key"]
-                except Exception as e:
+                except (SecretNotFoundError, ModelError) as e:
                     msg = (
                         f"Failed to retrieve luks-key secret (id={secret_id}): {e}. "
                         "Ensure the secret exists and the charm has grant-secret permission."

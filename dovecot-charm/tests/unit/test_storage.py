@@ -6,20 +6,7 @@ from unittest.mock import call, patch
 import ops
 import ops.testing
 
-
-def test_storage_attached_defer_if_cryptsetup_missing(ctx, base_state):
-    storage = ops.testing.Storage("mail-data")
-    state_in = dataclasses.replace(base_state, storages={storage})
-    with (
-        patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot"),
-        patch("charm.DovecotCharm._setup_procmail"),
-        patch("storage.shutil.which", return_value=None),
-        patch("storage.setup_luks_storage") as mock_setup_luks,
-    ):
-        ctx.run(ctx.on.storage_attached(storage), state_in)
-    # When cryptsetup is missing, setup_luks_storage is not called
-    mock_setup_luks.assert_not_called()
+from constants import MAIL_ROOT, MAPPER_NAME
 
 
 def test_storage_attached_luks_auto_provisioning_disabled_unmounted_is_blocked(ctx, base_state):
@@ -87,7 +74,6 @@ def test_storage_attached_calls_setup_luks_with_key(ctx, base_state):
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
-        patch("storage.shutil.which", return_value="/usr/sbin/cryptsetup"),
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
         patch("storage._is_luks_device", return_value=True),
         patch("storage._save_storage_dev_path"),
@@ -108,7 +94,6 @@ def test_storage_attached_saves_dev_path(ctx, base_state):
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
-        patch("storage.shutil.which", return_value="/usr/sbin/cryptsetup"),
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
         patch("storage._is_luks_device", return_value=True),
         patch("storage.setup_luks_storage"),
@@ -134,7 +119,6 @@ def test_start_uses_saved_dev_path_when_model_error(ctx, base_state):
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
-        patch("storage.shutil.which", return_value="/usr/sbin/cryptsetup"),
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
         patch.object(type(OpsStorage(None, None, None)), "location", location_prop),
         patch("storage._load_storage_dev_path", return_value="/dev/loop0") as mock_load,
@@ -165,7 +149,6 @@ def test_start_defers_when_model_error_and_no_saved_path(ctx, base_state):
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
-        patch("storage.shutil.which", return_value="/usr/sbin/cryptsetup"),
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
         patch.object(type(OpsStorage(None, None, None)), "location", location_prop),
         patch("storage._load_storage_dev_path", return_value=None),
@@ -191,7 +174,6 @@ def test_start_defers_when_device_not_yet_luks(ctx, base_state):
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
-        patch("storage.shutil.which", return_value="/usr/sbin/cryptsetup"),
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
         patch.object(type(OpsStorage(None, None, None)), "location", location_prop),
         patch("storage._load_storage_dev_path", return_value="/dev/disk/by-uuid/aabbccdd"),
@@ -226,19 +208,29 @@ def test_storage_detaching_unmount_and_close(ctx, base_state):
 
 
 def test_storage_detaching_not_mounted(ctx, base_state):
+    """When the LUKS mapper is not open and storage is not mounted, teardown
+    skips both luksClose and umount, then raises StorageError putting the unit
+    into BlockedStatus.
+    """
     storage = ops.testing.Storage("mail-data")
     state_in = dataclasses.replace(base_state, storages={storage})
     with (
         patch("charm.DovecotCharm._install"),
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
-        patch("storage.shutil.which", return_value=None),
         patch("storage._mail_storage_mounted", return_value=False),
         patch("storage.os.path.exists", return_value=False),
         patch("storage.subprocess.run") as mock_run,
+        patch("ops.model.StorageMapping.get", return_value=[]),
     ):
-        ctx.run(ctx.on.storage_detaching(storage), state_in)
-    mock_run.assert_not_called()
+        state_out = ctx.run(ctx.on.storage_detaching(storage), state_in)
+    # Neither umount nor luksClose should have been called
+    umount_call = call(["/usr/bin/umount", MAIL_ROOT], check=True)
+    luks_close_call = call(["/usr/sbin/cryptsetup", "luksClose", MAPPER_NAME], check=True)
+    assert umount_call not in mock_run.call_args_list
+    assert luks_close_call not in mock_run.call_args_list
+    # Unit must be blocked because storage is gone
+    assert isinstance(state_out.unit_status, ops.BlockedStatus)
 
 
 def test_storage_detaching_luks_disabled_skips_close(ctx, base_state):
@@ -252,7 +244,6 @@ def test_storage_detaching_luks_disabled_skips_close(ctx, base_state):
         patch("charm.DovecotCharm._install"),
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
-        patch("storage.shutil.which", return_value=None),
         patch("storage._mail_storage_mounted", return_value=True),
         patch("storage.os.path.exists", return_value=True),
         patch("storage.subprocess.run") as mock_run,
