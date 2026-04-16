@@ -65,6 +65,7 @@ def dovecot_charm(
             config=config,
             constraints={"virt-type": "virtual-machine"},
             trust=True,
+            log=False,
         )
 
     logging.info("Waiting for active status...")

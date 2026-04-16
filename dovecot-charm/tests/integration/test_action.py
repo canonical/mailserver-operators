@@ -13,6 +13,7 @@ def _seed_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
         "printf 'Subject: queue-test\\n\\nmessage body\\n' | "
         "/usr/sbin/sendmail  -odq -f test@yourdomain.com someone@example.com || true",
         unit=unit_name,
+        log=False,
     )
     time.sleep(10)
     juju.exec(
@@ -22,18 +23,22 @@ def _seed_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
         "done; "
         "exit 1",
         unit=unit_name,
+        log=False,
     )
 
 
 def _seed_deferred_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
     """Queue one deferred message by temporarily deferring SMTP transports."""
-    juju.exec("postconf -e 'relayhost = [10.255.255.255]' && postfix reload", unit=unit_name)
+    juju.exec(
+        "postconf -e 'relayhost = [10.255.255.255]' && postfix reload", unit=unit_name, log=False
+    )
     time.sleep(5)  # Give Postfix some time to process the new message
     try:
         juju.exec(
             "printf 'Subject: deferred-test\\n\\nmessage body\\n' | "
             "/usr/sbin/sendmail -f deferred-test@example.com deferred-test@example.net || true",
             unit=unit_name,
+            log=False,
         )
         time.sleep(10)  # Give Postfix some time to process the new message
         juju.exec(
@@ -43,14 +48,15 @@ def _seed_deferred_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
             "done; "
             "exit 1",
             unit=unit_name,
+            log=False,
         )
     finally:
-        juju.exec("sudo postconf -e 'relayhost =' && postfix reload", unit=unit_name)
+        juju.exec("sudo postconf -e 'relayhost =' && postfix reload", unit=unit_name, log=False)
 
 
 def _assert_queue_empty(juju: jubilant.Juju, unit_name: str):
     """Assert that Postfix reports an empty queue."""
-    juju.exec("postqueue -p | grep -q 'Mail queue is empty'", unit=unit_name)
+    juju.exec("postqueue -p | grep -q 'Mail queue is empty'", unit=unit_name, log=False)
 
 
 def _assert_deferred_queue_empty(juju: jubilant.Juju, unit_name: str):
@@ -58,12 +64,13 @@ def _assert_deferred_queue_empty(juju: jubilant.Juju, unit_name: str):
     juju.exec(
         "sudo find /var/spool/postfix/deferred -type f | grep -q . && exit 1 || exit 0",
         unit=unit_name,
+        log=False,
     )
 
 
 def _assert_queue_non_empty(juju: jubilant.Juju, unit_name: str):
     """Assert that Postfix reports a non-empty queue."""
-    juju.exec("postqueue -p | grep -qv 'Mail queue is empty'", unit=unit_name)
+    juju.exec("postqueue -p | grep -qv 'Mail queue is empty'", unit=unit_name, log=False)
 
 
 def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):

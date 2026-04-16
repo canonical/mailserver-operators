@@ -16,19 +16,19 @@ def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):
     """Test end-to-end mail delivery and IMAP retrieval."""
     unit_name = f"{dovecot_charm}/0"
     logging.info(f"Updating primary-unit config to {unit_name}...")
-    juju.config(dovecot_charm, {"primary-unit": unit_name})
+    juju.config(dovecot_charm, {"primary-unit": unit_name}, log=False)
     juju.wait(jubilant.all_active, timeout=300)
 
     password = token_hex(8)
     logging.info("Configuring user 'ubuntu'...")
 
-    juju.exec("usermod -aG mail ubuntu", unit=unit_name)
-    juju.exec(f"echo 'ubuntu:{password}' | chpasswd", unit=unit_name)
+    juju.exec("usermod -aG mail ubuntu", unit=unit_name, log=False)
+    juju.exec(f"echo 'ubuntu:{password}' | chpasswd", unit=unit_name, log=False)
 
     logging.info("Sending test email...")
     subject = "Mail Verification"
     cmd = f"echo 'This is the body' | mail -s '{subject}' ubuntu@localhost"
-    juju.exec(cmd, unit=unit_name)
+    juju.exec(cmd, unit=unit_name, log=False)
 
     logging.info("Verifying via IMAP...")
     status = juju.status()
