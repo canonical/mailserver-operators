@@ -10,8 +10,21 @@ import jubilant
 def _seed_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
     """Queue a test message and wait until Postfix reports a non-empty queue."""
     juju.exec(
+        'sudo postconf -e "header_checks = regexp:/etc/postfix/header_checks"',
+        unit=unit_name,
+    )
+    juju.exec(
+        'echo "/^Subject:.*queue.*/  HOLD" | sudo tee /etc/postfix/header_checks',
+        unit=unit_name,
+    )
+    juju.exec(
+        "sudo postmap /etc/postfix/header_checks && sudo postfix reload",
+        unit=unit_name,
+    )
+
+    juju.exec(
         "printf 'Subject: queue-test\\n\\nmessage body\\n' | "
-        "/usr/sbin/sendmail  -odq -f test@yourdomain.com someone@example.com || true",
+        "/usr/sbin/sendmail -f test@yourdomain.com someone@example.com || true",
         unit=unit_name,
     )
     time.sleep(10)

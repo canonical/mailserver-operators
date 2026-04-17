@@ -26,6 +26,15 @@ parts:
     stage:
     - templates
 
+storage:
+  mail-data:
+    type: block
+    description: |
+      LUKS encrypted storage for mail data. Encryption is managed by the charm
+      using the key supplied via the luks-key secret config option.
+    multiple:
+      range: "1"
+
 peers:
   replicas:
     interface: replicas
@@ -38,6 +47,24 @@ config:
         Used to identify outgoing mail and should match your server's hostname.
       default: ""
       type: string
+    luks-auto-provisioning:
+      description: |
+        Enable automatic LUKS encryption management for attached block storage.
+        When enabled, the charm will format the storage with LUKS using the key
+        supplied via luks-key, create an ext4 filesystem, and manage mounting
+        and fstab entries. Requires luks-key to be set. This process may
+        overwrite existing data on the attached block device if it is not
+        already LUKS-encrypted and using an ext4 filesystem.
+      default: false
+      type: boolean
+    luks-key:
+      description: |
+        Juju secret ID containing the LUKS encryption key for block storage.
+        The secret must have a field named "key" whose value is used as the
+        LUKS passphrase. Required when luks-auto-provisioning is true.
+        Example: juju add-secret my-luks-key key=<passphrase>
+      default: ""
+      type: secret
     postmaster-address:
       description: |
         Email address of the postmaster or mail system administrator.

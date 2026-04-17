@@ -153,6 +153,8 @@ disallow_untyped_defs = false
 
 [tool.bandit]
 exclude_dirs = ["/venv/"]
+skips = ["B603"]
+
 
 [tool.bandit.assert_used]
 skips = ["*/*test.py", "*/test_*.py", "*tests/*.py"]

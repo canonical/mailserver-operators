@@ -53,10 +53,15 @@ def dovecot_charm(
     if not juju.status().apps.get(APP_NAME):
         logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
 
+        secret_id = juju.cli("add-secret", "dovecot-luks-key", "key=s3cr3tpassphrase").strip()
+        logging.info(f"Created LUKS secret: {secret_id}")
+
         config = {
             "mailname": "example.com",
             "postmaster-address": "postmaster@example.com",
             "primary-unit": f"{APP_NAME}/0",
+            "luks-auto-provisioning": True,
+            "luks-key": secret_id,
         }
         charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
         juju.deploy(
@@ -67,6 +72,45 @@ def dovecot_charm(
             trust=True,
         )
 
+    juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
     logging.info("Waiting for active status...")
-    juju.wait(jubilant.all_active, timeout=10 * 60)
+    juju.wait(
+        lambda status: status.apps[APP_NAME].is_active,
+        timeout=10 * 60,
+    )
     return APP_NAME
+
+
+@pytest.fixture(scope="module")
+def dovecot_charm_manual_storage(
+    charm: str,
+    juju: jubilant.Juju,
+) -> str:
+    """Build and deploy the charm."""
+    charm_name = f"{APP_NAME}-manual"
+    logging.info(f"Checking for existing application {charm_name}...")
+
+    if not juju.status().apps.get(charm_name):
+        logging.info(f"Application {charm_name} not found, proceeding with deployment.")
+
+        config = {
+            "mailname": "example.com",
+            "postmaster-address": "postmaster@example.com",
+            "primary-unit": f"{charm_name}/0",
+            "luks-auto-provisioning": False,
+        }
+        charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
+        juju.deploy(
+            charm_path,
+            app=charm_name,
+            config=config,
+            constraints={"virt-type": "virtual-machine"},
+            trust=True,
+        )
+
+    logging.info("Waiting for blocked status...")
+    juju.wait(
+        lambda status: status.apps[charm_name].is_blocked,
+        timeout=10 * 60,
+    )
+    return charm_name

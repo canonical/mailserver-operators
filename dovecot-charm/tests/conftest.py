@@ -20,3 +20,9 @@ def pytest_addoption(parser: Parser) -> None:
     )
     parser.addoption("--model", action="store", help="Juju model to use")
     parser.addoption("--charm-file", action="store", help="Charm file to be deployed")
+    parser.addoption(
+        "--use-existing",
+        action="store_true",
+        default=False,
+        help="Use the currently active Juju model instead of creating a temporary one",
+    )
