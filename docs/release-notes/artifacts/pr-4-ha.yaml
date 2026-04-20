@@ -1,0 +1,4 @@
+name: pr-4-ha
+type: major
+summary: HA support with SSH key exchange and force-sync action
+url: https://github.com/canonical/mailserver-operators/pull/4
