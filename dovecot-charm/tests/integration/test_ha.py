@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 import logging
@@ -76,6 +76,10 @@ def test_ha_failover(juju, dovecot_charm):
     )
 
     logging.info("Running force-sync on Primary...")
+
+    # Create a test Maildir so the sync script has something to sync.
+    # Without this, the script exits 1 because no Maildir directories exist.
+    juju.exec("mkdir -p /srv/mail/testuser/Maildir/{new,cur,tmp}", unit=primary)
 
     task = juju.run(unit=primary, action="force-sync", wait=100)
     assert task.status == "completed"
