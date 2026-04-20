@@ -216,10 +216,8 @@ class DovecotCharm(CharmBase):
     # -- Service configuration ------------------------------------------------
 
     def _open_ports(self):
-        """Open mail ports."""
-        self.unit.open_port("tcp", 143)
+        """Open mail ports (TLS-only: plaintext 143/110 are not exposed)."""
         self.unit.open_port("tcp", 993)
-        self.unit.open_port("tcp", 110)
         self.unit.open_port("tcp", 995)
         self.unit.open_port("tcp", 4190)
         self.unit.open_port("tcp", 9900)
@@ -347,8 +345,8 @@ class DovecotCharm(CharmBase):
         key_file = SSH_DIR / "id_ed25519"
 
         if not key_file.exists():
-            subprocess.run(  # noqa: S603
-                ["ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(key_file)],
+            subprocess.run(
+                ["/usr/bin/ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(key_file)],
                 check=True,
                 capture_output=True,
             )
@@ -485,7 +483,7 @@ class DovecotCharm(CharmBase):
         try:
             cmd = [SYNC_TO_SECONDARY_TARGET]
             logger.info(f"Running manual sync: {' '.join(cmd)}")
-            subprocess.run(cmd, check=True, capture_output=True, text=True)  # noqa: S603
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
             event.set_results({"result": "Sync completed successfully"})
         except subprocess.CalledProcessError as e:
             msg = f"Sync failed: {e.stderr}"

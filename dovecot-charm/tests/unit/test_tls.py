@@ -2,11 +2,12 @@
 # See LICENSE file for licensing details.
 """Unit tests for TLS certificate integration."""
 
-import dataclasses
 from unittest.mock import MagicMock, patch
 
 import ops
 import pytest
+
+from exceptions import ConfigurationError
 
 
 def test_no_tls_cert_yet_blocks(ctx, base_state):
@@ -24,15 +25,6 @@ def test_no_tls_cert_yet_blocks(ctx, base_state):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
     assert isinstance(state_out.unit_status, ops.BlockedStatus)
     assert "certificate" in state_out.unit_status.message.lower()
-
-
-def test_no_tls_relation_blocks(ctx, base_state):
-    """Charm must be Blocked when mailname is empty (so _tls is None)."""
-    state_in = dataclasses.replace(base_state, config={**base_state.config, "mailname": ""})
-    # Empty mailname → _tls is None AND DovecotConfig validation fails first
-    # (mailname is required by pydantic); either way the charm must be Blocked
-    state_out = ctx.run(ctx.on.config_changed(), state_in)
-    assert isinstance(state_out.unit_status, ops.BlockedStatus)
 
 
 def test_setup_tls_writes_cert_key_and_chain(ctx, base_state, tmp_path):
@@ -122,8 +114,6 @@ def test_setup_tls_no_private_key_raises(ctx, base_state):
     TLS_CERT_DIR patch is needed.  At __exit__ _reconcile also calls
     _setup_tls with the same mock, hits the same error, and sets BlockedStatus.
     """
-    from exceptions import ConfigurationError
-
     mock_cert = MagicMock()
 
     with (

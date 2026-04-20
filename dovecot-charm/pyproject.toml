@@ -122,7 +122,6 @@ lint.per-file-ignores."tests/*" = [
   "D417",
   "S",
 ]
-
 lint.flake8-copyright.author = "Canonical Ltd."
 lint.flake8-copyright.min-file-size = 1
 lint.flake8-copyright.notice-rgx = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+"
