@@ -82,7 +82,7 @@ def dovecot_charm(
         logging.info("TLS relation already there...")
     logging.info("Waiting for active status...")
     juju.wait(
-        lambda status: status.apps[APP_NAME].is_active and status.apps[tls_charm].is_active,
+        lambda status: jubilant.all_active(status, APP_NAME, tls_charm),
         timeout=10 * 60,
     )
     return APP_NAME
