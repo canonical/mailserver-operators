@@ -40,6 +40,8 @@ def reconcile_guards():
         patch("charm.DovecotCharm._setup_ssh_keys"),
         # authorized_keys sync — not under test
         patch("charm.DovecotCharm._sync_authorized_keys"),
+        # known_hosts sync — not under test
+        patch("charm.DovecotCharm._sync_known_hosts"),
         # sync script rendering — not under test
         patch("charm.DovecotCharm._install_mail_sync_script"),
         # cronjob rendering + cron restart — not under test
@@ -165,6 +167,8 @@ def test_reconcile_skips_sync_script_when_not_primary(ctx, base_state):
         patch("charm.DovecotCharm._setup_ssh_keys"),
         # authorized_keys sync — not under test
         patch("charm.DovecotCharm._sync_authorized_keys"),
+        # known_hosts sync — not under test
+        patch("charm.DovecotCharm._sync_known_hosts"),
         # Override _is_primary to simulate being a non-primary unit
         patch("charm.DovecotCharm._is_primary", new_callable=PropertyMock, return_value=False),
         # These should NOT be called — we verify via state not mocks

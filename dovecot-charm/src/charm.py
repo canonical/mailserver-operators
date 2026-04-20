@@ -51,6 +51,7 @@ SYNC_TO_SECONDARY_CRONJOB_TEMPLATE = "sync-to-secondary_cron.tmpl"
 
 SSHD_CONFIG = Path("/etc/ssh/sshd_config")
 SSH_DIR = Path("/root/.ssh")
+SSH_HOST_KEY_FILE = Path("/etc/ssh/ssh_host_ed25519_key.pub")
 
 
 class DovecotCharm(CharmBase):
@@ -194,9 +195,10 @@ class DovecotCharm(CharmBase):
         except ConfigurationError as e:
             self.unit.status = BlockedStatus(str(e))
             return
-        # HA: SSH keys, authorized_keys, sync script + cronjob
+        # HA: SSH keys, authorized_keys, known_hosts, sync script + cronjob
         self._setup_ssh_keys()
         self._sync_authorized_keys()
+        self._sync_known_hosts()
         if self._is_primary:
             self._install_mail_sync_script()
             self._setup_mail_sync_cronjob()
@@ -340,7 +342,12 @@ class DovecotCharm(CharmBase):
     # -- HA / SSH key exchange ------------------------------------------------
 
     def _setup_ssh_keys(self):
-        """Generate an SSH key pair if absent and publish the public key via the peer relation."""
+        """Generate an SSH key pair if absent and publish keys via the peer relation.
+
+        Publishes both the user public key (for authorized_keys) and the host
+        public key (for known_hosts) so peers can verify each other's identity
+        without disabling StrictHostKeyChecking.
+        """
         SSH_DIR.mkdir(mode=0o700, exist_ok=True)
         key_file = SSH_DIR / "id_ed25519"
 
@@ -362,10 +369,10 @@ class DovecotCharm(CharmBase):
             relation.data[self.unit]["public_key"] = pub_key
             relation.data[self.unit]["hostname"] = socket.gethostname()
 
-        config_file = SSH_DIR / "config"
-        if not config_file.exists():
-            config_file.write_text("Host *\n    StrictHostKeyChecking no\n")
-            config_file.chmod(0o600)
+            # Publish the host public key so peers can populate known_hosts
+            if SSH_HOST_KEY_FILE.exists():
+                host_key = SSH_HOST_KEY_FILE.read_text().strip()
+                relation.data[self.unit]["ssh_host_key"] = host_key
 
     def _sync_authorized_keys(self):
         """Collect public keys from all peer units and write authorized_keys."""
@@ -391,6 +398,32 @@ class DovecotCharm(CharmBase):
         auth_file.chmod(0o600)
 
         self._ensure_root_ssh_login()
+
+    def _sync_known_hosts(self):
+        """Populate known_hosts with peer SSH host keys from the peer relation.
+
+        Each peer publishes its host public key and hostname on the relation.
+        This method writes those into known_hosts so SSH connections between
+        units use StrictHostKeyChecking (the default) instead of disabling it.
+        """
+        relation = self.model.get_relation(PEER_RELATION_NAME)
+        if not relation:
+            return
+
+        entries = []
+        for unit in relation.units:
+            host_key = relation.data[unit].get("ssh_host_key")
+            hostname = relation.data[unit].get("hostname")
+            if host_key and hostname:
+                # known_hosts format: <hostname> <key_type> <key_data>
+                entries.append(f"{hostname} {host_key}")
+
+        if not entries:
+            return
+
+        known_hosts_file = SSH_DIR / "known_hosts"
+        known_hosts_file.write_text("\n".join(entries) + "\n")
+        known_hosts_file.chmod(0o600)
 
     def _ensure_root_ssh_login(self):
         """Set PermitRootLogin to prohibit-password in sshd_config and reload sshd."""

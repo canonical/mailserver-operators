@@ -52,6 +52,7 @@ def test_setup_tls_writes_cert_key_and_chain(ctx, base_state, tmp_path):
         # HA methods do filesystem I/O (ssh-keygen, authorized_keys, sync scripts)
         patch("charm.DovecotCharm._setup_ssh_keys"),
         patch("charm.DovecotCharm._sync_authorized_keys"),
+        patch("charm.DovecotCharm._sync_known_hosts"),
         patch("charm.DovecotCharm._install_mail_sync_script"),
         patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
         ctx(ctx.on.config_changed(), base_state) as mgr,
@@ -95,6 +96,7 @@ def test_setup_tls_no_ca_omits_chain(ctx, base_state, tmp_path):
         # HA methods do filesystem I/O — not under test
         patch("charm.DovecotCharm._setup_ssh_keys"),
         patch("charm.DovecotCharm._sync_authorized_keys"),
+        patch("charm.DovecotCharm._sync_known_hosts"),
         patch("charm.DovecotCharm._install_mail_sync_script"),
         patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
         ctx(ctx.on.config_changed(), base_state) as mgr,
@@ -156,6 +158,7 @@ def test_certificate_available_event_triggers_reconcile(ctx, base_state, tmp_pat
         # HA methods do filesystem I/O — not under test
         patch("charm.DovecotCharm._setup_ssh_keys"),
         patch("charm.DovecotCharm._sync_authorized_keys"),
+        patch("charm.DovecotCharm._sync_known_hosts"),
         patch("charm.DovecotCharm._install_mail_sync_script"),
         patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
     ):
