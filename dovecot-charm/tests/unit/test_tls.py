@@ -6,7 +6,6 @@ import dataclasses
 from unittest.mock import MagicMock, patch
 
 import ops
-import ops.testing
 import pytest
 
 

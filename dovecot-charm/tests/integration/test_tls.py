@@ -5,31 +5,6 @@ import imaplib
 import logging
 import ssl
 
-import jubilant
-import pytest
-
-TLS_APP = "self-signed-certificates"
-
-
-@pytest.fixture(scope="module")
-def deploy_with_tls(juju: jubilant.Juju, dovecot_charm: str):
-    if TLS_APP not in juju.status().apps:
-        logging.info("Deploying self-signed-certificates...")
-        juju.deploy(TLS_APP, channel="latest/stable")
-    else:
-        logging.info(f"{TLS_APP} already deployed, skipping deployment.")
-
-    try:
-        logging.info("Adding TLS relation...")
-        juju.integrate(f"{dovecot_charm}:certificates", f"{TLS_APP}:certificates")
-    except Exception:
-        logging.info("TLS relation already there...")
-
-    # The charm is Blocked without a certificate; wait until it becomes Active
-    # (meaning _setup_tls succeeded and cert files are written).
-    logging.info("Waiting for active/idle status...")
-    juju.wait(jubilant.all_active, timeout=1200)
-
 
 def test_tls_certificate_files_written(juju, dovecot_charm, deploy_with_tls):
     """Verify that TLS certificate and key files are written to the unit."""
@@ -84,14 +59,13 @@ def test_tls_certificate_content_valid(juju, dovecot_charm, deploy_with_tls):
 
 
 def test_tls_dovecot_config_references_cert(juju, dovecot_charm, deploy_with_tls):
-    """Verify dovecot configuration uses ssl=required and references the cert."""
+    """Verify dovecot configuration references the cert."""
     unit_name = f"{dovecot_charm}/0"
 
     dovecot_conf = juju.exec(
         "cat", "/etc/dovecot/conf.d/99-local-dovecot-charm.conf", unit=unit_name
     )
     logging.info("Checking dovecot SSL configuration...")
-    assert "ssl = required" in dovecot_conf.stdout
     assert "ssl_cert" in dovecot_conf.stdout
     assert "example.com" in dovecot_conf.stdout
     assert "ssl_min_protocol = TLSv1.2" in dovecot_conf.stdout

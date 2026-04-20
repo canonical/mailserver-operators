@@ -47,6 +47,7 @@ def charm_fixture(pytestconfig: pytest.Config) -> str:
 def dovecot_charm(
     charm: str,
     juju: jubilant.Juju,
+    tls_charm: str,
 ) -> str:
     """Build and deploy the charm."""
     logging.info(f"Checking for existing application {APP_NAME}...")
@@ -74,10 +75,16 @@ def dovecot_charm(
             trust=True,
         )
 
+    try:
+        logging.info("Adding TLS relation...")
+        juju.integrate(f"{dovecot_charm}:certificates", f"{tls_charm}:certificates")
+    except Exception:
+        logging.info("TLS relation already there...")
+
     juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
     logging.info("Waiting for active status...")
     juju.wait(
-        lambda status: status.apps[APP_NAME].is_active,
+        lambda status: status.apps[APP_NAME].is_active and status.apps[tls_charm].is_active,
         timeout=10 * 60,
     )
     return APP_NAME
@@ -116,3 +123,15 @@ def dovecot_charm_manual_storage(
         timeout=10 * 60,
     )
     return charm_name
+
+
+@pytest.fixture(scope="module")
+def tls_charm(juju: jubilant.Juju) -> str:
+    tls_app = "self-signed-certificates"
+    if tls_app not in juju.status().apps:
+        logging.info("Deploying self-signed-certificates...")
+        juju.deploy(tls_app, channel="latest/stable")
+    else:
+        logging.info(f"{tls_app} already deployed, skipping deployment.")
+
+    return tls_app
