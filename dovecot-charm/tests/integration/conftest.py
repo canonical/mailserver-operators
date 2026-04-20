@@ -118,7 +118,7 @@ def dovecot_charm_manual_storage(
 
     try:
         logging.info("Adding TLS relation...")
-        juju.integrate(f"{dovecot_charm}:certificates", f"{tls_charm}:certificates")
+        juju.integrate(f"{charm_name}:certificates", f"{tls_charm}:certificates")
     except Exception:
         logging.info("TLS relation already there...")
 
