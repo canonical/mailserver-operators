@@ -136,6 +136,7 @@ def test_certificate_available_writes_files(ctx, base_state, tmp_path):
         patch("charm.DovecotCharm._install"),
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
+        patch("charm.ensure_storage_ready"),
         patch("charm.systemd.service_reload", return_value=True),
         ctx(ctx.on.config_changed(), base_state) as mgr,
     ):
@@ -155,6 +156,7 @@ def test_certificate_available_no_mailname_returns(ctx, base_state):
         patch("charm.DovecotCharm._install"),
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
+        patch("charm.ensure_storage_ready"),
         patch("charm.systemd.service_reload") as mock_service_reload,
         ctx(ctx.on.config_changed(), state_in) as mgr,
     ):
@@ -168,6 +170,7 @@ def test_certificate_available_restarts_dovecot(ctx, base_state, tmp_path):
         patch("charm.DovecotCharm._install"),
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
+        patch("charm.ensure_storage_ready"),
         patch("charm.systemd.service_reload", return_value=True) as mock_service_reload,
         ctx(ctx.on.config_changed(), base_state) as mgr,
     ):
