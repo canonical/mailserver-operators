@@ -1,10 +1,9 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 import imaplib
 import logging
 import ssl
-import time
 
 import jubilant
 import pytest
@@ -25,6 +24,9 @@ def deploy_with_tls(juju: jubilant.Juju, dovecot_charm: str):
         juju.integrate(f"{dovecot_charm}:certificates", f"{TLS_APP}:certificates")
     except Exception:
         logging.info("TLS relation already there...")
+
+    # The charm is Blocked without a certificate; wait until it becomes Active
+    # (meaning _setup_tls succeeded and cert files are written).
     logging.info("Waiting for active/idle status...")
     juju.wait(jubilant.all_active, timeout=1200)
 
@@ -33,8 +35,6 @@ def test_tls_certificate_files_written(juju, dovecot_charm, deploy_with_tls):
     """Verify that TLS certificate and key files are written to the unit."""
     unit_name = f"{dovecot_charm}/0"
     logging.info(f"Targeting unit: {unit_name}")
-
-    time.sleep(30)
 
     logging.info("Checking for TLS certificate file...")
     cert_check = juju.exec("ls", "-l", "/etc/dovecot/private/example.com.pem", unit=unit_name)
@@ -52,7 +52,7 @@ def test_tls_certificate_permissions(juju, dovecot_charm, deploy_with_tls):
     unit_name = f"{dovecot_charm}/0"
 
     cert_perms = juju.exec(
-        "stat", "-c", "'%a'", "/etc/dovecot/private/example.com.pem", unit=unit_name
+        "stat", "-c", "%a", "/etc/dovecot/private/example.com.pem", unit=unit_name
     )
     logging.info(f"Certificate permissions: {cert_perms.stdout}")
     assert cert_perms.stdout.strip() == "644", (
@@ -60,7 +60,7 @@ def test_tls_certificate_permissions(juju, dovecot_charm, deploy_with_tls):
     )
 
     key_perms = juju.exec(
-        "stat", "-c", "'%a'", "/etc/dovecot/private/example.com.key", unit=unit_name
+        "stat", "-c", "%a", "/etc/dovecot/private/example.com.key", unit=unit_name
     )
     logging.info(f"Key permissions: {key_perms.stdout}")
     assert key_perms.stdout.strip() == "600", (
@@ -84,13 +84,14 @@ def test_tls_certificate_content_valid(juju, dovecot_charm, deploy_with_tls):
 
 
 def test_tls_dovecot_config_references_cert(juju, dovecot_charm, deploy_with_tls):
-    """Verify dovecot configuration references the TLS certificate."""
+    """Verify dovecot configuration uses ssl=required and references the cert."""
     unit_name = f"{dovecot_charm}/0"
 
     dovecot_conf = juju.exec(
         "cat", "/etc/dovecot/conf.d/99-local-dovecot-charm.conf", unit=unit_name
     )
     logging.info("Checking dovecot SSL configuration...")
+    assert "ssl = required" in dovecot_conf.stdout
     assert "ssl_cert" in dovecot_conf.stdout
     assert "example.com" in dovecot_conf.stdout
     assert "ssl_min_protocol = TLSv1.2" in dovecot_conf.stdout
@@ -117,7 +118,6 @@ def test_tls_dovecot_ssl_port_responds(juju, dovecot_charm, deploy_with_tls):
             break
         except Exception as e:
             logging.warning(f"Attempt {i + 1} to connect to IMAP SSL failed: {e}")
-            time.sleep(5)
 
     assert connected, f"Failed to connect to IMAP SSL port on {unit_ip}:993"
     logging.info("IMAP SSL port responds correctly.")

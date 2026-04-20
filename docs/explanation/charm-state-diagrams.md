@@ -1,6 +1,6 @@
 # Dovecot Charm State Diagrams
 
-Based on `origin/pr/2-storage` + exception-based refactor.
+Based on `pr/3-tls`: storage + TLS + exception-based reconcile.
 
 ---
 
@@ -17,6 +17,7 @@ flowchart TD
     EV_UPGRADE([upgrade_charm])
     EV_STOR_ATT([mail_data_storage_attached])
     EV_STOR_DET([mail_data_storage_detaching])
+    EV_CERT_AVAIL([certificate_available])
     EV_PEER([replicas.relation_created])
     EV_ACTION([clear_queue action])
 
@@ -39,6 +40,8 @@ flowchart TD
     B_LUKS_DISABLED(["✖ Blocked\nmail-data not mounted;\nmanage-luks disabled\nraised: StorageError"])
     B_LUKS_FAILED(["✖ Blocked\nFailed to setup LUKS storage\nraised: StorageError"])
     B_LUKS_RT(["✖ Blocked\n<RuntimeError message>\n(device missing / not block /\nluksFormat / open /\ndmsetup / mkfs / mount)\nraised: StorageError"])
+    B_TLS_NO_REL(["✖ Blocked\nTLS certificates relation not available.\nIntegrate with a TLS provider.\nraised: ConfigurationError"])
+    B_TLS_NO_CERT(["✖ Blocked\nTLS certificate not yet available\nfrom the certificates relation.\nraised: ConfigurationError"])
     B_DOVECONF(["✖ Blocked\nInvalid Dovecot configuration\nraised: ConfigurationError"])
     B_POSTFIX(["✖ Blocked\nFailed to configure postfix:\n<stderr>\nraised: ConfigurationError"])
 
@@ -52,6 +55,7 @@ flowchart TD
     EV_UPGRADE      --> H_RECONCILE
     EV_STOR_ATT     --> H_RECONCILE
     EV_STOR_DET     --> H_RECONCILE
+    EV_CERT_AVAIL   --> H_RECONCILE
     EV_PEER         --> H_PEER
     EV_ACTION       --> H_ACTION
 
@@ -68,9 +72,11 @@ flowchart TD
     M_CONFIGURING   -->|"StorageError: CalledProcessError\n(ensure_storage_ready)"| B_LUKS_FAILED
     M_CONFIGURING   -->|"StorageError: RuntimeError\n(ensure_storage_ready)"| B_LUKS_RT
     M_CONFIGURING   -->|"shutil.which('doveconf') is None"| SILENT
-    M_CONFIGURING   -->|"all pass → _setup_dovecot"| M_DOVECOT
+    M_CONFIGURING   -->|"all pass → _setup_tls"| B_TLS_NO_REL
+    M_CONFIGURING   -->|"all pass → _setup_tls"| B_TLS_NO_CERT
+    M_CONFIGURING   -->|"tls cert written → _setup_dovecot"| M_DOVECOT
 
-    %% ── _reconcile: dovecot+procmail try/except block ────────────────────────
+    %% ── _reconcile: tls+dovecot+procmail try/except block ────────────────────
     M_DOVECOT       -->|"ConfigurationError\n(doveconf -c fails)"| B_DOVECONF
     M_DOVECOT       -->|"validation OK\n→ service_reload(dovecot)"| M_DOVECOT_OK
     M_DOVECOT_OK    --> M_PROCMAIL
@@ -85,10 +91,10 @@ flowchart TD
     classDef active   fill:#dcfce7,stroke:#16a34a,color:#14532d
     classDef silent   fill:#f3f4f6,stroke:#9ca3af,color:#6b7280,stroke-dasharray:4 4
 
-    class EV_INSTALL,EV_CONFIG,EV_UPGRADE,EV_STOR_ATT,EV_STOR_DET,EV_PEER,EV_ACTION event
+    class EV_INSTALL,EV_CONFIG,EV_UPGRADE,EV_STOR_ATT,EV_STOR_DET,EV_CERT_AVAIL,EV_PEER,EV_ACTION event
     class H_INSTALL,H_RECONCILE,H_PEER,H_ACTION handler
     class M_INSTALLING,M_DEPS,M_DONE,M_CONFIGURING,M_DOVECOT,M_DOVECOT_OK,M_PROCMAIL maint
-    class B_CONFIG,B_LUKS_DISABLED,B_LUKS_FAILED,B_LUKS_RT,B_DOVECONF,B_POSTFIX blocked
+    class B_CONFIG,B_LUKS_DISABLED,B_LUKS_FAILED,B_LUKS_RT,B_TLS_NO_REL,B_TLS_NO_CERT,B_DOVECONF,B_POSTFIX blocked
     class ACTIVE active
     class SILENT silent
 ```
@@ -101,7 +107,7 @@ Full execution path inside `_reconcile`, showing both `try/except` blocks and ev
 
 ```mermaid
 flowchart TD
-    START(["_reconcile(event) called\nconfig_changed / upgrade_charm /\nmail_data_storage_attached /\nmail_data_storage_detaching /\n[via _on_install]"])
+    START(["_reconcile(event) called\nconfig_changed / upgrade_charm /\nmail_data_storage_attached /\nmail_data_storage_detaching /\ncertificate_available /\n[via _on_install]"])
 
     S1["unit.status =\nMaintenance('Configuring charm')"]
 
@@ -139,12 +145,17 @@ flowchart TD
     S4{"shutil.which('doveconf')"}
     S4_NONE["log warning\n'Dovecot not installed yet'\nreturn\n(stays in Maintenance\n'Configuring charm')"]
 
-    %% ── try block 2: dovecot + procmail ─────────────────────────────────────
+    %% ── try block 2: tls + dovecot + procmail ───────────────────────────────
     TRY2[/"try"/]
+
+    S5TLS["_setup_tls(dovecot_config)"]
+    S5TLS_NO_REL["raises ConfigurationError\n'TLS certificates relation\nnot available…'"]
+    S5TLS_NO_CERT["raises ConfigurationError\n'TLS certificate not yet\navailable…'"]
+    S5TLS_OK["write cert → /etc/dovecot/private/<mailname>.pem (0o644)\nwrite key  → /etc/dovecot/private/<mailname>.key (0o600)"]
 
     S5A["_setup_dovecot(dovecot_config)"]
     S5A_1["unit.status =\nMaintenance('Setting up and\nconfiguring dovecot')"]
-    S5A_2["render dovecot.conf.tmpl\nwrite → /etc/dovecot/conf.d/\n99-local-dovecot-charm.conf"]
+    S5A_2["render dovecot.conf.tmpl\n(ssl=required, mailname cert paths)\nwrite → /etc/dovecot/conf.d/\n99-local-dovecot-charm.conf"]
     S5A_3{"doveconf -c\n/etc/dovecot/conf.d/\n99-local-dovecot-charm.conf"}
     S5A_RAISE["raises ConfigurationError\n'Invalid Dovecot configuration,\ncheck logs for details'"]
     S5A_OK["service_reload('dovecot',\nrestart_on_failure=True)\nunit.status =\nMaintenance('Dovecot\nconfiguration updated')"]
@@ -190,14 +201,18 @@ flowchart TD
     S4 -->|"None"| S4_NONE
     S4 -->|"found"| TRY2
 
-    TRY2 --> S5A --> S5A_1 --> S5A_2 --> S5A_3
+    TRY2 --> S5TLS
+    S5TLS -->|"_tls is None"| S5TLS_NO_REL
+    S5TLS -->|"get_assigned_certificate\nreturns (None,None)"| S5TLS_NO_CERT
+    S5TLS -->|"cert+key obtained"| S5TLS_OK --> S5A
+    S5A --> S5A_1 --> S5A_2 --> S5A_3
     S5A_3 -->|"non-zero exit"| S5A_RAISE
     S5A_3 -->|"exit 0"| S5A_OK --> S5B
     S5B --> S5B_1 --> S5B_2 --> S5B_3
     S5B_3 -->|"CalledProcessError"| S5B_RAISE
     S5B_3 -->|"success"| S5B_OK
 
-    S5A_RAISE & S5B_RAISE --> CATCH2
+    S5TLS_NO_REL & S5TLS_NO_CERT & S5A_RAISE & S5B_RAISE --> CATCH2
 
     S5B_OK --> S5C --> ACTIVE
 
@@ -216,10 +231,10 @@ flowchart TD
     class START start
     class TRY1,TRY2 tryblock
     class CATCH1,CATCH2 catch
-    class S3A,S3A_MT,S3B,S3C,S5A_3,S5B_3,S4 decision
-    class S2,S3,S3D,S3D_STEPS,S3E,S3E_STEPS,S5A,S5A_1,S5A_2,S5A_OK,S5B,S5B_1,S5B_2,S5B_OK,S5C action
+    class S3A,S3A_MT,S3B,S3C,S5A_3,S5B_3,S4,S5TLS decision
+    class S2,S3,S3D,S3D_STEPS,S3E,S3E_STEPS,S5TLS_OK,S5A,S5A_1,S5A_2,S5A_OK,S5B,S5B_1,S5B_2,S5B_OK,S5C action
     class S5A_1,S5B_1 maint
-    class S2_RAISES,S3A_RAISE,S3D_CPE,S3D_RTE,S5A_RAISE,S5B_RAISE raises
+    class S2_RAISES,S3A_RAISE,S3D_CPE,S3D_RTE,S5TLS_NO_REL,S5TLS_NO_CERT,S5A_RAISE,S5B_RAISE raises
     class ACTIVE active
     class S3B_NONE,S3C_BAD,S4_NONE silent
 ```
@@ -230,6 +245,9 @@ flowchart TD
 
 - **`_on_install`** no longer guards on config — just installs packages then calls `_reconcile`. Config blocking handled entirely inside `_reconcile`.
 - **`_configure` deleted** — inlined into `_reconcile` as second `try/except` block.
+- **`certificate_available` wired to `_reconcile`** — same handler as all other events. No separate `_on_certificate_available`.
+- **TLS is mandatory**: `ssl = required` always in dovecot.conf. The charm will not reach `ActiveStatus` without a working `certificates` relation that has issued a cert.
+- **`_setup_tls`** runs first in the second try block — writes cert+key from relation data to `/etc/dovecot/private/` before dovecot config is rendered or validated.
 - **Status written only in `_reconcile`** catch blocks (and transient Maintenance in individual setup methods). No function outside `_reconcile`/`_on_install` writes Blocked directly.
 - **Exception hierarchy:** `StorageError` and `ConfigurationError` both extend `CharmBlockedError`. First `try/except` catches `CharmBlockedError` (both types). Second catches `ConfigurationError` only.
 - **`teardown_detaching_storage`** never raises — `CalledProcessError` during umount/luksClose is logged and swallowed. Not in either try block.
