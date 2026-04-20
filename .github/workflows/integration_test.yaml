@@ -25,6 +25,7 @@ jobs:
           "test_config.py",
           "test_mail.py",
           "test_storage.py",
+          "test_tls.py",
         ]
   allure-report:
     if: ${{ !cancelled() && github.event_name == 'schedule' }}

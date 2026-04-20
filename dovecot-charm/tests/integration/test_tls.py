@@ -6,7 +6,7 @@ import logging
 import ssl
 
 
-def test_tls_certificate_files_written(juju, dovecot_charm, deploy_with_tls):
+def test_tls_certificate_files_written(juju, dovecot_charm):
     """Verify that TLS certificate and key files are written to the unit."""
     unit_name = f"{dovecot_charm}/0"
     logging.info(f"Targeting unit: {unit_name}")
@@ -22,7 +22,7 @@ def test_tls_certificate_files_written(juju, dovecot_charm, deploy_with_tls):
     assert "example.com.key" in key_check.stdout, "Key file not found"
 
 
-def test_tls_certificate_permissions(juju, dovecot_charm, deploy_with_tls):
+def test_tls_certificate_permissions(juju, dovecot_charm):
     """Verify correct file permissions on TLS cert and key."""
     unit_name = f"{dovecot_charm}/0"
 
@@ -43,7 +43,7 @@ def test_tls_certificate_permissions(juju, dovecot_charm, deploy_with_tls):
     )
 
 
-def test_tls_certificate_content_valid(juju, dovecot_charm, deploy_with_tls):
+def test_tls_certificate_content_valid(juju, dovecot_charm):
     """Verify the certificate file contains a valid PEM certificate."""
     unit_name = f"{dovecot_charm}/0"
 
@@ -58,7 +58,7 @@ def test_tls_certificate_content_valid(juju, dovecot_charm, deploy_with_tls):
     )
 
 
-def test_tls_dovecot_config_references_cert(juju, dovecot_charm, deploy_with_tls):
+def test_tls_dovecot_config_references_cert(juju, dovecot_charm):
     """Verify dovecot configuration references the cert."""
     unit_name = f"{dovecot_charm}/0"
 
@@ -71,7 +71,7 @@ def test_tls_dovecot_config_references_cert(juju, dovecot_charm, deploy_with_tls
     assert "ssl_min_protocol = TLSv1.2" in dovecot_conf.stdout
 
 
-def test_tls_dovecot_ssl_port_responds(juju, dovecot_charm, deploy_with_tls):
+def test_tls_dovecot_ssl_port_responds(juju, dovecot_charm):
     """Verify dovecot responds on the SSL IMAP port (993)."""
     unit_name = f"{dovecot_charm}/0"
     status = juju.status()

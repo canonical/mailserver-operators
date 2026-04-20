@@ -74,14 +74,12 @@ def dovecot_charm(
             constraints={"virt-type": "virtual-machine"},
             trust=True,
         )
-
+    juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
     try:
         logging.info("Adding TLS relation...")
-        juju.integrate(f"{dovecot_charm}:certificates", f"{tls_charm}:certificates")
+        juju.integrate(f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
     except Exception:
         logging.info("TLS relation already there...")
-
-    juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
     logging.info("Waiting for active status...")
     juju.wait(
         lambda status: status.apps[APP_NAME].is_active and status.apps[tls_charm].is_active,
@@ -94,6 +92,7 @@ def dovecot_charm(
 def dovecot_charm_manual_storage(
     charm: str,
     juju: jubilant.Juju,
+    tls_charm: str,
 ) -> str:
     """Build and deploy the charm."""
     charm_name = f"{APP_NAME}-manual"
@@ -116,6 +115,12 @@ def dovecot_charm_manual_storage(
             constraints={"virt-type": "virtual-machine"},
             trust=True,
         )
+
+    try:
+        logging.info("Adding TLS relation...")
+        juju.integrate(f"{dovecot_charm}:certificates", f"{tls_charm}:certificates")
+    except Exception:
+        logging.info("TLS relation already there...")
 
     logging.info("Waiting for blocked status...")
     juju.wait(
