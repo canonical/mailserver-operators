@@ -22,7 +22,7 @@ def test_open_ports(ctx, base_state):
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
 
-    expected = {ops.testing.TCPPort(p) for p in [143, 993, 110, 995, 4190, 9900]}
+    expected = {ops.testing.TCPPort(p) for p in [993, 995, 4190, 9900]}
     assert state_out.opened_ports == expected
 
 

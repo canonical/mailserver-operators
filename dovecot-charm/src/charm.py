@@ -166,10 +166,8 @@ class DovecotCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Charm installation done")
 
     def _open_ports(self):
-        """Open mail ports."""
-        self.unit.open_port("tcp", 143)
+        """Open mail ports (TLS-only: plaintext 143/110 are not exposed)."""
         self.unit.open_port("tcp", 993)
-        self.unit.open_port("tcp", 110)
         self.unit.open_port("tcp", 995)
         self.unit.open_port("tcp", 4190)
         self.unit.open_port("tcp", 9900)
