@@ -5,7 +5,9 @@
 """Dovecot charm."""
 
 import logging
+import os
 import shutil
+import socket
 import subprocess  # nosec
 import typing
 from pathlib import Path
@@ -57,6 +59,8 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
         self.framework.observe(self.on.mail_data_storage_attached, self._reconcile)
         self.framework.observe(self.on.mail_data_storage_detaching, self._reconcile)
+        self.framework.observe(self.on.replicas_relation_changed, self._on_replicas_changed)
+        self.framework.observe(self.on.force_sync_action, self._on_force_sync)
 
         self.framework.observe(
             self.on[PEER_RELATION_NAME].relation_created,
@@ -66,6 +70,13 @@ class DovecotCharm(CharmBase):
         self.jinja = jinja2.Environment(
             loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True
         )
+
+        # Sync to secondary
+        self.sync_smtp_aliases_target = "/usr/local/bin/sync-smtp-aliases.sh"
+        self.sync_to_secondary_target = "/usr/local/bin/sync-to-secondary.sh"
+        self.sync_to_secondary_cronjob_target = "/etc/cron.d/sync-to-secondary"
+        self.sync_to_secondary_template = "sync-to-secondary.sh.tmpl"
+        self.sync_to_secondary_cronjob_template = "sync-to-secondary_cron.tmpl"
 
         # TLS certificates integration
         self._tls = None
@@ -106,6 +117,11 @@ class DovecotCharm(CharmBase):
         """Handle peer relation created event."""
         relation_data = event.relation.data[self.unit]
         relation_data["unit-name"] = self.unit.name
+
+    @property
+    def _is_primary(self):
+        """Return True if this unit is the configured primary unit."""
+        return self.unit.name == self.config.get("primary-unit", "")
 
     def _get_dovecot_config(self) -> DovecotConfig:
         """Craft the DovecotConfig from charm configuration and validate it.
@@ -163,6 +179,10 @@ class DovecotCharm(CharmBase):
         apt.update()
         apt.add_package(REQUIRED_PACKAGES)
         shutil.copy(HOSTNAME_FILE, MAILNAME_FILE)
+        self._setup_ssh_keys()
+        if self._is_primary:
+            self._install_mail_sync_script()
+            self._setup_mail_sync_cronjob()
         self.unit.status = MaintenanceStatus("Charm installation done")
 
     def _open_ports(self):
@@ -268,6 +288,113 @@ class DovecotCharm(CharmBase):
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to clear Postfix queue: {e.stderr}")
             event.fail(f"Failed to run postsuper: {e.stderr}")
+
+    @property
+    def _secondary_hostname(self):
+        """Return the hostname/IP of the secondary unit."""
+        relation = self.model.get_relation("replicas")
+        if not relation:
+            return None
+
+        for unit in relation.units:
+            return (
+                relation.data[unit].get("hostname")
+                or relation.data[unit].get("private-address")
+                or relation.data[unit].get("ingress-address")
+            )
+
+        return None
+
+    def _setup_ssh_keys(self):
+        """Generate SSH key and share public key via peer relation."""
+        ssh_dir = Path("/root/.ssh")
+        ssh_dir.mkdir(mode=0o700, exist_ok=True)
+        key_file = ssh_dir / "id_ed25519"
+
+        if not key_file.exists():
+            logger.warning("keyfile not there")
+            os.system(f'ssh-keygen -t ed25519 -N "" -f {key_file}')  # noqa: S605
+
+        pub_key = (ssh_dir / "id_ed25519.pub").read_text().strip()
+        relation = self.model.get_relation("replicas")
+        if relation:
+            relation.data[self.unit]["public_key"] = pub_key
+            relation.data[self.unit]["hostname"] = socket.gethostname()
+
+        config_file = ssh_dir / "config"
+        if not config_file.exists():
+            config_file.write_text("Host *\n    StrictHostKeyChecking no\n")
+            config_file.chmod(0o600)
+
+    def _on_replicas_changed(self, event):
+        """Handle replicas relation changed — sync SSH authorized_keys."""
+        authorized_keys = []
+        relation = self.model.get_relation("replicas")
+
+        for unit in relation.units:
+            pk = relation.data[unit].get("public_key")
+            if pk:
+                authorized_keys.append(pk)
+
+        our_pk = relation.data[self.unit].get("public_key")
+        if our_pk:
+            authorized_keys.append(our_pk)
+
+        auth_file = Path("/root/.ssh/authorized_keys")
+        auth_file.write_text("\n".join(authorized_keys))
+        auth_file.chmod(0o600)
+
+        self._ensure_root_ssh_configs()
+
+    def _ensure_root_ssh_configs(self):
+        """Ensure PermitRootLogin is set in sshd_config."""
+        cmd = "sed -i 's/^#*PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config"
+        os.system(cmd)  # noqa: S605
+        os.system("systemctl restart ssh")  # noqa: S605, S607
+
+    def _install_mail_sync_script(self):
+        """Install mail pool synchronization script."""
+        self.unit.status = MaintenanceStatus("Installing mail pool synchronization script")
+        template_context = {
+            "secondary_hostname": self._secondary_hostname,
+            "mail_root": MAIL_ROOT,
+        }
+        template = self.jinja.get_template(self.sync_to_secondary_template)
+        contents = template.render(template_context)
+        host.write_file(self.sync_to_secondary_target, contents, perms=0o755)
+        self.unit.status = MaintenanceStatus("Mail pool synchronization installed")
+
+    def _setup_mail_sync_cronjob(self):
+        """Set up mail pool synchronization cronjob."""
+        self.unit.status = MaintenanceStatus("Setting up mail pool synchronization cronjob")
+        template_context = {
+            "schedule": self.config.get("sync-schedule", "*/30 * * * *"),
+        }
+        template = self.jinja.get_template(self.sync_to_secondary_cronjob_template)
+        contents = template.render(template_context)
+        host.write_file(self.sync_to_secondary_cronjob_target, contents, perms=0o644)
+        systemd.service_restart("cron")
+        self.unit.status = MaintenanceStatus("Mail pool synchronization cronjob has been set up")
+
+    def _on_force_sync(self, event):
+        """Force synchronization with secondary unit."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
+
+        if not self._secondary_hostname:
+            event.fail("No secondary unit found to sync to.")
+            return
+
+        try:
+            cmd = [self.sync_to_secondary_target]
+            logger.info(f"Running manual sync: {' '.join(cmd)}")
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            event.set_results({"result": "Sync completed successfully"})
+        except subprocess.CalledProcessError as e:
+            msg = f"Sync failed: {e.stderr}"
+            logger.error(msg)
+            event.fail(msg)
 
     def _setup_tls(self, dovecot_config: DovecotConfig) -> None:
         """Write TLS cert+key to disk from the certificates relation.
