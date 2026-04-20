@@ -3,10 +3,11 @@
 """Unit tests for TLS certificate integration."""
 
 from unittest.mock import MagicMock, patch
-from exceptions import ConfigurationError
 
 import ops
 import pytest
+
+from exceptions import ConfigurationError
 
 
 def test_no_tls_cert_yet_blocks(ctx, base_state):
