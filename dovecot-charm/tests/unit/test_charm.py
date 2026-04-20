@@ -12,10 +12,10 @@ import pytest
 from charm import DovecotCharm
 from exceptions import ConfigurationError
 
-
 # ---------------------------------------------------------------------------
 # Helpers — patches shared across many tests
 # ---------------------------------------------------------------------------
+
 
 @contextlib.contextmanager
 def reconcile_guards():
