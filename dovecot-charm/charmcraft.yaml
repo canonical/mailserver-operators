@@ -39,6 +39,10 @@ peers:
   replicas:
     interface: replicas
 
+requires:
+  certificates:
+    interface: tls-certificates
+
 config:
   options:
     mailname:

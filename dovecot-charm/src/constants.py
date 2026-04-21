@@ -45,3 +45,5 @@ PEER_RELATION_NAME = "replicas"
 # start hook can re-open LUKS without relying on `storage-get` (which fails
 # when Juju has not yet re-provisioned the storage after a VM restart).
 STORAGE_DEV_PATH_FILE = "/var/lib/dovecot-charm/storage-dev-path"
+
+TLS_CERT_DIR = Path("/etc/dovecot/private")

@@ -3,6 +3,7 @@
 
 import logging
 import typing
+from secrets import token_hex
 
 import jubilant
 import pytest
@@ -46,14 +47,16 @@ def charm_fixture(pytestconfig: pytest.Config) -> str:
 def dovecot_charm(
     charm: str,
     juju: jubilant.Juju,
+    tls_charm: str,
 ) -> str:
     """Build and deploy the charm."""
     logging.info(f"Checking for existing application {APP_NAME}...")
+    luks_key = token_hex(16)
 
     if not juju.status().apps.get(APP_NAME):
         logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
 
-        secret_id = juju.cli("add-secret", "dovecot-luks-key", "key=s3cr3tpassphrase").strip()
+        secret_id = juju.cli("add-secret", "dovecot-luks-key", f"key={luks_key}").strip()
         logging.info(f"Created LUKS secret: {secret_id}")
 
         config = {
@@ -71,11 +74,15 @@ def dovecot_charm(
             constraints={"virt-type": "virtual-machine"},
             trust=True,
         )
-
     juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
+    try:
+        logging.info("Adding TLS relation...")
+        juju.integrate(f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
+    except Exception:
+        logging.info("TLS relation already there...")
     logging.info("Waiting for active status...")
     juju.wait(
-        lambda status: status.apps[APP_NAME].is_active,
+        lambda status: jubilant.all_active(status, APP_NAME, tls_charm),
         timeout=10 * 60,
     )
     return APP_NAME
@@ -85,6 +92,7 @@ def dovecot_charm(
 def dovecot_charm_manual_storage(
     charm: str,
     juju: jubilant.Juju,
+    tls_charm: str,
 ) -> str:
     """Build and deploy the charm."""
     charm_name = f"{APP_NAME}-manual"
@@ -108,9 +116,27 @@ def dovecot_charm_manual_storage(
             trust=True,
         )
 
+    try:
+        logging.info("Adding TLS relation...")
+        juju.integrate(f"{charm_name}:certificates", f"{tls_charm}:certificates")
+    except Exception:
+        logging.info("TLS relation already there...")
+
     logging.info("Waiting for blocked status...")
     juju.wait(
         lambda status: status.apps[charm_name].is_blocked,
         timeout=10 * 60,
     )
     return charm_name
+
+
+@pytest.fixture(scope="module")
+def tls_charm(juju: jubilant.Juju) -> str:
+    tls_app = "self-signed-certificates"
+    if tls_app not in juju.status().apps:
+        logging.info("Deploying self-signed-certificates...")
+        juju.deploy(tls_app, channel="latest/stable")
+    else:
+        logging.info(f"{tls_app} already deployed, skipping deployment.")
+
+    return tls_app

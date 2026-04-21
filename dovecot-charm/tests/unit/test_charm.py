@@ -12,27 +12,28 @@ from exceptions import ConfigurationError
 
 def test_open_ports(ctx, base_state):
     with (
-        patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot"),
-        patch("charm.DovecotCharm._setup_procmail"),
+        # Guard real storage/TLS/dovecot operations so only port logic is exercised
         patch("charm.ensure_storage_ready"),
         patch("charm.teardown_detaching_storage"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
+        patch("charm.DovecotCharm._setup_tls"),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
 
-    expected = {ops.testing.TCPPort(p) for p in [143, 993, 110, 995, 4190, 9900]}
+    expected = {ops.testing.TCPPort(p) for p in [993, 995, 4190, 9900]}
     assert state_out.opened_ports == expected
 
 
 def test_configure_sets_active_on_success(ctx, base_state):
     with (
-        patch("charm.DovecotCharm._install"),
-        patch("charm.DovecotCharm._setup_dovecot"),
-        patch("charm.DovecotCharm._setup_procmail"),
         patch("charm.ensure_storage_ready"),
         patch("charm.teardown_detaching_storage"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
+        patch("charm.DovecotCharm._setup_tls"),
+        patch("charm.DovecotCharm._setup_dovecot"),
+        patch("charm.DovecotCharm._setup_procmail"),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
 
@@ -41,7 +42,10 @@ def test_configure_sets_active_on_success(ctx, base_state):
 
 def test_configure_blocks_when_dovecot_setup_fails(ctx, base_state):
     with (
-        patch("charm.DovecotCharm._install"),
+        patch("charm.ensure_storage_ready"),
+        patch("charm.teardown_detaching_storage"),
+        patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
+        patch("charm.DovecotCharm._setup_tls"),
         patch(
             "charm.DovecotCharm._setup_dovecot",
             side_effect=ConfigurationError(
@@ -49,9 +53,6 @@ def test_configure_blocks_when_dovecot_setup_fails(ctx, base_state):
             ),
         ),
         patch("charm.DovecotCharm._setup_procmail"),
-        patch("charm.ensure_storage_ready"),
-        patch("charm.teardown_detaching_storage"),
-        patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
 
@@ -61,15 +62,15 @@ def test_configure_blocks_when_dovecot_setup_fails(ctx, base_state):
 
 def test_configure_blocks_when_procmail_setup_fails(ctx, base_state):
     with (
-        patch("charm.DovecotCharm._install"),
+        patch("charm.ensure_storage_ready"),
+        patch("charm.teardown_detaching_storage"),
+        patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
+        patch("charm.DovecotCharm._setup_tls"),
         patch("charm.DovecotCharm._setup_dovecot"),
         patch(
             "charm.DovecotCharm._setup_procmail",
             side_effect=ConfigurationError("Failed to configure postfix: error"),
         ),
-        patch("charm.ensure_storage_ready"),
-        patch("charm.teardown_detaching_storage"),
-        patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
 
