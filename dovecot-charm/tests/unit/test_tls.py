@@ -49,12 +49,6 @@ def test_setup_tls_writes_cert_key_and_chain(ctx, base_state, tmp_path):
         # Isolate from dovecot/procmail filesystem writes
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
-        # HA methods do filesystem I/O (ssh-keygen, authorized_keys, sync scripts)
-        patch("charm.DovecotCharm._setup_ssh_keys"),
-        patch("charm.DovecotCharm._sync_authorized_keys"),
-        patch("charm.DovecotCharm._sync_known_hosts"),
-        patch("charm.DovecotCharm._install_mail_sync_script"),
-        patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
         ctx(ctx.on.config_changed(), base_state) as mgr,
     ):
         # Override the TLS library instance so get_assigned_certificate

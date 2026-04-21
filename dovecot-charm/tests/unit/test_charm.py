@@ -25,30 +25,22 @@ def reconcile_guards():
     is NOT about the logic inside these helpers (storage, TLS, dovecot, etc.).
     """
     with (
-        # storage module talks to cryptsetup / mount — not under test
         patch("charm.ensure_storage_ready"),
         patch("charm.teardown_detaching_storage"),
-        # doveconf binary check — pretend it's installed
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
-        # TLS writes cert/key files to disk — not under test
         patch("charm.DovecotCharm._setup_tls"),
-        # dovecot config rendering + validation + reload — not under test
         patch("charm.DovecotCharm._setup_dovecot"),
-        # procmail config rendering + postfix postconf — not under test
         patch("charm.DovecotCharm._setup_procmail"),
-        # SSH keygen + filesystem writes — not under test
         patch("charm.DovecotCharm._setup_ssh_keys"),
-        # authorized_keys sync — not under test
         patch("charm.DovecotCharm._sync_authorized_keys"),
-        # known_hosts sync — not under test
         patch("charm.DovecotCharm._sync_known_hosts"),
-        # sync script rendering — not under test
         patch("charm.DovecotCharm._install_mail_sync_script"),
-        # cronjob rendering + cron restart — not under test
         patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
     ):
         yield
 
+    expected = {ops.testing.TCPPort(p) for p in [993, 995, 4190, 9900]}
+    assert state_out.opened_ports == expected
 
 # ---------------------------------------------------------------------------
 # Reconcile: status + ports
@@ -79,7 +71,6 @@ def test_reconcile_blocks_when_dovecot_setup_fails(ctx, base_state):
         patch("charm.teardown_detaching_storage"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
         patch("charm.DovecotCharm._setup_tls"),
-        # _setup_dovecot raises — this is the condition under test
         patch(
             "charm.DovecotCharm._setup_dovecot",
             side_effect=ConfigurationError(
