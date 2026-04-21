@@ -77,9 +77,34 @@ def test_ha_failover(juju, dovecot_charm):
 
     logging.info("Running force-sync on Primary...")
 
-    # Create a test Maildir so the sync script has something to sync.
-    # Without this, the script exits 1 because no Maildir directories exist.
-    juju.exec("mkdir -p /srv/mail/testuser/Maildir/{new,cur,tmp}", unit=primary)
+    # Ensure a real system user exists for doveadm user lookup.
+    # A bare /srv/mail/<user> directory is not enough for dsync.
+    sync_user = "syncuser"
+    for unit in (primary, secondary):
+        juju.exec("rm -rf /srv/mail/syncuser /srv/mail/sync-* /srv/mail/testuser", unit=unit)
+
+    juju.exec(
+        (
+            f"id -u {sync_user} >/dev/null 2>&1 || "
+            f"useradd -M -d /srv/mail/{sync_user} -s /usr/sbin/nologin {sync_user}"
+        ),
+        unit=primary,
+    )
+    juju.exec(
+        (
+            f"mkdir -p /srv/mail/{sync_user}/Maildir/{{new,cur,tmp}} && "
+            f"chown -R {sync_user}:{sync_user} /srv/mail/{sync_user} && "
+            f"chmod 700 /srv/mail/{sync_user} /srv/mail/{sync_user}/Maildir"
+        ),
+        unit=primary,
+    )
+    juju.exec(
+        (
+            f"id -u {sync_user} >/dev/null 2>&1 || "
+            f"useradd -M -d /srv/mail/{sync_user} -s /usr/sbin/nologin {sync_user}"
+        ),
+        unit=secondary,
+    )
 
     task = juju.run(unit=primary, action="force-sync", wait=100)
     assert task.status == "completed"
