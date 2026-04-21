@@ -39,19 +39,11 @@ def reconcile_guards():
     ):
         yield
 
-    expected = {ops.testing.TCPPort(p) for p in [993, 995, 4190, 9900]}
-    assert state_out.opened_ports == expected
-
-# ---------------------------------------------------------------------------
-# Reconcile: status + ports
-# ---------------------------------------------------------------------------
-
 
 def test_reconcile_sets_active_on_success(ctx, base_state):
     """Reconcile must reach ActiveStatus when all setup steps succeed."""
     with reconcile_guards():
         state_out = ctx.run(ctx.on.config_changed(), base_state)
-
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
 
 

@@ -42,13 +42,12 @@ def test_setup_tls_writes_cert_key_and_chain(ctx, base_state, tmp_path):
     mock_key.__str__ = MagicMock(return_value="KEY_DATA")
 
     with (
-        # Redirect TLS_CERT_DIR so _setup_tls writes into tmp_path
         patch("charm.TLS_CERT_DIR", tmp_path),
         patch("charm.ensure_storage_ready"),
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
-        # Isolate from dovecot/procmail filesystem writes
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
+        patch("charm.DovecotCharm._setup_ssh_keys"),
         ctx(ctx.on.config_changed(), base_state) as mgr,
     ):
         # Override the TLS library instance so get_assigned_certificate
@@ -87,12 +86,7 @@ def test_setup_tls_no_ca_omits_chain(ctx, base_state, tmp_path):
         patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
-        # HA methods do filesystem I/O — not under test
         patch("charm.DovecotCharm._setup_ssh_keys"),
-        patch("charm.DovecotCharm._sync_authorized_keys"),
-        patch("charm.DovecotCharm._sync_known_hosts"),
-        patch("charm.DovecotCharm._install_mail_sync_script"),
-        patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
         ctx(ctx.on.config_changed(), base_state) as mgr,
     ):
         mgr.charm._tls = MagicMock()
@@ -149,12 +143,7 @@ def test_certificate_available_event_triggers_reconcile(ctx, base_state, tmp_pat
         ),
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
-        # HA methods do filesystem I/O — not under test
         patch("charm.DovecotCharm._setup_ssh_keys"),
-        patch("charm.DovecotCharm._sync_authorized_keys"),
-        patch("charm.DovecotCharm._sync_known_hosts"),
-        patch("charm.DovecotCharm._install_mail_sync_script"),
-        patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
     ):
         # Fire certificate_available via config_changed (same handler)
         state_out = ctx.run(ctx.on.config_changed(), base_state)
