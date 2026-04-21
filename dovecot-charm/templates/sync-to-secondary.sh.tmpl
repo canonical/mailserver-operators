@@ -15,6 +15,6 @@ for user_dir in "{{ mail_root }}"/*; do
 done
 if [ "$found" -eq 0 ]; then
 	echo "No Maildir found under {{ mail_root }}; nothing to sync." >&2
-	exit 1
+	exit 0
 fi
 touch {{ mail_root }}/.last-dsync

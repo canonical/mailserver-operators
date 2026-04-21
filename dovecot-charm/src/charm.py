@@ -39,7 +39,7 @@ from constants import (
     TLS_CERT_DIR,
 )
 from dovecot_config import DovecotConfig, DovecotConfigInvalidError, DovecotConfigSecretError
-from exceptions import CharmBlockedError, ConfigurationError
+from exceptions import CharmBlockedError, ConfigurationError, HASetupError
 from storage import ensure_storage_ready, teardown_detaching_storage
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
         self.framework.observe(self.on.mail_data_storage_attached, self._reconcile)
         self.framework.observe(self.on.mail_data_storage_detaching, self._reconcile)
-        self.framework.observe(self.on.replicas_relation_changed, self._reconcile)
+        self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._reconcile)
         self.framework.observe(self.on.force_sync_action, self._on_force_sync)
 
         self.framework.observe(
@@ -173,12 +173,16 @@ class DovecotCharm(CharmBase):
         except ConfigurationError as e:
             self.unit.status = BlockedStatus(str(e))
             return
-        ha.setup_ssh_keys(self)
-        ha.sync_authorized_keys(self)
-        ha.sync_known_hosts(self)
-        if self._is_primary:
-            ha.install_mail_sync_script(self)
-            ha.setup_mail_sync_cronjob(self)
+        try:
+            ha.setup_ssh_keys(self)
+            ha.sync_authorized_keys(self)
+            ha.sync_known_hosts(self)
+            if self._is_primary:
+                ha.install_mail_sync_script(self)
+                ha.setup_mail_sync_cronjob(self)
+        except HASetupError as e:
+            self.unit.status = BlockedStatus(str(e))
+            return
         self._open_ports()
         self.unit.status = ops.ActiveStatus()
 
@@ -306,13 +310,20 @@ class DovecotCharm(CharmBase):
             event.fail("No secondary unit found to sync to.")
             return
 
+        if not Path(SYNC_TO_SECONDARY_TARGET).exists():
+            event.fail(
+                "Sync script not yet installed. "
+                "Please wait for the charm to reach active state before running force-sync."
+            )
+            return
+
         try:
             cmd = [SYNC_TO_SECONDARY_TARGET]
             logger.info(f"Running manual sync: {' '.join(cmd)}")
             subprocess.run(cmd, check=True, capture_output=True, text=True)
             event.set_results({"result": "Sync completed successfully"})
-        except subprocess.CalledProcessError as e:
-            msg = f"Sync failed: {e.stderr}"
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            msg = f"Sync failed: {e}"
             logger.error(msg)
             event.fail(msg)
 

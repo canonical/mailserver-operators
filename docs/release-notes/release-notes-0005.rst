@@ -44,7 +44,7 @@ secondary unit on demand.
 
 Relevant links:
 
-* `PR <https://github.com/canonical/mailserver-operators/pull/4>`_
+* `PR <https://github.com/canonical/mailserver-operators/pull/15>`_
 
 Bug fixes
 ---------

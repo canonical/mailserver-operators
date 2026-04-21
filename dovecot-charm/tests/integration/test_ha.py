@@ -14,8 +14,9 @@ def _get_unit_hostname(status, app_name, unit_name):
         machine = status.apps[app_name].units[unit_name].machine
         return status.machines[machine].hostname
     except KeyError:
-        logging.error(f"Unit {unit_name} not found in status.")
-        return None
+        message = f"Could not determine hostname for unit {unit_name} from Juju status."
+        logging.error(message)
+        pytest.fail(message)
 
 
 @pytest.mark.timeout(1800)
@@ -34,7 +35,7 @@ def test_ha_failover(juju, dovecot_charm):
         return jubilant.all_active(status)
 
     logging.info("Waiting for 2 units to be active...")
-    juju.wait(two_units_active, timeout=600)
+    juju.wait(two_units_active, timeout=10 * 60)
 
     status = juju.status()
     units = list(status.apps[dovecot_charm].units.keys())
@@ -46,7 +47,7 @@ def test_ha_failover(juju, dovecot_charm):
     logging.info(f"Primary: {primary}, Secondary: {secondary}")
 
     juju.config(dovecot_charm, {"primary-unit": primary})
-    juju.wait(jubilant.all_active, timeout=300)
+    juju.wait(jubilant.all_active, timeout=5 * 60)
 
     logging.info("Verifying SSH key exchange...")
 

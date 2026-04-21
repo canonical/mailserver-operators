@@ -9,6 +9,7 @@ import logging
 import socket
 import subprocess  # nosec
 import typing
+from pathlib import Path
 
 from charmhelpers.core import host
 from charmlibs import systemd
@@ -25,6 +26,7 @@ from constants import (
     SYNC_TO_SECONDARY_TARGET,
     SYNC_TO_SECONDARY_TEMPLATE,
 )
+from exceptions import HASetupError
 
 if typing.TYPE_CHECKING:
     from charm import DovecotCharm
@@ -38,21 +40,26 @@ def setup_ssh_keys(charm: DovecotCharm) -> None:
     Publishes both the user public key (for authorized_keys) and the host
     public key (for known_hosts) so peers can verify each other's identity
     without disabling StrictHostKeyChecking.
+
+    Raises:
+        HASetupError: If SSH key generation fails.
     """
     SSH_DIR.mkdir(mode=0o700, exist_ok=True)
     key_file = SSH_DIR / "id_ed25519"
 
     if not key_file.exists():
-        subprocess.run(
-            ["/usr/bin/ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(key_file)],
-            check=True,
-            capture_output=True,
-        )
+        try:
+            subprocess.run(
+                ["/usr/bin/ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(key_file)],
+                check=True,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise HASetupError(f"SSH key generation failed: {e.stderr}") from e
 
     pub_key_file = SSH_DIR / "id_ed25519.pub"
     if not pub_key_file.exists():
-        logger.error("SSH public key file not found after key generation")
-        return
+        raise HASetupError("SSH public key file not found after key generation")
 
     pub_key = pub_key_file.read_text().strip()
     relation = charm.model.get_relation(PEER_RELATION_NAME)
@@ -118,23 +125,32 @@ def sync_known_hosts(charm: DovecotCharm) -> None:
 
 
 def ensure_root_ssh_login() -> None:
-    """Set PermitRootLogin to prohibit-password in sshd_config and reload sshd."""
-    if SSHD_CONFIG.exists():
-        content = SSHD_CONFIG.read_text()
-        new_content = ""
-        found = False
-        for line in content.splitlines(keepends=True):
-            stripped = line.lstrip("#").strip()
-            if stripped.startswith("PermitRootLogin"):
-                new_content += "PermitRootLogin prohibit-password\n"
-                found = True
-            else:
-                new_content += line
-        if not found:
-            new_content += "\nPermitRootLogin prohibit-password\n"
-        if new_content != content:
-            SSHD_CONFIG.write_text(new_content)
+    """Set PermitRootLogin to prohibit-password in sshd_config and reload sshd.
+
+    Raises:
+        HASetupError: If sshd reload fails.
+    """
+    if not SSHD_CONFIG.exists():
+        return
+
+    content = SSHD_CONFIG.read_text()
+    new_content = ""
+    found = False
+    for line in content.splitlines(keepends=True):
+        stripped = line.lstrip("#").strip()
+        if stripped.startswith("PermitRootLogin"):
+            new_content += "PermitRootLogin prohibit-password\n"
+            found = True
+        else:
+            new_content += line
+    if not found:
+        new_content += "\nPermitRootLogin prohibit-password\n"
+    if new_content != content:
+        SSHD_CONFIG.write_text(new_content)
+        try:
             systemd.service_reload("ssh", restart_on_failure=True)
+        except subprocess.CalledProcessError as e:
+            raise HASetupError(f"Failed to reload sshd after config change: {e}") from e
 
 
 def install_mail_sync_script(charm: DovecotCharm) -> None:
@@ -158,7 +174,12 @@ def install_mail_sync_script(charm: DovecotCharm) -> None:
 
 
 def setup_mail_sync_cronjob(charm: DovecotCharm) -> None:
-    """Set up the mail pool synchronization cronjob."""
+    """Set up the mail pool synchronization cronjob.
+
+    Skips writing and does not restart cron if the file content is unchanged.
+    Cron on Ubuntu automatically picks up changes in /etc/cron.d, so no
+    service restart is needed when the file is updated.
+    """
     if not charm._secondary_hostname:
         logger.info("Secondary hostname not yet known; skipping cronjob setup")
         return
@@ -169,5 +190,9 @@ def setup_mail_sync_cronjob(charm: DovecotCharm) -> None:
     }
     template = charm.jinja.get_template(SYNC_TO_SECONDARY_CRONJOB_TEMPLATE)
     contents = template.render(template_context)
+
+    cronjob_path = Path(SYNC_TO_SECONDARY_CRONJOB_TARGET)
+    if cronjob_path.exists() and cronjob_path.read_text() == contents:
+        return
+
     host.write_file(SYNC_TO_SECONDARY_CRONJOB_TARGET, contents, perms=0o644)
-    systemd.service_restart("cron")

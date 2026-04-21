@@ -8,7 +8,7 @@ changes:
 - title: Added HA support with SSH key exchange and force-sync action
   author: alithethird
   type: major
-  description: Added high availability support for Dovecot with automatic SSH key exchange between primary and secondary units via the replicas peer relation, rsync-based mail synchronization via cron, and a force-sync Juju action for on-demand replication.
+  description: Added high availability support for Dovecot with automatic SSH key exchange between primary and secondary units via the replicas peer relation, doveadm backup (dsync)-based mail synchronization via cron, and a force-sync Juju action for on-demand replication.
   urls:
     pr:
       - "https://github.com/canonical/mailserver-operators/pull/15"
