@@ -298,49 +298,6 @@ class DovecotCharm(CharmBase):
             logger.exception(f"Failed to configure postfix: {e}")
             raise ConfigurationError(f"Failed to configure postfix: {e.stderr}") from e
 
-    def _setup_tls(self, dovecot_config: DovecotConfig) -> None:
-        """Write TLS cert+key to disk from the certificates relation.
-
-        Called from _reconcile before _setup_dovecot so the cert files are
-        present when dovecot.conf is rendered and validated.
-
-        Raises:
-            ConfigurationError: If no TLS relation exists or the certificate
-                has not been issued yet.
-        """
-        if not self._tls:
-            raise ConfigurationError(
-                "TLS certificates relation not available. "
-                "Integrate with a TLS provider using the 'certificates' relation."
-            )
-
-        cert_request = CertificateRequestAttributes(
-            common_name=dovecot_config.mailname,
-            sans_dns=frozenset([dovecot_config.mailname]),
-        )
-        provider_cert, private_key = self._tls.get_assigned_certificate(cert_request)
-        if not provider_cert or not private_key:
-            raise ConfigurationError(
-                "TLS certificate not yet available from the certificates relation."
-            )
-
-        TLS_CERT_DIR.mkdir(parents=True, exist_ok=True)
-        cert_path = TLS_CERT_DIR / f"{dovecot_config.mailname}.pem"
-        key_path = TLS_CERT_DIR / f"{dovecot_config.mailname}.key"
-
-        cert_content = str(provider_cert.certificate)
-        if provider_cert.ca:
-            cert_content += "\n" + str(provider_cert.ca)
-        cert_path.write_text(cert_content)
-        cert_path.chmod(0o644)
-        logger.info(f"TLS certificate written to {cert_path}")
-
-        key_path.write_text(str(private_key))
-        key_path.chmod(0o600)
-        logger.info(f"TLS private key written to {key_path}")
-
-    # -- HA / SSH key exchange ------------------------------------------------
-
     def _setup_ssh_keys(self):
         """Generate an SSH key pair if absent and publish keys via the peer relation.
 
