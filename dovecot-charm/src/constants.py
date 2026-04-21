@@ -47,3 +47,13 @@ PEER_RELATION_NAME = "replicas"
 STORAGE_DEV_PATH_FILE = "/var/lib/dovecot-charm/storage-dev-path"
 
 TLS_CERT_DIR = Path("/etc/dovecot/private")
+
+# HA sync paths
+SYNC_TO_SECONDARY_TARGET = "/usr/local/bin/sync-to-secondary.sh"
+SYNC_TO_SECONDARY_CRONJOB_TARGET = "/etc/cron.d/sync-to-secondary"
+SYNC_TO_SECONDARY_TEMPLATE = "sync-to-secondary.sh.tmpl"
+SYNC_TO_SECONDARY_CRONJOB_TEMPLATE = "sync-to-secondary_cron.tmpl"
+
+SSHD_CONFIG = Path("/etc/ssh/sshd_config")
+SSH_DIR = Path("/root/.ssh")
+SSH_HOST_KEY_FILE = Path("/etc/ssh/ssh_host_ed25519_key.pub")

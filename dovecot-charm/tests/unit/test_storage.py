@@ -30,11 +30,11 @@ def test_start_uses_saved_dev_path_when_model_error(ctx, base_state):
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
         # HA methods do filesystem I/O (ssh-keygen, authorized_keys, sync scripts)
-        patch("charm.DovecotCharm._setup_ssh_keys"),
-        patch("charm.DovecotCharm._sync_authorized_keys"),
-        patch("charm.DovecotCharm._sync_known_hosts"),
-        patch("charm.DovecotCharm._install_mail_sync_script"),
-        patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
+        patch("ha.setup_ssh_keys"),
+        patch("ha.sync_authorized_keys"),
+        patch("ha.sync_known_hosts"),
+        patch("ha.install_mail_sync_script"),
+        patch("ha.setup_mail_sync_cronjob"),
         patch("ops._main._Dispatcher.run_any_legacy_hook"),
     ):
         state_out = ctx.run(ctx.on.start(), state_in)
@@ -79,11 +79,11 @@ def test_storage_attached_luks_auto_provisioning_disabled_mounted_is_active(ctx,
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
         # HA methods do filesystem I/O — not under test
-        patch("charm.DovecotCharm._setup_ssh_keys"),
-        patch("charm.DovecotCharm._sync_authorized_keys"),
-        patch("charm.DovecotCharm._sync_known_hosts"),
-        patch("charm.DovecotCharm._install_mail_sync_script"),
-        patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
+        patch("ha.setup_ssh_keys"),
+        patch("ha.sync_authorized_keys"),
+        patch("ha.sync_known_hosts"),
+        patch("ha.install_mail_sync_script"),
+        patch("ha.setup_mail_sync_cronjob"),
     ):
         state_out = ctx.run(ctx.on.storage_attached(storage), state_in)
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
@@ -118,11 +118,11 @@ def test_storage_attached_calls_setup_luks_with_key(ctx, base_state):
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
         # HA methods do filesystem I/O — not under test
-        patch("charm.DovecotCharm._setup_ssh_keys"),
-        patch("charm.DovecotCharm._sync_authorized_keys"),
-        patch("charm.DovecotCharm._sync_known_hosts"),
-        patch("charm.DovecotCharm._install_mail_sync_script"),
-        patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
+        patch("ha.setup_ssh_keys"),
+        patch("ha.sync_authorized_keys"),
+        patch("ha.sync_known_hosts"),
+        patch("ha.install_mail_sync_script"),
+        patch("ha.setup_mail_sync_cronjob"),
     ):
         state_out = ctx.run(ctx.on.storage_attached(storage), state_in)
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
@@ -144,11 +144,11 @@ def test_storage_attached_saves_dev_path(ctx, base_state):
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
         # HA methods do filesystem I/O — not under test
-        patch("charm.DovecotCharm._setup_ssh_keys"),
-        patch("charm.DovecotCharm._sync_authorized_keys"),
-        patch("charm.DovecotCharm._sync_known_hosts"),
-        patch("charm.DovecotCharm._install_mail_sync_script"),
-        patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
+        patch("ha.setup_ssh_keys"),
+        patch("ha.sync_authorized_keys"),
+        patch("ha.sync_known_hosts"),
+        patch("ha.install_mail_sync_script"),
+        patch("ha.setup_mail_sync_cronjob"),
     ):
         state_out = ctx.run(ctx.on.storage_attached(storage), state_in)
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
@@ -209,11 +209,11 @@ def test_storage_detaching_unmount_and_close(ctx, base_state):
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
         # HA methods do filesystem I/O — not under test
-        patch("charm.DovecotCharm._setup_ssh_keys"),
-        patch("charm.DovecotCharm._sync_authorized_keys"),
-        patch("charm.DovecotCharm._sync_known_hosts"),
-        patch("charm.DovecotCharm._install_mail_sync_script"),
-        patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
+        patch("ha.setup_ssh_keys"),
+        patch("ha.sync_authorized_keys"),
+        patch("ha.sync_known_hosts"),
+        patch("ha.install_mail_sync_script"),
+        patch("ha.setup_mail_sync_cronjob"),
     ):
         state_out = ctx.run(ctx.on.storage_detaching(storage), state_in)
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
@@ -250,11 +250,11 @@ def test_storage_detaching_luks_disabled_skips_close(ctx, base_state):
         patch("charm.DovecotCharm._setup_dovecot"),
         patch("charm.DovecotCharm._setup_procmail"),
         # HA methods do filesystem I/O — not under test
-        patch("charm.DovecotCharm._setup_ssh_keys"),
-        patch("charm.DovecotCharm._sync_authorized_keys"),
-        patch("charm.DovecotCharm._sync_known_hosts"),
-        patch("charm.DovecotCharm._install_mail_sync_script"),
-        patch("charm.DovecotCharm._setup_mail_sync_cronjob"),
+        patch("ha.setup_ssh_keys"),
+        patch("ha.sync_authorized_keys"),
+        patch("ha.sync_known_hosts"),
+        patch("ha.install_mail_sync_script"),
+        patch("ha.setup_mail_sync_cronjob"),
     ):
         state_out = ctx.run(ctx.on.storage_detaching(storage), state_in)
     assert isinstance(state_out.unit_status, ops.ActiveStatus)

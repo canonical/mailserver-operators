@@ -6,7 +6,6 @@
 
 import logging
 import shutil
-import socket
 import subprocess  # nosec
 import typing
 from pathlib import Path
@@ -23,6 +22,7 @@ from ops.charm import CharmBase
 from ops.main import main
 from ops.model import BlockedStatus, MaintenanceStatus
 
+import ha
 from constants import (
     DOVECOT_CONF_TARGET,
     DOVECOT_CONF_TEMPLATE,
@@ -34,6 +34,7 @@ from constants import (
     PROCMAILRC_TARGET,
     PROCMAILRC_TEMPLATE,
     REQUIRED_PACKAGES,
+    SYNC_TO_SECONDARY_TARGET,
     TEMPLATES_DIR,
     TLS_CERT_DIR,
 )
@@ -43,16 +44,6 @@ from storage import ensure_storage_ready, teardown_detaching_storage
 
 logger = logging.getLogger(__name__)
 
-# HA sync paths
-SYNC_TO_SECONDARY_TARGET = "/usr/local/bin/sync-to-secondary.sh"
-SYNC_TO_SECONDARY_CRONJOB_TARGET = "/etc/cron.d/sync-to-secondary"
-SYNC_TO_SECONDARY_TEMPLATE = "sync-to-secondary.sh.tmpl"
-SYNC_TO_SECONDARY_CRONJOB_TEMPLATE = "sync-to-secondary_cron.tmpl"
-
-SSHD_CONFIG = Path("/etc/ssh/sshd_config")
-SSH_DIR = Path("/root/.ssh")
-SSH_HOST_KEY_FILE = Path("/etc/ssh/ssh_host_ed25519_key.pub")
-
 
 class DovecotCharm(CharmBase):
     """Dovecot IMAP/POP3 mail server charm."""
@@ -60,7 +51,6 @@ class DovecotCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
-        # Events — every event except install goes through _reconcile.
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.start, self._reconcile)
         self.framework.observe(self.on.config_changed, self._reconcile)
@@ -75,12 +65,11 @@ class DovecotCharm(CharmBase):
             self.on[PEER_RELATION_NAME].relation_created,
             self._on_peer_relation_created,
         )
-        # Template system
+
         self.jinja = jinja2.Environment(
             loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True
         )
 
-        # TLS certificates integration
         self._tls = None
         mailname = self.config.get("mailname", "")
         if mailname:
@@ -121,26 +110,20 @@ class DovecotCharm(CharmBase):
         relation_data["unit-name"] = self.unit.name
 
     @property
-    def _is_primary(self):
+    def _is_primary(self) -> bool:
         """Return True if this unit is the configured primary unit."""
         return self.unit.name == self.config.get("primary-unit", "")
 
     @property
     def _secondary_hostname(self) -> typing.Optional[str]:
-        """Return the hostname/IP of the first remote peer unit, or None."""
+        """Return the hostname of the first remote peer unit, or None."""
         relation = self.model.get_relation(PEER_RELATION_NAME)
         if not relation:
             return None
-
         for unit in relation.units:
-            hostname = (
-                relation.data[unit].get("hostname")
-                or relation.data[unit].get("private-address")
-                or relation.data[unit].get("ingress-address")
-            )
+            hostname = relation.data[unit].get("hostname")
             if hostname:
                 return hostname
-
         return None
 
     def _get_dovecot_config(self) -> DovecotConfig:
@@ -164,19 +147,14 @@ class DovecotCharm(CharmBase):
             logger.exception(f"Secret retrieval error: {exc}")
             raise ConfigurationError(str(exc)) from exc
 
-    # -- Event handlers -------------------------------------------------------
-
     def _on_install(self, event):
-        """Handle install event — install packages only, then reconcile."""
+        """Handle install event."""
         self.unit.status = MaintenanceStatus("Installing packages")
         self._install()
         self._reconcile(event)
 
     def _reconcile(self, event):
-        """Reconcile charm state for every event except install.
-
-        Holistic handler: storage → TLS → dovecot → procmail → HA → ports.
-        """
+        """Reconcile charm state."""
         self.unit.status = MaintenanceStatus("Configuring charm")
         try:
             dovecot_config = self._get_dovecot_config()
@@ -195,27 +173,22 @@ class DovecotCharm(CharmBase):
         except ConfigurationError as e:
             self.unit.status = BlockedStatus(str(e))
             return
-        # HA: SSH keys, authorized_keys, known_hosts, sync script + cronjob
-        self._setup_ssh_keys()
-        self._sync_authorized_keys()
-        self._sync_known_hosts()
+        ha.setup_ssh_keys(self)
+        ha.sync_authorized_keys(self)
+        ha.sync_known_hosts(self)
         if self._is_primary:
-            self._install_mail_sync_script()
-            self._setup_mail_sync_cronjob()
+            ha.install_mail_sync_script(self)
+            ha.setup_mail_sync_cronjob(self)
         self._open_ports()
         self.unit.status = ops.ActiveStatus()
 
-    # -- Installation ---------------------------------------------------------
-
     def _install(self):
-        """Perform basic installation — packages and hostname only."""
+        """Install required packages and set up mailname."""
         self.unit.status = MaintenanceStatus("Installing required dependencies")
         apt.update()
         apt.add_package(REQUIRED_PACKAGES)
         shutil.copy(HOSTNAME_FILE, MAILNAME_FILE)
         self.unit.status = MaintenanceStatus("Charm installation done")
-
-    # -- Service configuration ------------------------------------------------
 
     def _open_ports(self):
         """Open mail ports (TLS-only: plaintext 143/110 are not exposed)."""
@@ -297,143 +270,6 @@ class DovecotCharm(CharmBase):
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to configure postfix: {e}")
             raise ConfigurationError(f"Failed to configure postfix: {e.stderr}") from e
-
-    def _setup_ssh_keys(self):
-        """Generate an SSH key pair if absent and publish keys via the peer relation.
-
-        Publishes both the user public key (for authorized_keys) and the host
-        public key (for known_hosts) so peers can verify each other's identity
-        without disabling StrictHostKeyChecking.
-        """
-        SSH_DIR.mkdir(mode=0o700, exist_ok=True)
-        key_file = SSH_DIR / "id_ed25519"
-
-        if not key_file.exists():
-            subprocess.run(
-                ["/usr/bin/ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(key_file)],
-                check=True,
-                capture_output=True,
-            )
-
-        pub_key_file = SSH_DIR / "id_ed25519.pub"
-        if not pub_key_file.exists():
-            logger.error("SSH public key file not found after key generation")
-            return
-
-        pub_key = pub_key_file.read_text().strip()
-        relation = self.model.get_relation(PEER_RELATION_NAME)
-        if relation:
-            relation.data[self.unit]["public_key"] = pub_key
-            relation.data[self.unit]["hostname"] = socket.gethostname()
-
-            # Publish the host public key so peers can populate known_hosts
-            if SSH_HOST_KEY_FILE.exists():
-                host_key = SSH_HOST_KEY_FILE.read_text().strip()
-                relation.data[self.unit]["ssh_host_key"] = host_key
-
-    def _sync_authorized_keys(self):
-        """Collect public keys from all peer units and write authorized_keys."""
-        relation = self.model.get_relation(PEER_RELATION_NAME)
-        if not relation:
-            return
-
-        authorized_keys = []
-        for unit in relation.units:
-            pk = relation.data[unit].get("public_key")
-            if pk:
-                authorized_keys.append(pk)
-
-        our_pk = relation.data[self.unit].get("public_key")
-        if our_pk:
-            authorized_keys.append(our_pk)
-
-        if not authorized_keys:
-            return
-
-        auth_file = SSH_DIR / "authorized_keys"
-        auth_file.write_text("\n".join(authorized_keys) + "\n")
-        auth_file.chmod(0o600)
-
-        self._ensure_root_ssh_login()
-
-    def _sync_known_hosts(self):
-        """Populate known_hosts with peer SSH host keys from the peer relation.
-
-        Each peer publishes its host public key and hostname on the relation.
-        This method writes those into known_hosts so SSH connections between
-        units use StrictHostKeyChecking (the default) instead of disabling it.
-        """
-        relation = self.model.get_relation(PEER_RELATION_NAME)
-        if not relation:
-            return
-
-        entries = []
-        for unit in relation.units:
-            host_key = relation.data[unit].get("ssh_host_key")
-            hostname = relation.data[unit].get("hostname")
-            if host_key and hostname:
-                # known_hosts format: <hostname> <key_type> <key_data>
-                entries.append(f"{hostname} {host_key}")
-
-        if not entries:
-            return
-
-        known_hosts_file = SSH_DIR / "known_hosts"
-        known_hosts_file.write_text("\n".join(entries) + "\n")
-        known_hosts_file.chmod(0o600)
-
-    def _ensure_root_ssh_login(self):
-        """Set PermitRootLogin to prohibit-password in sshd_config and reload sshd."""
-        if SSHD_CONFIG.exists():
-            content = SSHD_CONFIG.read_text()
-            new_content = ""
-            found = False
-            for line in content.splitlines(keepends=True):
-                stripped = line.lstrip("#").strip()
-                if stripped.startswith("PermitRootLogin"):
-                    new_content += "PermitRootLogin prohibit-password\n"
-                    found = True
-                else:
-                    new_content += line
-            if not found:
-                new_content += "\nPermitRootLogin prohibit-password\n"
-            if new_content != content:
-                SSHD_CONFIG.write_text(new_content)
-                systemd.service_reload("ssh", restart_on_failure=True)
-
-    def _install_mail_sync_script(self):
-        """Render and install the mail pool synchronization script.
-
-        Skipped when the secondary hostname is not yet known (no remote peer).
-        """
-        secondary = self._secondary_hostname
-        if not secondary:
-            logger.info("Secondary hostname not yet known; skipping sync script installation")
-            return
-
-        self.unit.status = MaintenanceStatus("Installing mail pool synchronization script")
-        template_context = {
-            "secondary_hostname": secondary,
-            "mail_root": MAIL_ROOT,
-        }
-        template = self.jinja.get_template(SYNC_TO_SECONDARY_TEMPLATE)
-        contents = template.render(template_context)
-        host.write_file(SYNC_TO_SECONDARY_TARGET, contents, perms=0o755)
-
-    def _setup_mail_sync_cronjob(self):
-        """Set up the mail pool synchronization cronjob."""
-        if not self._secondary_hostname:
-            logger.info("Secondary hostname not yet known; skipping cronjob setup")
-            return
-
-        self.unit.status = MaintenanceStatus("Setting up mail pool synchronization cronjob")
-        template_context = {
-            "schedule": self.config.get("sync-schedule", "*/30 * * * *"),
-        }
-        template = self.jinja.get_template(SYNC_TO_SECONDARY_CRONJOB_TEMPLATE)
-        contents = template.render(template_context)
-        host.write_file(SYNC_TO_SECONDARY_CRONJOB_TARGET, contents, perms=0o644)
-        systemd.service_restart("cron")
 
     # -- Actions --------------------------------------------------------------
 
