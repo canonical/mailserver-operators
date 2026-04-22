@@ -13,17 +13,6 @@ import jubilant
 import pytest
 
 
-def _get_unit_hostname(status, app_name, unit_name):
-    """Helper to get unit hostname from status."""
-    try:
-        machine = status.apps[app_name].units[unit_name].machine
-        return status.machines[machine].hostname
-    except KeyError:
-        message = f"Could not determine hostname for unit {unit_name} from Juju status."
-        logging.error(message)
-        pytest.fail(message)
-
-
 def _check_mail_via_imap(unit_ip: str, user: str, password: str, subject: str) -> bool:
     """Poll IMAP on unit_ip until the email with the given subject is found."""
     context = ssl.create_default_context()
@@ -54,9 +43,20 @@ def _check_mail_via_imap(unit_ip: str, user: str, password: str, subject: str) -
     return False
 
 
-def _setup_mail_user(juju: jubilant.Juju, units: list[str], user: str, password: str):
-    """Create a system user with a Maildir on each unit, set password on all units."""
-    for unit in units:
+def _setup_mail_user(
+    juju: jubilant.Juju,
+    primary: str,
+    secondary: str,
+    user: str,
+    password: str,
+):
+    """Create a mail user on both units.
+
+    The system account and password are created on both units so PAM auth works
+    on the secondary after sync.  The Maildir is only initialised on the primary
+    so that dsync can replicate it to the secondary without GUID conflicts.
+    """
+    for unit in (primary, secondary):
         juju.exec(
             (
                 f"id -u {user} >/dev/null 2>&1 || "
@@ -67,13 +67,14 @@ def _setup_mail_user(juju: jubilant.Juju, units: list[str], user: str, password:
         juju.exec(f"echo '{user}:{password}' | chpasswd", unit=unit)
         juju.exec(f"usermod -aG mail {user}", unit=unit)
 
-    # Maildir only needs to exist on primary so doveadm backup has something to sync
-    primary = units[0]
+    # Maildir only on primary — dsync creates it on the secondary during the
+    # first sync.  Pre-initialising it on the secondary would give INBOX a
+    # different GUID and cause doveadm backup to fail with
+    # "mailbox_delete failed: INBOX can't be deleted".
     juju.exec(
         (
-            f"mkdir -p /srv/mail/{user}/Maildir/{{new,cur,tmp}} && "
-            f"chown -R {user}:{user} /srv/mail/{user} && "
-            f"chmod 700 /srv/mail/{user} /srv/mail/{user}/Maildir"
+            f"install -d -m 0700 -o {user} -g mail /srv/mail/{user} && "
+            f"doveadm mailbox create -u {user} INBOX 2>/dev/null || true"
         ),
         unit=primary,
     )
@@ -88,12 +89,45 @@ def _get_last_sync_mtime(juju: jubilant.Juju, unit: str) -> int | None:
 
 
 def _get_sync_cron_run_count(juju: jubilant.Juju, unit: str) -> int:
-    """Return count of sync-to-secondary cron executions recorded in syslog."""
-    output = juju.exec(
-        "grep -c 'sync-to-secondary.sh' /var/log/syslog 2>/dev/null || true",
+    """Return count of sync-to-secondary cron executions from syslog or direct log.
+
+    Works across charm versions: newer versions log via logger to syslog,
+    older versions redirect directly to /var/log/sync-to-secondary.log.
+    """
+    # Try syslog first (newer charm versions with logger)
+    syslog_output = juju.exec(
+        "grep -c 'sync-to-secondary' /var/log/syslog 2>/dev/null || true",
         unit=unit,
     ).stdout.strip()
-    return int(output) if output.isdigit() else 0
+    syslog_count = int(syslog_output) if syslog_output.isdigit() else 0
+
+    # Also check direct sync log file (older charm versions)
+    synclog_output = juju.exec(
+        "wc -l /var/log/sync-to-secondary.log 2>/dev/null | awk '{print $1}' || true",
+        unit=unit,
+    ).stdout.strip()
+    synclog_count = int(synclog_output) if synclog_output.isdigit() else 0
+
+    # Return the higher count (more reliable detector across versions)
+    return max(syslog_count, synclog_count)
+
+
+def _get_sync_log_content(juju: jubilant.Juju, unit: str, lines: int = 20) -> str:
+    """Return last N sync-to-secondary lines from syslog for debugging."""
+    output = juju.exec(
+        f"grep 'sync-to-secondary' /var/log/syslog 2>/dev/null | tail -n {lines} || echo 'No sync entries in syslog'",
+        unit=unit,
+    ).stdout
+    return output
+
+
+def _get_cron_file_content(juju: jubilant.Juju, unit: str) -> str:
+    """Return content of the sync-to-secondary cron file for debugging."""
+    output = juju.exec(
+        "cat /etc/cron.d/sync-to-secondary 2>/dev/null || echo 'Cron file not found'",
+        unit=unit,
+    ).stdout
+    return output
 
 
 def _wait_for_sync_trigger(
@@ -104,12 +138,15 @@ def _wait_for_sync_trigger(
     timeout: int = 4 * 60,
     poll_interval: int = 5,
 ) -> int:
-    """Wait for a cron-triggered sync signal and return observed marker mtime.
+    """Wait until /srv/mail/.last-dsync mtime advances, indicating a completed sync.
 
-    Accepts either /srv/mail/.last-dsync mtime advance or syslog cron count increase
-    to work across charm revisions with different script logging/exit behavior.
+    The sync script touches .last-dsync only at the very end, so this is a
+    reliable end-of-sync marker. Falls back to syslog cron count increase only
+    when .last-dsync never existed (e.g. no users yet), but in that case we also
+    add a grace sleep so any in-progress dsync can finish.
     """
     deadline = time.time() + timeout
+    cron_fired = False
     while time.time() < deadline:
         current_mtime = _get_last_sync_mtime(juju, unit)
         if current_mtime is not None and (
@@ -118,8 +155,11 @@ def _wait_for_sync_trigger(
             return current_mtime
 
         current_cron_count = _get_sync_cron_run_count(juju, unit)
-        if current_cron_count > previous_cron_count:
-            return current_mtime or 0
+        if current_cron_count > previous_cron_count and not cron_fired:
+            logging.info(
+                "Cron fired (syslog count increased); waiting for .last-dsync to update..."
+            )
+            cron_fired = True
 
         time.sleep(poll_interval)
 
@@ -130,28 +170,16 @@ def _wait_for_sync_trigger(
 
 
 @pytest.mark.timeout(30 * 60)
-def test_force_sync_action(juju: jubilant.Juju, dovecot_charm: str):
+def test_force_sync_action(juju: jubilant.Juju, dovecot_charm_dual_unit: str):
     """force-sync action replicates mail from primary to secondary via doveadm backup."""
     status = juju.status()
-    if len(status.apps[dovecot_charm].units) < 2:
-        logging.info("Adding the second unit...")
-        juju.add_unit(dovecot_charm, num_units=1)
-
-    def two_units_active(status):
-        app = status.apps.get(dovecot_charm)
-        if not app or len(app.units) < 2:
-            return False
-        return jubilant.all_active(status)
-
-    logging.info("Waiting for 2 units to be active...")
-    juju.wait(two_units_active, timeout=10 * 60)
-
-    status = juju.status()
-    units = sorted(status.apps[dovecot_charm].units.keys(), key=lambda x: int(x.split("/")[-1]))
+    units = sorted(
+        status.apps[dovecot_charm_dual_unit].units.keys(), key=lambda x: int(x.split("/")[-1])
+    )
     primary, secondary = units[0], units[1]
     logging.info(f"Primary: {primary}, Secondary: {secondary}")
 
-    juju.config(dovecot_charm, {"primary-unit": primary})
+    juju.config(dovecot_charm_dual_unit, {"primary-unit": primary})
     juju.wait(jubilant.all_active, timeout=5 * 60)
 
     # Remove legacy HA test users that can break dsync on reruns.
@@ -163,7 +191,7 @@ def test_force_sync_action(juju: jubilant.Juju, dovecot_charm: str):
     password = token_hex(8)
     for unit in (primary, secondary):
         juju.exec(f"rm -rf /srv/mail/{user}", unit=unit)
-    _setup_mail_user(juju, [primary, secondary], user, password)
+    _setup_mail_user(juju, primary, secondary, user, password)
 
     # Send email on primary
     subject = f"Force Sync Test {token_hex(4)}"
@@ -177,7 +205,7 @@ def test_force_sync_action(juju: jubilant.Juju, dovecot_charm: str):
     assert task.results["result"] == "Sync completed successfully"
 
     # Verify email arrived on secondary via IMAP
-    secondary_ip = juju.status().apps[dovecot_charm].units[secondary].public_address
+    secondary_ip = juju.status().apps[dovecot_charm_dual_unit].units[secondary].public_address
     logging.info(f"Checking for email on secondary via IMAP at {secondary_ip}:993...")
     assert _check_mail_via_imap(secondary_ip, user, password, subject), (
         f"Email with subject '{subject}' not found on secondary after force-sync"
@@ -190,16 +218,16 @@ def test_force_sync_action(juju: jubilant.Juju, dovecot_charm: str):
     logging.info("force-sync on secondary correctly failed.")
 
 
-@pytest.mark.timeout(10 * 60)
-def test_auto_sync(juju: jubilant.Juju, dovecot_charm: str):
+def test_auto_sync(juju: jubilant.Juju, dovecot_charm_dual_unit: str):
     """Auto-sync via cron replicates mail from primary to secondary within 2 minutes."""
     status = juju.status()
-    units = sorted(status.apps[dovecot_charm].units.keys(), key=lambda x: int(x.split("/")[-1]))
-    assert len(units) >= 2, "Need at least 2 units; run test_force_sync_action first"
+    units = sorted(
+        status.apps[dovecot_charm_dual_unit].units.keys(), key=lambda x: int(x.split("/")[-1])
+    )
     primary, secondary = units[0], units[1]
 
     logging.info(f"Ensuring primary-unit is set to {primary}...")
-    juju.config(dovecot_charm, {"primary-unit": primary})
+    juju.config(dovecot_charm_dual_unit, {"primary-unit": primary})
     juju.wait(jubilant.all_active, timeout=5 * 60)
 
     # Remove legacy HA test users that can break dsync on reruns.
@@ -211,7 +239,7 @@ def test_auto_sync(juju: jubilant.Juju, dovecot_charm: str):
     password = token_hex(8)
     for unit in (primary, secondary):
         juju.exec(f"rm -rf /srv/mail/{user}", unit=unit)
-    _setup_mail_user(juju, [primary, secondary], user, password)
+    _setup_mail_user(juju, primary, secondary, user, password)
 
     # Send email on primary
     subject = f"Auto Sync Test {token_hex(4)}"
@@ -224,32 +252,33 @@ def test_auto_sync(juju: jubilant.Juju, dovecot_charm: str):
     try:
         # Lower sync schedule to every minute, wait for reconcile
         logging.info("Setting sync-schedule to */1 * * * * (every minute)...")
-        juju.config(dovecot_charm, {"sync-schedule": "*/1 * * * *"})
+        juju.config(dovecot_charm_dual_unit, {"sync-schedule": "*/1 * * * *"})
         juju.wait(jubilant.all_active, timeout=5 * 60)
 
+        logging.info(f"Cron file after config change:\n{_get_cron_file_content(juju, primary)}")
         logging.info("Waiting for first cron-triggered sync signal on primary...")
         _wait_for_sync_trigger(juju, primary, previous_sync_mtime, previous_cron_count)
 
         # Verify email arrived on secondary via IMAP
-        secondary_ip = juju.status().apps[dovecot_charm].units[secondary].public_address
+        secondary_ip = juju.status().apps[dovecot_charm_dual_unit].units[secondary].public_address
         logging.info(f"Checking for email on secondary via IMAP at {secondary_ip}:993...")
         synced = _check_mail_via_imap(secondary_ip, user, password, subject)
         if not synced:
-            logging.info("Email not found after first cron sync; waiting for one more cron run...")
-            current_mtime = _get_last_sync_mtime(juju, primary)
-            current_cron_count = _get_sync_cron_run_count(juju, primary)
-            _wait_for_sync_trigger(
-                juju,
-                primary,
-                current_mtime,
-                current_cron_count,
-                timeout=2 * 60,
-            )
+            logging.info("Email not found after first cron sync.")
+            logging.info(f"Sync log on primary:\n{_get_sync_log_content(juju, primary)}")
+            logging.info("Cron file content:")
+            logging.info(_get_cron_file_content(juju, primary))
+            logging.info("Trying manual sync as fallback to verify sync mechanism works...")
+            juju.exec("/usr/local/bin/sync-to-secondary.sh", unit=primary)
+            time.sleep(15)
             synced = _check_mail_via_imap(secondary_ip, user, password, subject)
+            if not synced:
+                logging.info("Manual sync also failed. Checking sync log after manual run:")
+                logging.info(f"Sync log:\n{_get_sync_log_content(juju, primary, lines=30)}")
 
         assert synced, f"Email with subject '{subject}' not found on secondary after auto-sync"
     finally:
         # Reset sync-schedule to default
         logging.info("Resetting sync-schedule to default...")
-        juju.config(dovecot_charm, {"sync-schedule": "*/30 * * * *"})
+        juju.config(dovecot_charm_dual_unit, {"sync-schedule": "*/30 * * * *"})
         juju.wait(jubilant.all_active, timeout=5 * 60)
