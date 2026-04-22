@@ -53,6 +53,7 @@ def setup_ssh_keys(charm: DovecotCharm) -> None:
                 ["/usr/bin/ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(key_file)],
                 check=True,
                 capture_output=True,
+                text=True,
             )
         except subprocess.CalledProcessError as e:
             raise HASetupError(f"SSH key generation failed: {e.stderr}") from e

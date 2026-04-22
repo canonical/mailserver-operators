@@ -275,8 +275,6 @@ class DovecotCharm(CharmBase):
             logger.exception(f"Failed to configure postfix: {e}")
             raise ConfigurationError(f"Failed to configure postfix: {e.stderr}") from e
 
-    # -- Actions --------------------------------------------------------------
-
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""
         queue_to_clear = event.params.get("queue", "deferred")
@@ -322,7 +320,19 @@ class DovecotCharm(CharmBase):
             logger.info(f"Running manual sync: {' '.join(cmd)}")
             subprocess.run(cmd, check=True, capture_output=True, text=True)
             event.set_results({"result": "Sync completed successfully"})
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        except subprocess.CalledProcessError as e:
+            parts = [
+                f"Sync failed with exit code {e.returncode} while running "
+                f"{' '.join(e.cmd) if isinstance(e.cmd, (list, tuple)) else e.cmd}"
+            ]
+            if e.stderr and e.stderr.strip():
+                parts.append(f"stderr: {e.stderr.strip()}")
+            if e.stdout and e.stdout.strip():
+                parts.append(f"stdout: {e.stdout.strip()}")
+            msg = ". ".join(parts)
+            logger.error(msg)
+            event.fail(msg)
+        except FileNotFoundError as e:
             msg = f"Sync failed: {e}"
             logger.error(msg)
             event.fail(msg)
