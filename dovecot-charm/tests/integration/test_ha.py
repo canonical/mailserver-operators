@@ -112,7 +112,9 @@ def _wait_for_sync_trigger(
     deadline = time.time() + timeout
     while time.time() < deadline:
         current_mtime = _get_last_sync_mtime(juju, unit)
-        if current_mtime is not None and (previous_mtime is None or current_mtime > previous_mtime):
+        if current_mtime is not None and (
+            previous_mtime is None or current_mtime > previous_mtime
+        ):
             return current_mtime
 
         current_cron_count = _get_sync_cron_run_count(juju, unit)
