@@ -116,3 +116,7 @@ class TestSyncScheduleValidation:
     def test_rejects_alphabetic_field(self):
         with pytest.raises(ValidationError, match="disallowed characters"):
             DovecotConfig(**_VALID_BASE, sync_schedule="* * * * MON")
+
+    def test_rejects_question_mark(self):
+        with pytest.raises(ValidationError, match="disallowed characters"):
+            DovecotConfig(**_VALID_BASE, sync_schedule="? * * * *")

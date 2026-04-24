@@ -71,26 +71,42 @@ def setup_ssh_keys(charm: DovecotCharm) -> None:
         relation.data[charm.unit]["public_key"] = pub_key
         relation.data[charm.unit]["hostname"] = socket.gethostname()
 
+        # Publish own IP so peers can restrict root SSH to known addresses.
+        binding = charm.model.get_binding(PEER_RELATION_NAME)
+        if binding:
+            relation.data[charm.unit]["ip_address"] = str(binding.network.bind_address)
+
         if SSH_HOST_KEY_FILE.exists():
             host_key = SSH_HOST_KEY_FILE.read_text().strip()
             relation.data[charm.unit]["ssh_host_key"] = host_key
 
 
 def sync_authorized_keys(charm: DovecotCharm) -> None:
-    """Collect public keys from all peer units and write authorized_keys."""
+    """Collect public keys and IPs from all peer units and write authorized_keys.
+
+    Also calls ensure_root_ssh_login with the collected peer IPs so that root
+    SSH key login is restricted to known peer addresses only.
+    """
     relation = charm.model.get_relation(PEER_RELATION_NAME)
     if not relation:
         return
 
     authorized_keys = []
+    peer_ips: list[str] = []
     for unit in relation.units:
         pk = relation.data[unit].get("public_key")
         if pk:
             authorized_keys.append(pk)
+        ip = relation.data[unit].get("ip_address")
+        if ip:
+            peer_ips.append(ip)
 
     our_pk = relation.data[charm.unit].get("public_key")
     if our_pk:
         authorized_keys.append(our_pk)
+    our_ip = relation.data[charm.unit].get("ip_address")
+    if our_ip:
+        peer_ips.append(our_ip)
 
     if not authorized_keys:
         return
@@ -99,7 +115,7 @@ def sync_authorized_keys(charm: DovecotCharm) -> None:
     auth_file.write_text("\n".join(authorized_keys) + "\n")
     auth_file.chmod(0o600)
 
-    ensure_root_ssh_login()
+    ensure_root_ssh_login(peer_ips)
 
 
 def sync_known_hosts(charm: DovecotCharm) -> None:
@@ -128,12 +144,18 @@ def sync_known_hosts(charm: DovecotCharm) -> None:
     known_hosts_file.chmod(0o600)
 
 
-def ensure_root_ssh_login() -> None:
-    """Set PermitRootLogin via an sshd drop-in, validate, and reload sshd.
+def ensure_root_ssh_login(peer_ips: list[str]) -> None:
+    """Set PermitRootLogin via an sshd drop-in restricted to peer addresses.
 
-    Writes /etc/ssh/sshd_config.d/99-dovecot-ha.conf so that the distro-owned
-    sshd_config is not modified.  Validates the resulting config with
-    ``sshd -t`` before reloading; rolls back the drop-in on failure.
+    Writes /etc/ssh/sshd_config.d/99-dovecot-ha.conf with:
+    - A global ``PermitRootLogin no`` baseline.
+    - A ``Match Address`` block that permits ``prohibit-password`` only for
+      the supplied peer IP addresses.
+
+    If no peer IPs are known yet the drop-in is removed (or not written) so
+    that root login remains governed by the distro default until peers are
+    available.  Validates with ``sshd -t`` before reloading; rolls back on
+    failure.
 
     Raises:
         HASetupError: If sshd validation or reload fails.
@@ -141,7 +163,23 @@ def ensure_root_ssh_login() -> None:
     if not SSHD_CONFIG.exists():
         return
 
-    drop_in_content = "PermitRootLogin prohibit-password\n"
+    if not peer_ips:
+        # No peers known yet — remove our drop-in if present and return.
+        if SSHD_DROPIN_FILE.exists():
+            SSHD_DROPIN_FILE.unlink()
+            try:
+                systemd.service_reload("ssh", restart_on_failure=True)
+            except subprocess.CalledProcessError as e:
+                raise HASetupError(f"Failed to reload sshd after config change: {e}") from e
+        return
+
+    address_list = ",".join(sorted(set(peer_ips)))
+    drop_in_content = (
+        "PermitRootLogin no\n"
+        "\n"
+        f"Match Address {address_list}\n"
+        "    PermitRootLogin prohibit-password\n"
+    )
 
     if SSHD_DROPIN_FILE.exists() and SSHD_DROPIN_FILE.read_text() == drop_in_content:
         return

@@ -86,7 +86,7 @@ class DovecotConfig(BaseModel):
         fields = value.split()
         if len(fields) != 5:
             raise ValueError(f"sync-schedule must have exactly 5 fields, got {len(fields)}")
-        allowed = re.compile(r"^[0-9\*/,\-?]+$")
+        allowed = re.compile(r"^[0-9\*/,\-]+$")
         for field in fields:
             if not allowed.match(field):
                 raise ValueError(f"sync-schedule field {field!r} contains disallowed characters")
