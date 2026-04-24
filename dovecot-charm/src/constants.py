@@ -55,5 +55,7 @@ SYNC_TO_SECONDARY_TEMPLATE = "sync-to-secondary.sh.tmpl"
 SYNC_TO_SECONDARY_CRONJOB_TEMPLATE = "sync-to-secondary_cron.tmpl"
 
 SSHD_CONFIG = Path("/etc/ssh/sshd_config")
+SSHD_DROPIN_DIR = Path("/etc/ssh/sshd_config.d")
+SSHD_DROPIN_FILE = SSHD_DROPIN_DIR / "99-dovecot-ha.conf"
 SSH_DIR = Path("/root/.ssh")
 SSH_HOST_KEY_FILE = Path("/etc/ssh/ssh_host_ed25519_key.pub")

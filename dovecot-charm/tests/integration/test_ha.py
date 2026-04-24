@@ -141,9 +141,9 @@ def _wait_for_sync_trigger(
     """Wait until /srv/mail/.last-dsync mtime advances, indicating a completed sync.
 
     The sync script touches .last-dsync only at the very end, so this is a
-    reliable end-of-sync marker. Falls back to syslog cron count increase only
-    when .last-dsync never existed (e.g. no users yet), but in that case we also
-    add a grace sleep so any in-progress dsync can finish.
+    reliable end-of-sync marker. Syslog cron count is checked only to log
+    that the cron job appears to have fired while we continue waiting for
+    .last-dsync to be updated.
     """
     deadline = time.time() + timeout
     cron_fired = False

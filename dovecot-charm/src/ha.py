@@ -21,6 +21,8 @@ from constants import (
     SSH_DIR,
     SSH_HOST_KEY_FILE,
     SSHD_CONFIG,
+    SSHD_DROPIN_DIR,
+    SSHD_DROPIN_FILE,
     SYNC_TO_SECONDARY_CRONJOB_TARGET,
     SYNC_TO_SECONDARY_CRONJOB_TEMPLATE,
     SYNC_TO_SECONDARY_TARGET,
@@ -126,32 +128,64 @@ def sync_known_hosts(charm: DovecotCharm) -> None:
 
 
 def ensure_root_ssh_login() -> None:
-    """Set PermitRootLogin to prohibit-password in sshd_config and reload sshd.
+    """Set PermitRootLogin via an sshd drop-in, validate, and reload sshd.
+
+    Writes /etc/ssh/sshd_config.d/99-dovecot-ha.conf so that the distro-owned
+    sshd_config is not modified.  Validates the resulting config with
+    ``sshd -t`` before reloading; rolls back the drop-in on failure.
 
     Raises:
-        HASetupError: If sshd reload fails.
+        HASetupError: If sshd validation or reload fails.
     """
     if not SSHD_CONFIG.exists():
         return
 
-    content = SSHD_CONFIG.read_text()
-    new_content = ""
-    found = False
-    for line in content.splitlines(keepends=True):
-        stripped = line.lstrip("#").strip()
-        if stripped.startswith("PermitRootLogin"):
-            new_content += "PermitRootLogin prohibit-password\n"
-            found = True
+    drop_in_content = "PermitRootLogin prohibit-password\n"
+
+    if SSHD_DROPIN_FILE.exists() and SSHD_DROPIN_FILE.read_text() == drop_in_content:
+        return
+
+    previous_exists = SSHD_DROPIN_FILE.exists()
+    previous_content = SSHD_DROPIN_FILE.read_text() if previous_exists else None
+
+    SSHD_DROPIN_DIR.mkdir(mode=0o755, parents=True, exist_ok=True)
+    SSHD_DROPIN_FILE.write_text(drop_in_content)
+
+    try:
+        subprocess.run(
+            ["/usr/sbin/sshd", "-t", "-f", str(SSHD_CONFIG)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        if previous_exists and previous_content is not None:
+            SSHD_DROPIN_FILE.write_text(previous_content)
         else:
-            new_content += line
-    if not found:
-        new_content += "\nPermitRootLogin prohibit-password\n"
-    if new_content != content:
-        SSHD_CONFIG.write_text(new_content)
-        try:
-            systemd.service_reload("ssh", restart_on_failure=True)
-        except subprocess.CalledProcessError as e:
-            raise HASetupError(f"Failed to reload sshd after config change: {e}") from e
+            SSHD_DROPIN_FILE.unlink(missing_ok=True)
+        raise HASetupError(f"Failed to validate sshd configuration: {e.stderr}") from e
+
+    try:
+        systemd.service_reload("ssh", restart_on_failure=True)
+    except subprocess.CalledProcessError as e:
+        raise HASetupError(f"Failed to reload sshd after config change: {e}") from e
+
+
+def _validate_cron_schedule(schedule: str) -> str:
+    """Validate and return a sanitised 5-field cron schedule string.
+
+    Raises:
+        HASetupError: If the schedule contains unsafe characters or does not
+            consist of exactly 5 whitespace-separated fields.
+    """
+    if "\n" in schedule or "\r" in schedule:
+        raise HASetupError(f"Invalid sync-schedule: value must not contain newlines: {schedule!r}")
+    fields = schedule.split()
+    if len(fields) != 5:
+        raise HASetupError(
+            f"Invalid sync-schedule: expected 5 fields, got {len(fields)}: {schedule!r}"
+        )
+    return schedule
 
 
 def install_mail_sync_script(charm: DovecotCharm) -> None:
@@ -186,8 +220,9 @@ def setup_mail_sync_cronjob(charm: DovecotCharm) -> None:
         return
 
     charm.unit.status = MaintenanceStatus("Setting up mail pool synchronization cronjob")
+    schedule = _validate_cron_schedule(charm.config.get("sync-schedule", "*/30 * * * *"))
     template_context = {
-        "schedule": charm.config.get("sync-schedule", "*/30 * * * *"),
+        "schedule": schedule,
     }
     template = charm.jinja.get_template(SYNC_TO_SECONDARY_CRONJOB_TEMPLATE)
     contents = template.render(template_context)
