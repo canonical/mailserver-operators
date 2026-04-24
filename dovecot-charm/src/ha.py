@@ -152,6 +152,9 @@ def ensure_root_ssh_login() -> None:
     SSHD_DROPIN_DIR.mkdir(mode=0o755, parents=True, exist_ok=True)
     SSHD_DROPIN_FILE.write_text(drop_in_content)
 
+    # sshd -t requires the privsep directory to exist even for config checks.
+    Path("/run/sshd").mkdir(mode=0o755, exist_ok=True)
+
     try:
         subprocess.run(
             ["/usr/sbin/sshd", "-t", "-f", str(SSHD_CONFIG)],
