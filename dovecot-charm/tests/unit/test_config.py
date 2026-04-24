@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from ops.model import BlockedStatus
+from pydantic import ValidationError
 
 from dovecot_config import DovecotConfig, DovecotConfigInvalidError
 
@@ -53,3 +54,65 @@ def test_from_charm_primary_unit_does_not_exist_raises_value_error(base_state):
 
     with pytest.raises(DovecotConfigInvalidError, match="Primary unit does not exist"):
         DovecotConfig.from_charm(charm)
+
+
+# Valid config kwargs shared by sync_schedule tests.
+_VALID_BASE = {
+    "mailname": "example.com",
+    "postmaster_address": "admin@example.com",
+    "primary_unit": "dovecot-charm/0",
+}
+
+
+class TestSyncScheduleValidation:
+    def test_valid_default(self):
+        cfg = DovecotConfig(**_VALID_BASE)
+        assert cfg.sync_schedule == "*/30 * * * *"
+
+    def test_valid_every_minute(self):
+        cfg = DovecotConfig(**_VALID_BASE, sync_schedule="*/1 * * * *")
+        assert cfg.sync_schedule == "*/1 * * * *"
+
+    def test_valid_specific_fields(self):
+        cfg = DovecotConfig(**_VALID_BASE, sync_schedule="0 4 * * 1")
+        assert cfg.sync_schedule == "0 4 * * 1"
+
+    def test_normalises_whitespace(self):
+        cfg = DovecotConfig(**_VALID_BASE, sync_schedule="*/30  *   *  * *")
+        assert cfg.sync_schedule == "*/30 * * * *"
+
+    def test_rejects_newline(self):
+        with pytest.raises(ValidationError, match="must not contain newlines"):
+            DovecotConfig(**_VALID_BASE, sync_schedule="*/30 * * * *\nbad root /bin/evil")
+
+    def test_rejects_too_few_fields(self):
+        with pytest.raises(ValidationError, match="exactly 5 fields"):
+            DovecotConfig(**_VALID_BASE, sync_schedule="*/30 * * *")
+
+    def test_rejects_too_many_fields(self):
+        with pytest.raises(ValidationError, match="exactly 5 fields"):
+            DovecotConfig(**_VALID_BASE, sync_schedule="*/30 * * * * extra")
+
+    def test_rejects_empty_string(self):
+        with pytest.raises(ValidationError, match="exactly 5 fields"):
+            DovecotConfig(**_VALID_BASE, sync_schedule="")
+
+    def test_rejects_command_substitution(self):
+        with pytest.raises(ValidationError, match="disallowed characters"):
+            DovecotConfig(**_VALID_BASE, sync_schedule="$(rm) * * * *")
+
+    def test_rejects_backticks(self):
+        with pytest.raises(ValidationError, match="disallowed characters"):
+            DovecotConfig(**_VALID_BASE, sync_schedule="`id` * * * *")
+
+    def test_rejects_semicolon(self):
+        with pytest.raises(ValidationError, match="disallowed characters"):
+            DovecotConfig(**_VALID_BASE, sync_schedule="*;id * * * *")
+
+    def test_rejects_pipe(self):
+        with pytest.raises(ValidationError, match="disallowed characters"):
+            DovecotConfig(**_VALID_BASE, sync_schedule="*|cat * * * *")
+
+    def test_rejects_alphabetic_field(self):
+        with pytest.raises(ValidationError, match="disallowed characters"):
+            DovecotConfig(**_VALID_BASE, sync_schedule="* * * * MON")

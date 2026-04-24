@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import socket
 import subprocess  # nosec
 import typing
@@ -33,6 +32,7 @@ from exceptions import HASetupError
 
 if typing.TYPE_CHECKING:
     from charm import DovecotCharm
+    from dovecot_config import DovecotConfig
 
 logger = logging.getLogger(__name__)
 
@@ -172,32 +172,6 @@ def ensure_root_ssh_login() -> None:
         raise HASetupError(f"Failed to reload sshd after config change: {e}") from e
 
 
-def _validate_cron_schedule(schedule: str) -> str:
-    """Validate and return a sanitised 5-field cron schedule string.
-
-    Each field may only contain digits and the characters ``* / , - ?``.
-    The returned value is whitespace-normalised (fields joined by single spaces).
-
-    Raises:
-        HASetupError: If the schedule contains unsafe characters or does not
-            consist of exactly 5 whitespace-separated fields.
-    """
-    if "\n" in schedule or "\r" in schedule:
-        raise HASetupError(f"Invalid sync-schedule: value must not contain newlines: {schedule!r}")
-    fields = schedule.split()
-    if len(fields) != 5:
-        raise HASetupError(
-            f"Invalid sync-schedule: expected 5 fields, got {len(fields)}: {schedule!r}"
-        )
-    _allowed = re.compile(r"^[0-9\*/,\-?]+$")
-    for field in fields:
-        if not _allowed.match(field):
-            raise HASetupError(
-                f"Invalid sync-schedule: field {field!r} contains disallowed characters"
-            )
-    return " ".join(fields)
-
-
 def install_mail_sync_script(charm: DovecotCharm) -> None:
     """Render and install the mail pool synchronization script.
 
@@ -218,7 +192,7 @@ def install_mail_sync_script(charm: DovecotCharm) -> None:
     host.write_file(SYNC_TO_SECONDARY_TARGET, contents, perms=0o755)
 
 
-def setup_mail_sync_cronjob(charm: DovecotCharm) -> None:
+def setup_mail_sync_cronjob(charm: DovecotCharm, dovecot_config: DovecotConfig) -> None:
     """Set up the mail pool synchronization cronjob.
 
     Skips writing and does not restart cron if the file content is unchanged.
@@ -230,9 +204,8 @@ def setup_mail_sync_cronjob(charm: DovecotCharm) -> None:
         return
 
     charm.unit.status = MaintenanceStatus("Setting up mail pool synchronization cronjob")
-    schedule = _validate_cron_schedule(charm.config.get("sync-schedule", "*/30 * * * *"))
     template_context = {
-        "schedule": schedule,
+        "schedule": dovecot_config.sync_schedule,
     }
     template = charm.jinja.get_template(SYNC_TO_SECONDARY_CRONJOB_TEMPLATE)
     contents = template.render(template_context)
