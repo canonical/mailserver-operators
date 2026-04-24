@@ -36,3 +36,26 @@ class TestValidateCronSchedule:
     def test_rejects_empty_string(self):
         with pytest.raises(HASetupError, match="expected 5 fields, got 0"):
             _validate_cron_schedule("")
+
+    def test_rejects_command_substitution(self):
+        with pytest.raises(HASetupError, match="disallowed characters"):
+            _validate_cron_schedule("$(rm) * * * *")
+
+    def test_rejects_backticks(self):
+        with pytest.raises(HASetupError, match="disallowed characters"):
+            _validate_cron_schedule("`id` * * * *")
+
+    def test_rejects_semicolon(self):
+        with pytest.raises(HASetupError, match="disallowed characters"):
+            _validate_cron_schedule("*;id * * * *")
+
+    def test_rejects_pipe(self):
+        with pytest.raises(HASetupError, match="disallowed characters"):
+            _validate_cron_schedule("*|cat * * * *")
+
+    def test_rejects_alphabetic_field(self):
+        with pytest.raises(HASetupError, match="disallowed characters"):
+            _validate_cron_schedule("* * * * MON")
+
+    def test_normalises_whitespace(self):
+        assert _validate_cron_schedule("*/30  *   *  * *") == "*/30 * * * *"

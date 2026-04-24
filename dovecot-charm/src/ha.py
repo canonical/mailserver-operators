@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import socket
 import subprocess  # nosec
 import typing
@@ -174,6 +175,9 @@ def ensure_root_ssh_login() -> None:
 def _validate_cron_schedule(schedule: str) -> str:
     """Validate and return a sanitised 5-field cron schedule string.
 
+    Each field may only contain digits and the characters ``* / , - ?``.
+    The returned value is whitespace-normalised (fields joined by single spaces).
+
     Raises:
         HASetupError: If the schedule contains unsafe characters or does not
             consist of exactly 5 whitespace-separated fields.
@@ -185,7 +189,13 @@ def _validate_cron_schedule(schedule: str) -> str:
         raise HASetupError(
             f"Invalid sync-schedule: expected 5 fields, got {len(fields)}: {schedule!r}"
         )
-    return schedule
+    _allowed = re.compile(r"^[0-9\*/,\-?]+$")
+    for field in fields:
+        if not _allowed.match(field):
+            raise HASetupError(
+                f"Invalid sync-schedule: field {field!r} contains disallowed characters"
+            )
+    return " ".join(fields)
 
 
 def install_mail_sync_script(charm: DovecotCharm) -> None:
