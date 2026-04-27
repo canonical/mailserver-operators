@@ -89,27 +89,12 @@ def _get_last_sync_mtime(juju: jubilant.Juju, unit: str) -> int | None:
 
 
 def _get_sync_cron_run_count(juju: jubilant.Juju, unit: str) -> int:
-    """Return count of sync-to-secondary cron executions from syslog or direct log.
-
-    Works across charm versions: newer versions log via logger to syslog,
-    older versions redirect directly to /var/log/sync-to-secondary.log.
-    """
-    # Try syslog first (newer charm versions with logger)
-    syslog_output = juju.exec(
+    """Return count of sync-to-secondary cron executions from syslog."""
+    output = juju.exec(
         "grep -c 'sync-to-secondary' /var/log/syslog 2>/dev/null || true",
         unit=unit,
     ).stdout.strip()
-    syslog_count = int(syslog_output) if syslog_output.isdigit() else 0
-
-    # Also check direct sync log file (older charm versions)
-    synclog_output = juju.exec(
-        "wc -l /var/log/sync-to-secondary.log 2>/dev/null | awk '{print $1}' || true",
-        unit=unit,
-    ).stdout.strip()
-    synclog_count = int(synclog_output) if synclog_output.isdigit() else 0
-
-    # Return the higher count (more reliable detector across versions)
-    return max(syslog_count, synclog_count)
+    return int(output) if output.isdigit() else 0
 
 
 def _get_sync_log_content(juju: jubilant.Juju, unit: str, lines: int = 20) -> str:
@@ -121,13 +106,13 @@ def _get_sync_log_content(juju: jubilant.Juju, unit: str, lines: int = 20) -> st
     return output
 
 
-def _get_cron_file_content(juju: jubilant.Juju, unit: str) -> str:
-    """Return content of the sync-to-secondary cron file for debugging."""
-    output = juju.exec(
-        "cat /etc/cron.d/sync-to-secondary 2>/dev/null || echo 'Cron file not found'",
+def _get_cron_file_content(juju: jubilant.Juju, unit: str) -> str | None:
+    """Return content of the sync-to-secondary cron file, or None if not present."""
+    result = juju.exec(
+        "test -f /etc/cron.d/sync-to-secondary && cat /etc/cron.d/sync-to-secondary || true",
         unit=unit,
-    ).stdout
-    return output
+    ).stdout.strip()
+    return result if result else None
 
 
 def _wait_for_sync_trigger(

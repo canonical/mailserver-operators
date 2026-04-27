@@ -78,7 +78,7 @@ def dovecot_charm(
     try:
         logging.info("Adding TLS relation...")
         juju.integrate(f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
-    except Exception:
+    except jubilant.CLIError:
         logging.info("TLS relation already there...")
     logging.info("Waiting for active status...")
     juju.wait(
@@ -119,7 +119,7 @@ def dovecot_charm_manual_storage(
     try:
         logging.info("Adding TLS relation...")
         juju.integrate(f"{charm_name}:certificates", f"{tls_charm}:certificates")
-    except Exception:
+    except jubilant.CLIError:
         logging.info("TLS relation already there...")
 
     logging.info("Waiting for blocked status...")
@@ -192,7 +192,7 @@ def dovecot_charm_dual_unit(
     try:
         logging.info("Adding TLS relation...")
         juju.integrate(f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
-    except Exception:
+    except jubilant.CLIError:
         logging.info("TLS relation already there...")
     logging.info("Waiting for active status...")
     juju.wait(

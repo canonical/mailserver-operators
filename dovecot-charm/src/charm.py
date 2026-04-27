@@ -156,6 +156,11 @@ class DovecotCharm(CharmBase):
     def _reconcile(self, event):
         """Reconcile charm state."""
         self.unit.status = MaintenanceStatus("Configuring charm")
+        if len(self.get_units()) > 2:
+            self.unit.status = BlockedStatus(
+                "Only one primary and one secondary unit are supported; remove extra units"
+            )
+            return
         try:
             dovecot_config = self._get_dovecot_config()
             ensure_storage_ready(self, dovecot_config=dovecot_config)
@@ -305,7 +310,10 @@ class DovecotCharm(CharmBase):
             return
 
         if not self._secondary_hostname:
-            event.fail("No secondary unit found to sync to.")
+            event.fail(
+                "Secondary unit hostname is not yet known. "
+                "Ensure a second unit is deployed and has joined the peer relation."
+            )
             return
 
         if not Path(SYNC_TO_SECONDARY_TARGET).exists():

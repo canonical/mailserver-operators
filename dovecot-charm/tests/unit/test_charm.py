@@ -2,23 +2,52 @@
 # See LICENSE file for licensing details.
 import contextlib
 import dataclasses
+from pathlib import Path
 from subprocess import CalledProcessError  # nosec
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import ops
 import ops.testing
 import pytest
 
 from charm import DovecotCharm
+from constants import SYNC_TO_SECONDARY_TARGET
 from exceptions import ConfigurationError, HASetupError
 
 # ---------------------------------------------------------------------------
 # Helpers — patches shared across many tests
 # ---------------------------------------------------------------------------
 
+PEER_RELATION_NAME = "replicas"
+
+
+def _secondary_relation(hostname: str = "10.0.0.2") -> ops.testing.PeerRelation:
+    """Return a peer PeerRelation whose remote unit has published the given hostname."""
+    return ops.testing.PeerRelation(
+        PEER_RELATION_NAME,
+        peers_data={1: {"hostname": hostname}},
+    )
+
+
+def _non_primary_config(base_config: dict) -> dict:
+    """Return config where primary-unit doesn't match this unit (dovecot-charm/0)."""
+    return {**base_config, "primary-unit": "dovecot-charm/99"}
+
+
+def _sync_script_exists_patch(exists: bool):
+    """Return a Path.exists side_effect that intercepts only SYNC_TO_SECONDARY_TARGET."""
+    _real_exists = Path.exists
+
+    def _patched(self):
+        if str(self) == SYNC_TO_SECONDARY_TARGET:
+            return exists
+        return _real_exists(self)
+
+    return _patched
+
 
 @contextlib.contextmanager
-def reconcile_guards():
+def _reconcile_io_guards():
     """Guard all I/O in _reconcile so tests only exercise event wiring / status.
 
     Use when the test drives an event that triggers _reconcile but the test
@@ -42,14 +71,14 @@ def reconcile_guards():
 
 def test_reconcile_sets_active_on_success(ctx, base_state):
     """Reconcile must reach ActiveStatus when all setup steps succeed."""
-    with reconcile_guards():
+    with _reconcile_io_guards():
         state_out = ctx.run(ctx.on.config_changed(), base_state)
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
 
 
 def test_reconcile_opens_mail_ports(ctx, base_state):
     """All required IMAP/POP3/Sieve/metrics ports must be opened."""
-    with reconcile_guards():
+    with _reconcile_io_guards():
         state_out = ctx.run(ctx.on.config_changed(), base_state)
 
     expected = {ops.testing.TCPPort(p) for p in [993, 995, 4190, 9900]}
@@ -103,19 +132,14 @@ def test_reconcile_blocks_when_procmail_setup_fails(ctx, base_state):
 
 def test_is_primary_true_when_unit_matches_config(ctx, base_state):
     """_is_primary returns True when primary-unit config matches this unit."""
-    with reconcile_guards(), ctx(ctx.on.config_changed(), base_state) as mgr:
+    with _reconcile_io_guards(), ctx(ctx.on.config_changed(), base_state) as mgr:
         assert mgr.charm._is_primary is True
 
 
 def test_is_primary_false_when_unit_differs(ctx, base_state):
-    """_is_primary returns False when primary-unit config doesn't match this unit.
-
-    We access the charm inside the context manager before the event fires,
-    so no _reconcile I/O is reached — no patches needed for the HA methods.
-    Config validation is bypassed by patching _get_dovecot_config.
-    """
+    """_is_primary returns False when primary-unit config doesn't match this unit."""
     state_in = dataclasses.replace(
-        base_state, config={**base_state.config, "primary-unit": "dovecot-charm/99"}
+        base_state, config=_non_primary_config(base_state.config)
     )
     with (
         patch("charm.DovecotCharm._get_dovecot_config"),
@@ -134,21 +158,16 @@ def test_is_primary_false_when_unit_differs(ctx, base_state):
 
 def test_reconcile_skips_sync_script_when_not_primary(ctx, base_state):
     """When this unit is NOT primary, sync script and cronjob are not installed."""
+    state_in = dataclasses.replace(
+        base_state, config=_non_primary_config(base_state.config)
+    )
     with (
-        patch("charm.ensure_storage_ready"),
-        patch("charm.teardown_detaching_storage"),
-        patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
-        patch("charm.DovecotCharm._setup_tls"),
-        patch("charm.DovecotCharm._setup_dovecot"),
-        patch("charm.DovecotCharm._setup_procmail"),
-        patch("ha.setup_ssh_keys"),
-        patch("ha.sync_authorized_keys"),
-        patch("ha.sync_known_hosts"),
-        patch("charm.DovecotCharm._is_primary", new_callable=PropertyMock, return_value=False),
+        patch("charm.DovecotCharm._get_dovecot_config"),
+        _reconcile_io_guards(),
         patch("ha.install_mail_sync_script") as mock_sync,
         patch("ha.setup_mail_sync_cronjob") as mock_cron,
     ):
-        state_out = ctx.run(ctx.on.config_changed(), base_state)
+        state_out = ctx.run(ctx.on.config_changed(), state_in)
 
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
     mock_sync.assert_not_called()
@@ -163,9 +182,7 @@ def test_reconcile_skips_sync_script_when_not_primary(ctx, base_state):
 def test_clear_queue_deferred(ctx, base_state):
     """clear-queue action with queue=deferred passes correct args to postsuper."""
     mock_result = MagicMock(stdout="cleared")
-    with (
-        patch("charm.subprocess.run", return_value=mock_result) as mock_run,
-    ):
+    with patch("charm.subprocess.run", return_value=mock_result) as mock_run:
         ctx.run(
             ctx.on.action("clear-queue", params={"queue": "deferred"}),
             base_state,
@@ -182,9 +199,7 @@ def test_clear_queue_deferred(ctx, base_state):
 def test_clear_queue_all(ctx, base_state):
     """clear-queue action with queue=all omits the deferred queue filter."""
     mock_result = MagicMock(stdout="cleared")
-    with (
-        patch("charm.subprocess.run", return_value=mock_result) as mock_run,
-    ):
+    with patch("charm.subprocess.run", return_value=mock_result) as mock_run:
         ctx.run(
             ctx.on.action("clear-queue", params={"queue": "all"}),
             base_state,
@@ -222,28 +237,22 @@ def test_clear_queue_failure(ctx, base_state):
 def test_force_sync_success(ctx, base_state):
     """force-sync succeeds when this unit is primary and a secondary exists."""
     mock_result = MagicMock(stdout="ok", stderr="")
+    state_in = dataclasses.replace(base_state, relations={_secondary_relation()})
     with (
         patch("charm.subprocess.run", return_value=mock_result),
-        patch("charm.Path") as mock_path_cls,
-        patch.object(
-            DovecotCharm,
-            "_secondary_hostname",
-            new_callable=PropertyMock,
-            return_value="10.0.0.2",
-        ),
+        patch.object(Path, "exists", _sync_script_exists_patch(True)),
     ):
-        mock_path_cls.return_value.exists.return_value = True
-        ctx.run(ctx.on.action("force-sync"), base_state)
+        ctx.run(ctx.on.action("force-sync"), state_in)
     assert ctx.action_results == {"result": "Sync completed successfully"}
 
 
 def test_force_sync_not_primary(ctx, base_state):
     """force-sync must fail when executed on a non-primary unit."""
-    with (
-        patch("charm.DovecotCharm._is_primary", new_callable=PropertyMock, return_value=False),
-        pytest.raises(ops.testing.ActionFailed) as exc_info,
-    ):
-        ctx.run(ctx.on.action("force-sync"), base_state)
+    state_in = dataclasses.replace(
+        base_state, config=_non_primary_config(base_state.config)
+    )
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(ctx.on.action("force-sync"), state_in)
     assert "primary unit" in exc_info.value.message
 
 
@@ -251,27 +260,21 @@ def test_force_sync_no_secondary(ctx, base_state):
     """force-sync must fail when no secondary unit hostname is available."""
     with pytest.raises(ops.testing.ActionFailed) as exc_info:
         ctx.run(ctx.on.action("force-sync"), base_state)
-    assert "secondary" in exc_info.value.message
+    assert "secondary" in exc_info.value.message.lower()
 
 
 def test_force_sync_subprocess_failure(ctx, base_state):
     """force-sync must fail when the sync script exits non-zero."""
+    state_in = dataclasses.replace(base_state, relations={_secondary_relation()})
     with (
         patch(
             "charm.subprocess.run",
             side_effect=CalledProcessError(1, "sync", stderr="fail"),
         ),
-        patch("charm.Path") as mock_path_cls,
-        patch.object(
-            DovecotCharm,
-            "_secondary_hostname",
-            new_callable=PropertyMock,
-            return_value="10.0.0.2",
-        ),
+        patch.object(Path, "exists", _sync_script_exists_patch(True)),
         pytest.raises(ops.testing.ActionFailed) as exc_info,
     ):
-        mock_path_cls.return_value.exists.return_value = True
-        ctx.run(ctx.on.action("force-sync"), base_state)
+        ctx.run(ctx.on.action("force-sync"), state_in)
     assert "fail" in exc_info.value.message
 
 
@@ -283,12 +286,7 @@ def test_force_sync_subprocess_failure(ctx, base_state):
 def test_reconcile_blocks_when_ha_setup_fails(ctx, base_state):
     """Charm must be Blocked when HA setup raises HASetupError."""
     with (
-        patch("charm.ensure_storage_ready"),
-        patch("charm.teardown_detaching_storage"),
-        patch("charm.shutil.which", return_value="/usr/bin/doveconf"),
-        patch("charm.DovecotCharm._setup_tls"),
-        patch("charm.DovecotCharm._setup_dovecot"),
-        patch("charm.DovecotCharm._setup_procmail"),
+        _reconcile_io_guards(),
         patch("ha.setup_ssh_keys", side_effect=HASetupError("SSH keygen failed")),
     ):
         state_out = ctx.run(ctx.on.config_changed(), base_state)
@@ -299,17 +297,11 @@ def test_reconcile_blocks_when_ha_setup_fails(ctx, base_state):
 
 def test_force_sync_script_not_installed(ctx, base_state):
     """force-sync must fail with a clear message when sync script is not yet installed."""
+    state_in = dataclasses.replace(base_state, relations={_secondary_relation()})
     with (
-        patch.object(
-            DovecotCharm,
-            "_secondary_hostname",
-            new_callable=PropertyMock,
-            return_value="10.0.0.2",
-        ),
-        patch("charm.Path") as mock_path_cls,
+        patch.object(Path, "exists", _sync_script_exists_patch(False)),
         pytest.raises(ops.testing.ActionFailed) as exc_info,
     ):
-        mock_path_cls.return_value.exists.return_value = False
-        ctx.run(ctx.on.action("force-sync"), base_state)
+        ctx.run(ctx.on.action("force-sync"), state_in)
 
     assert "wait for the charm" in exc_info.value.message
