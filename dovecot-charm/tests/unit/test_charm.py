@@ -10,7 +10,6 @@ import ops
 import ops.testing
 import pytest
 
-from charm import DovecotCharm
 from constants import SYNC_TO_SECONDARY_TARGET
 from exceptions import ConfigurationError, HASetupError
 
@@ -138,9 +137,7 @@ def test_is_primary_true_when_unit_matches_config(ctx, base_state):
 
 def test_is_primary_false_when_unit_differs(ctx, base_state):
     """_is_primary returns False when primary-unit config doesn't match this unit."""
-    state_in = dataclasses.replace(
-        base_state, config=_non_primary_config(base_state.config)
-    )
+    state_in = dataclasses.replace(base_state, config=_non_primary_config(base_state.config))
     with (
         patch("charm.DovecotCharm._get_dovecot_config"),
         patch("charm.ensure_storage_ready"),
@@ -158,9 +155,7 @@ def test_is_primary_false_when_unit_differs(ctx, base_state):
 
 def test_reconcile_skips_sync_script_when_not_primary(ctx, base_state):
     """When this unit is NOT primary, sync script and cronjob are not installed."""
-    state_in = dataclasses.replace(
-        base_state, config=_non_primary_config(base_state.config)
-    )
+    state_in = dataclasses.replace(base_state, config=_non_primary_config(base_state.config))
     with (
         patch("charm.DovecotCharm._get_dovecot_config"),
         _reconcile_io_guards(),
@@ -248,9 +243,7 @@ def test_force_sync_success(ctx, base_state):
 
 def test_force_sync_not_primary(ctx, base_state):
     """force-sync must fail when executed on a non-primary unit."""
-    state_in = dataclasses.replace(
-        base_state, config=_non_primary_config(base_state.config)
-    )
+    state_in = dataclasses.replace(base_state, config=_non_primary_config(base_state.config))
     with pytest.raises(ops.testing.ActionFailed) as exc_info:
         ctx.run(ctx.on.action("force-sync"), state_in)
     assert "primary unit" in exc_info.value.message
