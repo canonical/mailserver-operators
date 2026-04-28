@@ -4,7 +4,7 @@
 """Dovecot charm configuration."""
 
 import logging
-import re
+import subprocess  # nosec
 from typing import TYPE_CHECKING
 
 from ops import ModelError, SecretNotFoundError
@@ -64,8 +64,8 @@ class DovecotConfig(BaseModel):
         description="LUKS passphrase from the luks-key secret. Required when luks_auto_provisioning is true.",
     )
     sync_schedule: str = Field(
-        "*/30 * * * *",
-        description="Cron schedule for syncing mail from primary to secondary units.",
+        "daily",
+        description="Systemd OnCalendar expression for syncing mail from primary to secondary units.",
     )
 
     @field_validator("luks_key", mode="after")
@@ -80,17 +80,21 @@ class DovecotConfig(BaseModel):
     @field_validator("sync_schedule", mode="after")
     @classmethod
     def _validate_sync_schedule(cls, value: str) -> str:
-        """Validate the cron schedule: 5 fields, safe characters only."""
+        """Validate the OnCalendar expression using systemd-analyze."""
         if "\n" in value or "\r" in value:
             raise ValueError("sync-schedule must not contain newlines")
-        fields = value.split()
-        if len(fields) != 5:
-            raise ValueError(f"sync-schedule must have exactly 5 fields, got {len(fields)}")
-        allowed = re.compile(r"^[0-9\*/,\-]+$")
-        for field in fields:
-            if not allowed.match(field):
-                raise ValueError(f"sync-schedule field {field!r} contains disallowed characters")
-        return " ".join(fields)
+        try:
+            subprocess.run(
+                ["/usr/bin/systemd-analyze", "calendar", value],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            raise ValueError(
+                f"sync-schedule {value!r} is not a valid OnCalendar expression: {e}"
+            ) from e
+        return value
 
     @field_validator("primary_unit", mode="after")
     @classmethod
@@ -135,7 +139,7 @@ class DovecotConfig(BaseModel):
                     "primary_unit": config.get("primary-unit"),
                     "luks_auto_provisioning": luks_auto_provisioning,
                     "luks_key": luks_key,
-                    "sync_schedule": config.get("sync-schedule", "*/30 * * * *"),
+                    "sync_schedule": config.get("sync-schedule", "daily"),
                 },
                 context={"charm": charm},
             )

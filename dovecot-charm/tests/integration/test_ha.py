@@ -88,28 +88,28 @@ def _get_last_sync_mtime(juju: jubilant.Juju, unit: str) -> int | None:
     return int(output) if output.isdigit() else None
 
 
-def _get_sync_cron_run_count(juju: jubilant.Juju, unit: str) -> int:
-    """Return count of sync-to-secondary cron executions from syslog."""
+def _get_sync_timer_run_count(juju: jubilant.Juju, unit: str) -> int:
+    """Return count of sync-to-secondary service invocations from the journal."""
     output = juju.exec(
-        "grep -c 'sync-to-secondary' /var/log/syslog 2>/dev/null || true",
+        "journalctl -u sync-to-secondary.service --no-pager -q 2>/dev/null | wc -l || true",
         unit=unit,
     ).stdout.strip()
     return int(output) if output.isdigit() else 0
 
 
 def _get_sync_log_content(juju: jubilant.Juju, unit: str, lines: int = 20) -> str:
-    """Return last N sync-to-secondary lines from syslog for debugging."""
+    """Return last N lines from the sync-to-secondary service journal for debugging."""
     output = juju.exec(
-        f"grep 'sync-to-secondary' /var/log/syslog 2>/dev/null | tail -n {lines} || echo 'No sync entries in syslog'",
+        f"journalctl -u sync-to-secondary.service --no-pager -n {lines} 2>/dev/null || echo 'No journal entries for sync-to-secondary'",
         unit=unit,
     ).stdout
     return output
 
 
-def _get_cron_file_content(juju: jubilant.Juju, unit: str) -> str | None:
-    """Return content of the sync-to-secondary cron file, or None if not present."""
+def _get_timer_status(juju: jubilant.Juju, unit: str) -> str | None:
+    """Return systemctl show output for the sync-to-secondary timer, or None if absent."""
     result = juju.exec(
-        "test -f /etc/cron.d/sync-to-secondary && cat /etc/cron.d/sync-to-secondary || true",
+        "systemctl show sync-to-secondary.timer --property=ActiveState,LastTriggerUSec 2>/dev/null || true",
         unit=unit,
     ).stdout.strip()
     return result if result else None
@@ -119,19 +119,19 @@ def _wait_for_sync_trigger(
     juju: jubilant.Juju,
     unit: str,
     previous_mtime: int | None,
-    previous_cron_count: int,
+    previous_timer_count: int,
     timeout: int = 4 * 60,
     poll_interval: int = 5,
 ) -> int:
     """Wait until /srv/mail/.last-dsync mtime advances, indicating a completed sync.
 
     The sync script touches .last-dsync only at the very end, so this is a
-    reliable end-of-sync marker. Syslog cron count is checked only to log
-    that the cron job appears to have fired while we continue waiting for
+    reliable end-of-sync marker. Journal timer count is checked only to log
+    that the timer appears to have fired while we continue waiting for
     .last-dsync to be updated.
     """
     deadline = time.time() + timeout
-    cron_fired = False
+    timer_fired = False
     while time.time() < deadline:
         current_mtime = _get_last_sync_mtime(juju, unit)
         if current_mtime is not None and (
@@ -139,18 +139,18 @@ def _wait_for_sync_trigger(
         ):
             return current_mtime
 
-        current_cron_count = _get_sync_cron_run_count(juju, unit)
-        if current_cron_count > previous_cron_count and not cron_fired:
+        current_timer_count = _get_sync_timer_run_count(juju, unit)
+        if current_timer_count > previous_timer_count and not timer_fired:
             logging.info(
-                "Cron fired (syslog count increased); waiting for .last-dsync to update..."
+                "Timer fired (journal count increased); waiting for .last-dsync to update..."
             )
-            cron_fired = True
+            timer_fired = True
 
         time.sleep(poll_interval)
 
     raise AssertionError(
         "Timed out waiting for sync trigger on "
-        f"{unit}; previous mtime={previous_mtime}, previous cron count={previous_cron_count}"
+        f"{unit}; previous mtime={previous_mtime}, previous timer count={previous_timer_count}"
     )
 
 
@@ -204,7 +204,7 @@ def test_force_sync_action(juju: jubilant.Juju, dovecot_charm_dual_unit: str):
 
 
 def test_auto_sync(juju: jubilant.Juju, dovecot_charm_dual_unit: str):
-    """Auto-sync via cron replicates mail from primary to secondary within 2 minutes."""
+    """Auto-sync via systemd timer replicates mail from primary to secondary within 2 minutes."""
     status = juju.status()
     units = sorted(
         status.apps[dovecot_charm_dual_unit].units.keys(), key=lambda x: int(x.split("/")[-1])
@@ -232,27 +232,27 @@ def test_auto_sync(juju: jubilant.Juju, dovecot_charm_dual_unit: str):
     juju.exec(f"echo 'test body' | mail -s '{subject}' {user}@localhost", unit=primary)
 
     previous_sync_mtime = _get_last_sync_mtime(juju, primary)
-    previous_cron_count = _get_sync_cron_run_count(juju, primary)
+    previous_timer_count = _get_sync_timer_run_count(juju, primary)
 
     try:
         # Lower sync schedule to every minute, wait for reconcile
-        logging.info("Setting sync-schedule to */1 * * * * (every minute)...")
-        juju.config(dovecot_charm_dual_unit, {"sync-schedule": "*/1 * * * *"})
+        logging.info("Setting sync-schedule to *:* (every minute)...")
+        juju.config(dovecot_charm_dual_unit, {"sync-schedule": "*:*"})
         juju.wait(jubilant.all_active, timeout=5 * 60)
 
-        logging.info(f"Cron file after config change:\n{_get_cron_file_content(juju, primary)}")
-        logging.info("Waiting for first cron-triggered sync signal on primary...")
-        _wait_for_sync_trigger(juju, primary, previous_sync_mtime, previous_cron_count)
+        logging.info(f"Timer status after config change:\n{_get_timer_status(juju, primary)}")
+        logging.info("Waiting for first timer-triggered sync signal on primary...")
+        _wait_for_sync_trigger(juju, primary, previous_sync_mtime, previous_timer_count)
 
         # Verify email arrived on secondary via IMAP
         secondary_ip = juju.status().apps[dovecot_charm_dual_unit].units[secondary].public_address
         logging.info(f"Checking for email on secondary via IMAP at {secondary_ip}:993...")
         synced = _check_mail_via_imap(secondary_ip, user, password, subject)
         if not synced:
-            logging.info("Email not found after first cron sync.")
+            logging.info("Email not found after first timer sync.")
             logging.info(f"Sync log on primary:\n{_get_sync_log_content(juju, primary)}")
-            logging.info("Cron file content:")
-            logging.info(_get_cron_file_content(juju, primary))
+            logging.info("Timer status:")
+            logging.info(_get_timer_status(juju, primary))
             logging.info("Trying manual sync as fallback to verify sync mechanism works...")
             juju.exec("/usr/local/bin/sync-to-secondary.sh", unit=primary)
             time.sleep(15)
@@ -265,5 +265,5 @@ def test_auto_sync(juju: jubilant.Juju, dovecot_charm_dual_unit: str):
     finally:
         # Reset sync-schedule to default
         logging.info("Resetting sync-schedule to default...")
-        juju.config(dovecot_charm_dual_unit, {"sync-schedule": "*/30 * * * *"})
+        juju.config(dovecot_charm_dual_unit, {"sync-schedule": "daily"})
         juju.wait(jubilant.all_active, timeout=5 * 60)

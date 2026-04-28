@@ -135,7 +135,7 @@ def test_is_primary_false_when_unit_differs(ctx, base_state):
 
 
 def test_reconcile_skips_sync_script_when_not_primary(ctx, base_state):
-    """When this unit is NOT primary, sync script and cronjob are not installed."""
+    """When this unit is NOT primary, sync script and timer are not installed."""
     # primary-unit must be a known unit; use the secondary (unit id 1 = dovecot-charm/1)
     # so that this unit (dovecot-charm/0) is not primary.
     state_in = dataclasses.replace(
@@ -146,20 +146,20 @@ def test_reconcile_skips_sync_script_when_not_primary(ctx, base_state):
 
     class _SpyHA(NoOpHAManager):
         install_called = False
-        cronjob_called = False
+        timer_called = False
 
         def install_mail_sync_script(self):
             _SpyHA.install_called = True
 
-        def setup_mail_sync_cronjob(self, dovecot_config):
-            _SpyHA.cronjob_called = True
+        def setup_mail_sync_timer(self, dovecot_config):
+            _SpyHA.timer_called = True
 
     with patch.object(DovecotTestCharm, "_ha", _SpyHA()):
         state_out = ctx.run(ctx.on.config_changed(), state_in)
 
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
     assert not _SpyHA.install_called
-    assert not _SpyHA.cronjob_called
+    assert not _SpyHA.timer_called
 
 
 # ---------------------------------------------------------------------------

@@ -181,7 +181,7 @@ class DovecotCharm(CharmBase):
             self._ha.sync_known_hosts()
             if self._is_primary:
                 self._ha.install_mail_sync_script()
-                self._ha.setup_mail_sync_cronjob(dovecot_config)
+                self._ha.setup_mail_sync_timer(dovecot_config)
         except HASetupError as e:
             self.unit.status = BlockedStatus(str(e))
             return

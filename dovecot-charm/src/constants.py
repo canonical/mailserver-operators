@@ -18,7 +18,6 @@ DOVECOT_CONF_TARGET = "/etc/dovecot/conf.d/99-local-dovecot-charm.conf"
 PROCMAILRC_TEMPLATE = "procmailrc.tmpl"
 PROCMAILRC_TARGET = "/etc/procmailrc"
 REQUIRED_PACKAGES = [
-    "cron",
     "cryptsetup",
     "dovecot-imapd",
     "dovecot-lmtpd",
@@ -50,9 +49,11 @@ TLS_CERT_DIR = Path("/etc/dovecot/private")
 
 # HA sync paths
 SYNC_TO_SECONDARY_TARGET = "/usr/local/bin/sync-to-secondary.sh"
-SYNC_TO_SECONDARY_CRONJOB_TARGET = "/etc/cron.d/sync-to-secondary"
+SYNC_TO_SECONDARY_SERVICE_TARGET = "/etc/systemd/system/sync-to-secondary.service"
+SYNC_TO_SECONDARY_TIMER_TARGET = "/etc/systemd/system/sync-to-secondary.timer"
 SYNC_TO_SECONDARY_TEMPLATE = "sync-to-secondary.sh.tmpl"
-SYNC_TO_SECONDARY_CRONJOB_TEMPLATE = "sync-to-secondary_cron.tmpl"
+SYNC_TO_SECONDARY_SERVICE_TEMPLATE = "sync-to-secondary.service.tmpl"
+SYNC_TO_SECONDARY_TIMER_TEMPLATE = "sync-to-secondary.timer.tmpl"
 
 SSHD_CONFIG = Path("/etc/ssh/sshd_config")
 SSHD_DROPIN_DIR = Path("/etc/ssh/sshd_config.d")

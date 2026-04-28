@@ -23,10 +23,12 @@ from constants import (
     SSHD_CONFIG,
     SSHD_DROPIN_DIR,
     SSHD_DROPIN_FILE,
-    SYNC_TO_SECONDARY_CRONJOB_TARGET,
-    SYNC_TO_SECONDARY_CRONJOB_TEMPLATE,
+    SYNC_TO_SECONDARY_SERVICE_TARGET,
+    SYNC_TO_SECONDARY_SERVICE_TEMPLATE,
     SYNC_TO_SECONDARY_TARGET,
     SYNC_TO_SECONDARY_TEMPLATE,
+    SYNC_TO_SECONDARY_TIMER_TARGET,
+    SYNC_TO_SECONDARY_TIMER_TEMPLATE,
 )
 from exceptions import HASetupError
 
@@ -41,7 +43,7 @@ class HAManager:
     """Manages high-availability setup between primary and secondary units.
 
     Handles SSH key exchange, authorized_keys/known_hosts population, sshd
-    configuration, and mail sync script/cronjob installation.  Injected into
+    configuration, and mail sync script/timer installation.  Injected into
     DovecotCharm so unit tests can substitute a no-op implementation without
     patching module-level functions.
     """
@@ -166,27 +168,39 @@ class HAManager:
         contents = template.render(template_context)
         host.write_file(SYNC_TO_SECONDARY_TARGET, contents, perms=0o755)
 
-    def setup_mail_sync_cronjob(self, dovecot_config: DovecotConfig) -> None:
-        """Set up the mail pool synchronization cronjob.
+    def setup_mail_sync_timer(self, dovecot_config: DovecotConfig) -> None:
+        """Set up the mail pool synchronisation systemd timer.
 
-        Skips writing and does not restart cron if the file content is unchanged.
+        Writes the .service and .timer unit files if their content has changed,
+        reloads the systemd daemon when needed, then enables and starts the timer.
+        Skips when the secondary hostname is not yet known.
         """
         if not self._charm._secondary_hostname:
-            logger.info("Secondary hostname not yet known; skipping cronjob setup")
+            logger.info("Secondary hostname not yet known; skipping timer setup")
             return
 
-        self._charm.unit.status = MaintenanceStatus("Setting up mail pool synchronization cronjob")
-        template_context = {
-            "schedule": dovecot_config.sync_schedule,
-        }
-        template = self._charm.jinja.get_template(SYNC_TO_SECONDARY_CRONJOB_TEMPLATE)
-        contents = template.render(template_context)
+        self._charm.unit.status = MaintenanceStatus("Setting up mail pool synchronisation timer")
 
-        cronjob_path = Path(SYNC_TO_SECONDARY_CRONJOB_TARGET)
-        if cronjob_path.exists() and cronjob_path.read_text() == contents:
-            return
+        service_contents = self._charm.jinja.get_template(
+            SYNC_TO_SECONDARY_SERVICE_TEMPLATE
+        ).render()
+        service_path = Path(SYNC_TO_SECONDARY_SERVICE_TARGET)
+        service_changed = not service_path.exists() or service_path.read_text() != service_contents
+        if service_changed:
+            host.write_file(SYNC_TO_SECONDARY_SERVICE_TARGET, service_contents, perms=0o644)
 
-        host.write_file(SYNC_TO_SECONDARY_CRONJOB_TARGET, contents, perms=0o644)
+        timer_contents = self._charm.jinja.get_template(SYNC_TO_SECONDARY_TIMER_TEMPLATE).render(
+            {"schedule": dovecot_config.sync_schedule}
+        )
+        timer_path = Path(SYNC_TO_SECONDARY_TIMER_TARGET)
+        timer_changed = not timer_path.exists() or timer_path.read_text() != timer_contents
+        if timer_changed:
+            host.write_file(SYNC_TO_SECONDARY_TIMER_TARGET, timer_contents, perms=0o644)
+
+        if service_changed or timer_changed:
+            systemd.daemon_reload()
+
+        systemd.service_resume("sync-to-secondary.timer")
 
     def _ensure_root_ssh_login(self, peer_ips: list[str]) -> None:
         """Set PermitRootLogin via an sshd drop-in restricted to peer addresses.

@@ -40,7 +40,9 @@ class FakeStorageManager(StorageManager):
         saved_paths:    List of dev_path values recorded by _save_storage_dev_path().
     """
 
-    def __init__(self, charm=None, *, mounted=True, saved_path=None, is_luks=True, mapper_exists=False):
+    def __init__(
+        self, charm=None, *, mounted=True, saved_path=None, is_luks=True, mapper_exists=False
+    ):
         self._charm = charm
         self.mounted = mounted
         self.saved_path = saved_path
@@ -101,7 +103,7 @@ class NoOpHAManager(HAManager):
     def install_mail_sync_script(self):
         pass
 
-    def setup_mail_sync_cronjob(self, dovecot_config):
+    def setup_mail_sync_timer(self, dovecot_config):
         pass
 
 

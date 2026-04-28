@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import dataclasses
+from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -65,58 +66,80 @@ _VALID_BASE = {
 
 
 class TestSyncScheduleValidation:
-    def test_valid_default(self):
+    """Tests for the sync_schedule OnCalendar validator.
+
+    Most tests patch subprocess.run to avoid a hard dependency on systemd-analyze
+    being present in the unit-test environment.  One live test verifies the
+    default value against the real binary.
+    """
+
+    _VALID_MOCK = MagicMock(returncode=0)
+
+    def _mock_valid(self):
+        return patch("dovecot_config.subprocess.run", return_value=self._VALID_MOCK)
+
+    def _mock_invalid(self):
+        return patch(
+            "dovecot_config.subprocess.run",
+            side_effect=CalledProcessError(1, "systemd-analyze", stderr="Invalid"),
+        )
+
+    def test_valid_default_live(self):
+        """The default 'daily' must be accepted by the real systemd-analyze."""
         cfg = DovecotConfig(**_VALID_BASE)
-        assert cfg.sync_schedule == "*/30 * * * *"
+        assert cfg.sync_schedule == "daily"
 
     def test_valid_every_minute(self):
-        cfg = DovecotConfig(**_VALID_BASE, sync_schedule="*/1 * * * *")
-        assert cfg.sync_schedule == "*/1 * * * *"
+        with self._mock_valid():
+            cfg = DovecotConfig(**_VALID_BASE, sync_schedule="*:*")
+        assert cfg.sync_schedule == "*:*"
 
-    def test_valid_specific_fields(self):
-        cfg = DovecotConfig(**_VALID_BASE, sync_schedule="0 4 * * 1")
-        assert cfg.sync_schedule == "0 4 * * 1"
+    def test_valid_hourly(self):
+        with self._mock_valid():
+            cfg = DovecotConfig(**_VALID_BASE, sync_schedule="hourly")
+        assert cfg.sync_schedule == "hourly"
 
-    def test_normalises_whitespace(self):
-        cfg = DovecotConfig(**_VALID_BASE, sync_schedule="*/30  *   *  * *")
-        assert cfg.sync_schedule == "*/30 * * * *"
+    def test_valid_daily(self):
+        with self._mock_valid():
+            cfg = DovecotConfig(**_VALID_BASE, sync_schedule="daily")
+        assert cfg.sync_schedule == "daily"
 
     def test_rejects_newline(self):
         with pytest.raises(ValidationError, match="must not contain newlines"):
-            DovecotConfig(**_VALID_BASE, sync_schedule="*/30 * * * *\nbad root /bin/evil")
+            DovecotConfig(**_VALID_BASE, sync_schedule="*:0/30\nbad")
 
-    def test_rejects_too_few_fields(self):
-        with pytest.raises(ValidationError, match="exactly 5 fields"):
-            DovecotConfig(**_VALID_BASE, sync_schedule="*/30 * * *")
+    def test_rejects_carriage_return(self):
+        with pytest.raises(ValidationError, match="must not contain newlines"):
+            DovecotConfig(**_VALID_BASE, sync_schedule="*:0/30\rbad")
 
-    def test_rejects_too_many_fields(self):
-        with pytest.raises(ValidationError, match="exactly 5 fields"):
-            DovecotConfig(**_VALID_BASE, sync_schedule="*/30 * * * * extra")
+    def test_rejects_invalid_expression(self):
+        with (
+            self._mock_invalid(),
+            pytest.raises(ValidationError, match="not a valid OnCalendar expression"),
+        ):
+            DovecotConfig(**_VALID_BASE, sync_schedule="not-a-calendar")
 
     def test_rejects_empty_string(self):
-        with pytest.raises(ValidationError, match="exactly 5 fields"):
+        with (
+            self._mock_invalid(),
+            pytest.raises(ValidationError, match="not a valid OnCalendar expression"),
+        ):
             DovecotConfig(**_VALID_BASE, sync_schedule="")
 
-    def test_rejects_command_substitution(self):
-        with pytest.raises(ValidationError, match="disallowed characters"):
-            DovecotConfig(**_VALID_BASE, sync_schedule="$(rm) * * * *")
+    def test_rejects_shell_injection(self):
+        with (
+            self._mock_invalid(),
+            pytest.raises(ValidationError, match="not a valid OnCalendar expression"),
+        ):
+            DovecotConfig(**_VALID_BASE, sync_schedule="$(rm -rf /)/")
 
-    def test_rejects_backticks(self):
-        with pytest.raises(ValidationError, match="disallowed characters"):
-            DovecotConfig(**_VALID_BASE, sync_schedule="`id` * * * *")
-
-    def test_rejects_semicolon(self):
-        with pytest.raises(ValidationError, match="disallowed characters"):
-            DovecotConfig(**_VALID_BASE, sync_schedule="*;id * * * *")
-
-    def test_rejects_pipe(self):
-        with pytest.raises(ValidationError, match="disallowed characters"):
-            DovecotConfig(**_VALID_BASE, sync_schedule="*|cat * * * *")
-
-    def test_rejects_alphabetic_field(self):
-        with pytest.raises(ValidationError, match="disallowed characters"):
-            DovecotConfig(**_VALID_BASE, sync_schedule="* * * * MON")
-
-    def test_rejects_question_mark(self):
-        with pytest.raises(ValidationError, match="disallowed characters"):
-            DovecotConfig(**_VALID_BASE, sync_schedule="? * * * *")
+    def test_calls_systemd_analyze_with_value(self):
+        """Validator must pass the schedule value directly to systemd-analyze calendar."""
+        with patch("dovecot_config.subprocess.run", return_value=self._VALID_MOCK) as mock_run:
+            DovecotConfig(**_VALID_BASE, sync_schedule="*:0/15")
+        mock_run.assert_called_once_with(
+            ["/usr/bin/systemd-analyze", "calendar", "*:0/15"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
