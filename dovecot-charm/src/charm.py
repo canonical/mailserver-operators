@@ -12,8 +12,7 @@ from pathlib import Path
 
 import jinja2
 import ops
-from charmhelpers.core import host
-from charmlibs import apt, systemd
+from charmlibs import apt
 from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
@@ -22,25 +21,19 @@ from ops.charm import CharmBase
 from ops.main import main
 from ops.model import BlockedStatus, MaintenanceStatus
 
-import ha
 from constants import (
-    DOVECOT_CONF_TARGET,
-    DOVECOT_CONF_TEMPLATE,
-    ENCRYPTED_MOUNTPOINT,
     HOSTNAME_FILE,
-    MAIL_ROOT,
     MAILNAME_FILE,
     PEER_RELATION_NAME,
-    PROCMAILRC_TARGET,
-    PROCMAILRC_TEMPLATE,
     REQUIRED_PACKAGES,
     SYNC_TO_SECONDARY_TARGET,
     TEMPLATES_DIR,
-    TLS_CERT_DIR,
 )
 from dovecot_config import DovecotConfig, DovecotConfigInvalidError, DovecotConfigSecretError
+from dovecot_setup import DovecotSetup
 from exceptions import CharmBlockedError, ConfigurationError, HASetupError
-from storage import ensure_storage_ready, teardown_detaching_storage
+from ha import HAManager
+from storage import StorageManager
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +43,10 @@ class DovecotCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+
+        self._storage = StorageManager(self)
+        self._dovecot_setup = DovecotSetup(self)
+        self._ha = HAManager(self)
 
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.start, self._reconcile)
@@ -163,28 +160,28 @@ class DovecotCharm(CharmBase):
             return
         try:
             dovecot_config = self._get_dovecot_config()
-            ensure_storage_ready(self, dovecot_config=dovecot_config)
-            teardown_detaching_storage(self)
+            self._storage.ensure_storage_ready(dovecot_config)
+            self._storage.teardown_detaching_storage()
         except CharmBlockedError as e:
             self.unit.status = BlockedStatus(str(e))
             return
-        if not shutil.which("doveconf"):
+        if not self._dovecot_setup.is_installed():
             logger.warning("Dovecot not installed yet, deferring configuration")
             return
         try:
-            self._setup_tls(dovecot_config)
-            self._setup_dovecot(dovecot_config)
-            self._setup_procmail()
+            self._dovecot_setup.setup_tls(dovecot_config)
+            self._dovecot_setup.setup_dovecot(dovecot_config)
+            self._dovecot_setup.setup_procmail()
         except ConfigurationError as e:
             self.unit.status = BlockedStatus(str(e))
             return
         try:
-            ha.setup_ssh_keys(self)
-            ha.sync_authorized_keys(self)
-            ha.sync_known_hosts(self)
+            self._ha.setup_ssh_keys()
+            self._ha.sync_authorized_keys()
+            self._ha.sync_known_hosts()
             if self._is_primary:
-                ha.install_mail_sync_script(self)
-                ha.setup_mail_sync_cronjob(self, dovecot_config)
+                self._ha.install_mail_sync_script()
+                self._ha.setup_mail_sync_cronjob(dovecot_config)
         except HASetupError as e:
             self.unit.status = BlockedStatus(str(e))
             return
@@ -206,80 +203,6 @@ class DovecotCharm(CharmBase):
         self.unit.open_port("tcp", 4190)
         self.unit.open_port("tcp", 9900)
 
-    def _setup_dovecot(self, dovecot_config: DovecotConfig) -> None:
-        """Set up and configure dovecot.
-
-        Raises:
-            ConfigurationError: If dovecot configuration validation fails.
-        """
-        self.unit.status = MaintenanceStatus("Setting up and configuring dovecot")
-        template_context = {
-            "dovecot_chroot": ENCRYPTED_MOUNTPOINT,
-            "mail_root": MAIL_ROOT,
-            "mailname": dovecot_config.mailname,
-            "postmaster_address": dovecot_config.postmaster_address,
-        }
-        template = self.jinja.get_template(DOVECOT_CONF_TEMPLATE)
-        contents = template.render(template_context)
-        host.write_file(DOVECOT_CONF_TARGET, contents, perms=0o644)
-        if not self._validate_dovecot_config(dovecot_config):
-            raise ConfigurationError("Invalid Dovecot configuration, check logs for details")
-        systemd.service_reload("dovecot", restart_on_failure=True)
-        self.unit.status = MaintenanceStatus("Dovecot configuration updated")
-
-    def _validate_dovecot_config(self, config: DovecotConfig) -> bool:
-        """Validate the Dovecot configuration.
-
-        Returns:
-            bool: True if configuration is valid, False otherwise.
-        """
-        try:
-            # The command and arguments are fixed literals with no user-controlled input.
-            subprocess.run(
-                ["/usr/bin/doveconf", "-c", DOVECOT_CONF_TARGET],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            return True
-        except subprocess.CalledProcessError as e:
-            logger.exception(f"Failed to validate dovecot configuration: {e}")
-            return False
-
-    def _setup_procmail(self) -> None:
-        """Set up and configure procmail default file.
-
-        Raises:
-            ConfigurationError: If postfix configuration fails.
-        """
-        self.unit.status = MaintenanceStatus("Setting up and configuring procmail")
-
-        # Ensure mail_root exists with permissions for delivery
-        mail_root = Path(MAIL_ROOT)
-        mail_root.mkdir(parents=True, exist_ok=True)
-        mail_root.chmod(0o1777)
-
-        template_context = {
-            "mail_root": MAIL_ROOT,
-        }
-        template = self.jinja.get_template(PROCMAILRC_TEMPLATE)
-        contents = template.render(template_context)
-        host.write_file(PROCMAILRC_TARGET, contents, perms=0o644)
-
-        # Configure Postfix to use procmail
-        try:
-            # The command and arguments are fixed literals with no user-controlled input.
-            subprocess.run(
-                ["/usr/sbin/postconf", "-e", 'mailbox_command=/usr/bin/procmail -a "$EXTENSION"'],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            systemd.service_reload("postfix", restart_on_failure=True)
-        except subprocess.CalledProcessError as e:
-            logger.exception(f"Failed to configure postfix: {e}")
-            raise ConfigurationError(f"Failed to configure postfix: {e.stderr}") from e
-
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""
         queue_to_clear = event.params.get("queue", "deferred")
@@ -296,7 +219,6 @@ class DovecotCharm(CharmBase):
             logger.info("Running clear-queue action: Deleting deferred mail from Postfix queue.")
 
         try:
-            # The command and arguments are fixed literals with no user-controlled input.
             result = subprocess.run(command, check=True, capture_output=True, text=True)
             event.set_results({"status": "success", "output": result.stdout})
         except subprocess.CalledProcessError as e:
@@ -344,47 +266,6 @@ class DovecotCharm(CharmBase):
             msg = f"Sync failed: {e}"
             logger.error(msg)
             event.fail(msg)
-
-    def _setup_tls(self, dovecot_config: DovecotConfig) -> None:
-        """Write TLS cert+key to disk from the certificates relation.
-
-        Called from _reconcile before _setup_dovecot so the cert files are
-        present when dovecot.conf is rendered and validated.
-
-        Raises:
-            ConfigurationError: If no TLS relation exists or the certificate
-                has not been issued yet.
-        """
-        if not self._tls:
-            raise ConfigurationError(
-                "TLS certificates relation not available. "
-                "Integrate with a TLS provider using the 'certificates' relation."
-            )
-
-        cert_request = CertificateRequestAttributes(
-            common_name=dovecot_config.mailname,
-            sans_dns=frozenset([dovecot_config.mailname]),
-        )
-        provider_cert, private_key = self._tls.get_assigned_certificate(cert_request)
-        if not provider_cert or not private_key:
-            raise ConfigurationError(
-                "TLS certificate not yet available from the certificates relation."
-            )
-
-        TLS_CERT_DIR.mkdir(parents=True, exist_ok=True)
-        cert_path = TLS_CERT_DIR / f"{dovecot_config.mailname}.pem"
-        key_path = TLS_CERT_DIR / f"{dovecot_config.mailname}.key"
-
-        cert_content = str(provider_cert.certificate)
-        if provider_cert.ca:
-            cert_content += "\n" + str(provider_cert.ca)
-        cert_path.write_text(cert_content)
-        cert_path.chmod(0o644)
-        logger.info(f"TLS certificate written to {cert_path}")
-
-        key_path.write_text(str(private_key))
-        key_path.chmod(0o600)
-        logger.info(f"TLS private key written to {key_path}")
 
 
 if __name__ == "__main__":  # pragma: nocover
