@@ -236,11 +236,11 @@ class HAManager:
             "    PermitRootLogin prohibit-password\n"
         )
 
-        if SSHD_DROPIN_FILE.exists() and SSHD_DROPIN_FILE.read_text() == drop_in_content:
-            return
-
         previous_exists = SSHD_DROPIN_FILE.exists()
         previous_content = SSHD_DROPIN_FILE.read_text() if previous_exists else None
+
+        if previous_exists and previous_content == drop_in_content:
+            return
 
         SSHD_DROPIN_DIR.mkdir(mode=0o755, parents=True, exist_ok=True)
         SSHD_DROPIN_FILE.write_text(drop_in_content)

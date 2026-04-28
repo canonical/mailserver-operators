@@ -8,6 +8,7 @@ import logging
 import shutil
 import subprocess  # nosec
 import typing
+from functools import cached_property
 from pathlib import Path
 
 import jinja2
@@ -106,12 +107,12 @@ class DovecotCharm(CharmBase):
         relation_data = event.relation.data[self.unit]
         relation_data["unit-name"] = self.unit.name
 
-    @property
+    @cached_property
     def _is_primary(self) -> bool:
         """Return True if this unit is the configured primary unit."""
         return self.unit.name == self.config.get("primary-unit", "")
 
-    @property
+    @cached_property
     def _secondary_hostname(self) -> typing.Optional[str]:
         """Return the hostname of the first remote peer unit, or None."""
         relation = self.model.get_relation(PEER_RELATION_NAME)
@@ -246,9 +247,8 @@ class DovecotCharm(CharmBase):
             return
 
         try:
-            cmd = [SYNC_TO_SECONDARY_TARGET]
-            logger.info(f"Running manual sync: {' '.join(cmd)}")
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            logger.info(f"Running manual sync: {SYNC_TO_SECONDARY_TARGET}")
+            subprocess.run([SYNC_TO_SECONDARY_TARGET], check=True, capture_output=True, text=True)
             event.set_results({"result": "Sync completed successfully"})
         except subprocess.CalledProcessError as e:
             parts = [
