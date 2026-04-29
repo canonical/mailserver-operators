@@ -5,6 +5,7 @@
 """Dovecot charm."""
 
 import logging
+import os
 import shutil
 import subprocess  # nosec
 import typing
@@ -24,6 +25,7 @@ from ops.model import BlockedStatus, MaintenanceStatus
 
 from constants import (
     HOSTNAME_FILE,
+    MAIL_ROOT,
     MAILNAME_FILE,
     PEER_RELATION_NAME,
     REQUIRED_PACKAGES,
@@ -54,6 +56,9 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._reconcile)
         self.framework.observe(self.on.upgrade_charm, self._on_install)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
+        self.framework.observe(self.on.gdpr_archive_action, self._on_gdpr_archive)
+        self.framework.observe(self.on.gdpr_delete_action, self._on_gdpr_delete)
+        self.framework.observe(self.on.gdpr_takeout_action, self._on_gdpr_takeout)
         self.framework.observe(self.on.mail_data_storage_attached, self._reconcile)
         self.framework.observe(self.on.mail_data_storage_detaching, self._reconcile)
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._reconcile)
@@ -67,6 +72,10 @@ class DovecotCharm(CharmBase):
         self.jinja = jinja2.Environment(
             loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True
         )
+
+        # GDPR archive/takeout directories
+        self.gdpr_archive_dir = "/srv/mail/archives"
+        self.gdpr_takeout_dir = "/tmp/gdpr-takeout"  # noqa: S108
 
         self._tls = None
         mailname = self.config.get("mailname", "")
@@ -225,6 +234,137 @@ class DovecotCharm(CharmBase):
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to clear Postfix queue: {e.stderr}")
             event.fail(f"Failed to run postsuper: {e.stderr}")
+
+    def _on_gdpr_archive(self, event):
+        """Archive a user's mailbox for long-term retention."""
+        username = event.params["username"]
+        compress = event.params.get("compress", True)
+        archive_dir = f"{self.gdpr_archive_dir}/{username}"
+
+        logger.info(f"GDPR archive: archiving mailbox for user '{username}'")
+
+        try:
+            os.makedirs(archive_dir, exist_ok=True)
+
+            subprocess.run(
+                ["doveadm", "backup", "-u", username, f"mdbox:{archive_dir}/"],  # noqa: S607
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            logger.info(f"Mailbox for '{username}' backed up to {archive_dir}")
+
+            result_path = archive_dir
+            if compress:
+                tar_path = f"{self.gdpr_archive_dir}/{username}.tar.gz"
+                subprocess.run(
+                    ["tar", "-czf", tar_path, "-C", self.gdpr_archive_dir, username],  # noqa: S607
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                shutil.rmtree(archive_dir)
+                result_path = tar_path
+                logger.info(f"Archive compressed to {tar_path}")
+
+            event.set_results({"status": "success", "path": result_path})
+        except subprocess.CalledProcessError as e:
+            msg = f"Failed to archive mailbox for '{username}': {e.stderr}"
+            logger.error(msg)
+            event.fail(msg)
+
+    def _on_gdpr_delete(self, event):
+        """Permanently delete a user's mailbox (GDPR right to erasure)."""
+        username = event.params["username"]
+        confirm = event.params.get("confirm", False)
+
+        if not confirm:
+            event.fail("Deletion not confirmed. Set confirm=true to proceed.")
+            return
+
+        logger.warning(f"GDPR delete: permanently deleting mailbox for user '{username}'")
+
+        try:
+            subprocess.run(
+                ["doveadm", "expunge", "-u", username, "mailbox", "*", "all"],  # noqa: S607
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            logger.info(f"All mail expunged for user '{username}'")
+
+            user_mail_dir = os.path.join(MAIL_ROOT, username)
+            if os.path.exists(user_mail_dir):
+                shutil.rmtree(user_mail_dir)
+                logger.info(f"Mail directory removed: {user_mail_dir}")
+
+            event.set_results(
+                {"status": "success", "message": f"Mailbox for '{username}' deleted"}
+            )
+        except subprocess.CalledProcessError as e:
+            msg = f"Failed to delete mailbox for '{username}': {e.stderr}"
+            logger.error(msg)
+            event.fail(msg)
+
+    def _on_gdpr_takeout(self, event):
+        """Export a user's mail data in a portable format (GDPR data portability)."""
+        username = event.params["username"]
+        export_format = event.params.get("format", "maildir")
+        export_dir = f"{self.gdpr_takeout_dir}/{username}"
+
+        logger.info(f"GDPR takeout: exporting mailbox for user '{username}' as {export_format}")
+
+        try:
+            os.makedirs(export_dir, exist_ok=True)
+
+            if export_format == "maildir":
+                subprocess.run(
+                    [  # noqa: S607
+                        "doveadm",
+                        "sync",
+                        "-u",
+                        username,
+                        f"maildir:{export_dir}/:LAYOUT=fs",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            else:
+                mbox_path = f"{export_dir}/{username}.mbox"
+                result = subprocess.run(
+                    [  # noqa: S607
+                        "doveadm",
+                        "fetch",
+                        "-u",
+                        username,
+                        "text",
+                        "mailbox",
+                        "*",
+                        "all",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                with open(mbox_path, "w") as f:  # noqa: PTH123
+                    f.write(result.stdout)
+
+            tar_path = f"{self.gdpr_takeout_dir}/{username}-takeout.tar.gz"
+            subprocess.run(
+                ["tar", "-czf", tar_path, "-C", self.gdpr_takeout_dir, username],  # noqa: S607
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            shutil.rmtree(export_dir)
+
+            logger.info(f"Takeout export created at {tar_path}")
+            event.set_results({"status": "success", "path": tar_path})
+        except subprocess.CalledProcessError as e:
+            msg = f"Failed to export mailbox for '{username}': {e.stderr}"
+            logger.error(msg)
+            event.fail(msg)
 
     def _on_force_sync(self, event):
         """Force synchronization with secondary unit."""
