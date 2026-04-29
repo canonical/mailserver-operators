@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 
 import logging
-import subprocess
+import subprocess  # nosec B404
 import time
 import typing
 
@@ -78,7 +78,7 @@ def test_dovecot_auth_metrics(juju: jubilant.Juju, dovecot_charm: str):
 def test_prometheus_alert_rules_present(juju: jubilant.Juju, dovecot_charm: str):
     """Verify Prometheus alert rules files are present in the charm."""
     logging.info("Checking for Prometheus alert rules...")
-    endpoint_check = subprocess.run(
+    endpoint_check = subprocess.run(  # nosec B607
         ["juju", "show-application", dovecot_charm, "--format", "json"],
         capture_output=True,
         text=True,
@@ -92,7 +92,7 @@ def test_prometheus_alert_rules_present(juju: jubilant.Juju, dovecot_charm: str)
 def test_grafana_dashboard_present(juju: jubilant.Juju, dovecot_charm: str):
     """Verify Grafana dashboard files are present in the charm."""
     logging.info("Checking for Grafana dashboard...")
-    endpoint_check = subprocess.run(
+    endpoint_check = subprocess.run(  # nosec B607
         ["juju", "show-application", dovecot_charm, "--format", "json"],
         capture_output=True,
         text=True,
@@ -106,7 +106,7 @@ def test_grafana_dashboard_present(juju: jubilant.Juju, dovecot_charm: str):
 def test_loki_log_rules_present(juju: jubilant.Juju, dovecot_charm: str):
     """Verify Loki log alert rules are present in the charm."""
     logging.info("Checking for Loki log alert rules...")
-    endpoint_check = subprocess.run(
+    endpoint_check = subprocess.run(  # nosec B607
         ["juju", "show-application", dovecot_charm, "--format", "json"],
         capture_output=True,
         text=True,

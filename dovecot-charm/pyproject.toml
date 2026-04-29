@@ -44,6 +44,9 @@ unit = [
   "pydantic",
   "pytest",
 ]
+static = [
+  "bandit[toml]",
+]
 coverage-report = [
   "coverage[toml]",
   "pytest",
@@ -132,17 +135,6 @@ lint.per-file-ignores."tests/*" = [
   "D415",
   "D417",
   "S",
-]
-lint.per-file-ignores."src/charms/*" = [
-  "B006",
-  "B028",
-  "RUF100",
-  "S101",
-  "SIM102",
-  "SIM103",
-  "UP015",
-  "UP032",
-  "UP042",
 ]
 lint.flake8-copyright.author = "Canonical Ltd."
 lint.flake8-copyright.min-file-size = 1
