@@ -244,7 +244,8 @@ class DovecotCharm(CharmBase):
         logger.info(f"GDPR archive: archiving mailbox for user '{username}'")
 
         try:
-            os.makedirs(archive_dir, exist_ok=True)
+            os.makedirs(archive_dir, mode=0o700, exist_ok=True)
+            os.chmod(archive_dir, 0o700)
 
             subprocess.run(
                 [DOVEADM_BIN, "backup", "-u", username, f"mdbox:{archive_dir}/"],
