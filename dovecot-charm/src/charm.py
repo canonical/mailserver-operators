@@ -237,6 +237,9 @@ class DovecotCharm(CharmBase):
 
     def _on_gdpr_archive(self, event):
         """Archive a user's mailbox for long-term retention."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
         username = event.params["username"]
         compress = event.params.get("compress", True)
         archive_dir = f"{GDPR_ARCHIVE_DIR}/{username}"
@@ -285,6 +288,9 @@ class DovecotCharm(CharmBase):
 
     def _on_gdpr_delete(self, event):
         """Permanently delete a user's mailbox (GDPR right to erasure)."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
         username = event.params["username"]
         confirm = event.params.get("confirm", False)
 
@@ -322,6 +328,9 @@ class DovecotCharm(CharmBase):
 
     def _on_gdpr_takeout(self, event):
         """Export a user's mail data in a portable format (GDPR data portability)."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
         username = event.params["username"]
         export_format = event.params.get("format", "maildir")
         export_dir = f"{GDPR_TAKEOUT_DIR}/{username}"
@@ -383,7 +392,8 @@ class DovecotCharm(CharmBase):
             logger.error(f"Binary not found: {e.filename}")
             event.fail(msg)
         except subprocess.CalledProcessError as e:
-            msg = f"Failed to export mailbox for '{username}': {e.stderr}"
+            stderr = e.stderr.decode(errors="replace") if isinstance(e.stderr, bytes) else e.stderr
+            msg = f"Failed to export mailbox for '{username}': {stderr}"
             logger.error(msg)
             event.fail(msg)
         finally:

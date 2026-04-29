@@ -125,13 +125,8 @@ def _setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, passwo
     )
     juju.exec(f"echo '{user}:{password}' | chpasswd", unit=unit_name)
     juju.exec(f"usermod -aG mail {user}", unit=unit_name)
-    juju.exec(
-        (
-            f"install -d -m 0700 -o {user} -g mail {MAIL_ROOT}/{user} && "
-            f"doveadm mailbox create -u {user} INBOX 2>/dev/null || true"
-        ),
-        unit=unit_name,
-    )
+    juju.exec(f"install -d -m 0700 -o {user} -g mail {MAIL_ROOT}/{user}", unit=unit_name)
+    juju.exec(f"doveadm mailbox create -u {user} INBOX 2>/dev/null || true", unit=unit_name)
     juju.exec(
         (
             f"printf 'From: {user}@example.com\\nSubject: GDPR test\\n\\ntest body\\n' | "

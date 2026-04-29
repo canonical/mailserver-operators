@@ -233,6 +233,25 @@ def test_force_sync_script_not_installed(ctx, base_state):
 
 
 @pytest.mark.parametrize(
+    "action_name,params",
+    [
+        ("gdpr-archive", {"username": "alice", "compress": False}),
+        ("gdpr-delete", {"username": "alice", "confirm": True}),
+        ("gdpr-takeout", {"username": "alice", "format": "maildir"}),
+    ],
+)
+def test_gdpr_actions_require_primary(ctx, base_state, action_name, params):
+    """GDPR actions must fail immediately when run on a non-primary unit."""
+    non_primary_state = dataclasses.replace(
+        base_state,
+        config={**base_state.config, "primary-unit": "dovecot-charm/99"},
+    )
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(ctx.on.action(action_name, params=params), non_primary_state)
+    assert "primary" in exc_info.value.message.lower()
+
+
+@pytest.mark.parametrize(
     "compress,expected_suffix",
     [(True, "alice.tar.gz"), (False, "alice")],
 )
