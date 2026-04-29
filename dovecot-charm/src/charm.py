@@ -24,6 +24,7 @@ from ops.main import main
 from ops.model import BlockedStatus, MaintenanceStatus
 
 from constants import (
+    DOVEADM_BIN,
     GDPR_ARCHIVE_DIR,
     GDPR_TAKEOUT_DIR,
     HOSTNAME_FILE,
@@ -32,6 +33,7 @@ from constants import (
     PEER_RELATION_NAME,
     REQUIRED_PACKAGES,
     SYNC_TO_SECONDARY_TARGET,
+    TAR_BIN,
     TEMPLATES_DIR,
 )
 from dovecot_config import DovecotConfig, DovecotConfigInvalidError, DovecotConfigSecretError
@@ -249,7 +251,7 @@ class DovecotCharm(CharmBase):
             os.makedirs(archive_dir, exist_ok=True)
 
             subprocess.run(
-                ["doveadm", "backup", "-u", username, f"mdbox:{archive_dir}/"],  # noqa: S607
+                [DOVEADM_BIN, "backup", "-u", username, f"mdbox:{archive_dir}/"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -260,7 +262,7 @@ class DovecotCharm(CharmBase):
             if compress:
                 tar_path = f"{self.gdpr_archive_dir}/{username}.tar.gz"
                 subprocess.run(
-                    ["tar", "-czf", tar_path, "-C", self.gdpr_archive_dir, username],  # noqa: S607
+                    [TAR_BIN, "-czf", tar_path, "-C", self.gdpr_archive_dir, username],
                     check=True,
                     capture_output=True,
                     text=True,
@@ -288,7 +290,7 @@ class DovecotCharm(CharmBase):
 
         try:
             subprocess.run(
-                ["doveadm", "expunge", "-u", username, "mailbox", "*", "all"],  # noqa: S607
+                [DOVEADM_BIN, "expunge", "-u", username, "mailbox", "*", "all"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -321,8 +323,8 @@ class DovecotCharm(CharmBase):
 
             if export_format == "maildir":
                 subprocess.run(
-                    [  # noqa: S607
-                        "doveadm",
+                    [
+                        DOVEADM_BIN,
                         "sync",
                         "-u",
                         username,
@@ -335,8 +337,8 @@ class DovecotCharm(CharmBase):
             else:
                 mbox_path = f"{export_dir}/{username}.mbox"
                 result = subprocess.run(
-                    [  # noqa: S607
-                        "doveadm",
+                    [
+                        DOVEADM_BIN,
                         "fetch",
                         "-u",
                         username,
@@ -349,12 +351,12 @@ class DovecotCharm(CharmBase):
                     capture_output=True,
                     text=True,
                 )
-                with open(mbox_path, "w") as f:  # noqa: PTH123
+                with open(mbox_path, "w") as f:
                     f.write(result.stdout)
 
             tar_path = f"{self.gdpr_takeout_dir}/{username}-takeout.tar.gz"
             subprocess.run(
-                ["tar", "-czf", tar_path, "-C", self.gdpr_takeout_dir, username],  # noqa: S607
+                [TAR_BIN, "-czf", tar_path, "-C", self.gdpr_takeout_dir, username],
                 check=True,
                 capture_output=True,
                 text=True,
