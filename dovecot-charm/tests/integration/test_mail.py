@@ -17,7 +17,7 @@ def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):
     unit_name = f"{dovecot_charm}/0"
     logging.info(f"Updating primary-unit config to {unit_name}...")
     juju.config(dovecot_charm, {"primary-unit": unit_name})
-    juju.wait(jubilant.all_active, timeout=300)
+    juju.wait(jubilant.all_active, timeout=5 * 60)
 
     password = token_hex(8)
     logging.info("Configuring user 'ubuntu'...")

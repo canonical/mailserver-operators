@@ -4,6 +4,7 @@
 """Dovecot charm configuration."""
 
 import logging
+import subprocess  # nosec
 from typing import TYPE_CHECKING
 
 from ops import ModelError, SecretNotFoundError
@@ -62,6 +63,10 @@ class DovecotConfig(BaseModel):
         "",
         description="LUKS passphrase from the luks-key secret. Required when luks_auto_provisioning is true.",
     )
+    sync_schedule: str = Field(
+        "daily",
+        description="Systemd OnCalendar expression for syncing mail from primary to secondary units.",
+    )
 
     @field_validator("luks_key", mode="after")
     @classmethod
@@ -70,6 +75,25 @@ class DovecotConfig(BaseModel):
         luks_auto_provisioning = info.data.get("luks_auto_provisioning", False)
         if luks_auto_provisioning and not value:
             raise ValueError("luks-key secret must be set when luks-auto-provisioning is enabled")
+        return value
+
+    @field_validator("sync_schedule", mode="after")
+    @classmethod
+    def _validate_sync_schedule(cls, value: str) -> str:
+        """Validate the OnCalendar expression using systemd-analyze."""
+        if "\n" in value or "\r" in value:
+            raise ValueError("sync-schedule must not contain newlines")
+        try:
+            subprocess.run(
+                ["/usr/bin/systemd-analyze", "calendar", value],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            raise ValueError(
+                f"sync-schedule {value!r} is not a valid OnCalendar expression: {e}"
+            ) from e
         return value
 
     @field_validator("primary_unit", mode="after")
@@ -115,6 +139,7 @@ class DovecotConfig(BaseModel):
                     "primary_unit": config.get("primary-unit"),
                     "luks_auto_provisioning": luks_auto_provisioning,
                     "luks_key": luks_key,
+                    "sync_schedule": config.get("sync-schedule", "daily"),
                 },
                 context={"charm": charm},
             )

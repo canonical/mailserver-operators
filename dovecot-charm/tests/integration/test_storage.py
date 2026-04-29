@@ -17,7 +17,7 @@ def test_luks_storage_auto_provisioning(juju: jubilant.Juju, dovecot_charm: str)
     logging.info(f"Targeting unit: {unit_name}")
 
     logging.info("Waiting for charm to be active with storage attached...")
-    juju.wait(jubilant.all_active, timeout=600)
+    juju.wait(jubilant.all_active, timeout=10 * 60)
 
     logging.info("Verifying LUKS setup...")
     juju.exec("ls -l /dev/mapper/mail-data", unit=unit_name)
@@ -126,7 +126,7 @@ def test_luks_storage_manual_provisioning(juju: jubilant.Juju, dovecot_charm_man
     juju.config(dovecot_charm_manual_storage, {"mailname": "example1.com"})
 
     logging.info("Waiting for charm to become active...")
-    juju.wait(jubilant.all_active, timeout=300)
+    juju.wait(jubilant.all_active, timeout=5 * 60)
 
     # Verify LUKS device status
     logging.info("Verifying LUKS device is properly configured...")
@@ -182,7 +182,7 @@ def test_data_persists_across_restart(juju: jubilant.Juju, dovecot_charm: str):
 
     # Wait for charm to re-settle after reboot
     logging.info("Waiting for charm to re-settle...")
-    juju.wait(jubilant.all_active, timeout=600)
+    juju.wait(jubilant.all_active, timeout=10 * 60)
 
     # After reboot the Juju storage API may not yet be re-provisioned when the
     # start hook fires; the charm defers and retries until LUKS open + mount

@@ -18,7 +18,6 @@ DOVECOT_CONF_TARGET = "/etc/dovecot/conf.d/99-local-dovecot-charm.conf"
 PROCMAILRC_TEMPLATE = "procmailrc.tmpl"
 PROCMAILRC_TARGET = "/etc/procmailrc"
 REQUIRED_PACKAGES = [
-    "cron",
     "cryptsetup",
     "dovecot-imapd",
     "dovecot-lmtpd",
@@ -47,3 +46,17 @@ PEER_RELATION_NAME = "replicas"
 STORAGE_DEV_PATH_FILE = "/var/lib/dovecot-charm/storage-dev-path"
 
 TLS_CERT_DIR = Path("/etc/dovecot/private")
+
+# HA sync paths
+SYNC_TO_SECONDARY_TARGET = "/usr/local/bin/sync-to-secondary.sh"
+SYNC_TO_SECONDARY_SERVICE_TARGET = "/etc/systemd/system/sync-to-secondary.service"
+SYNC_TO_SECONDARY_TIMER_TARGET = "/etc/systemd/system/sync-to-secondary.timer"
+SYNC_TO_SECONDARY_TEMPLATE = "sync-to-secondary.sh.tmpl"
+SYNC_TO_SECONDARY_SERVICE_TEMPLATE = "sync-to-secondary.service.tmpl"
+SYNC_TO_SECONDARY_TIMER_TEMPLATE = "sync-to-secondary.timer.tmpl"
+
+SSHD_CONFIG = Path("/etc/ssh/sshd_config")
+SSHD_DROPIN_DIR = Path("/etc/ssh/sshd_config.d")
+SSHD_DROPIN_FILE = SSHD_DROPIN_DIR / "99-dovecot-ha.conf"
+SSH_DIR = Path("/root/.ssh")
+SSH_HOST_KEY_FILE = Path("/etc/ssh/ssh_host_ed25519_key.pub")

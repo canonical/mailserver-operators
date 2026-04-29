@@ -78,7 +78,7 @@ def dovecot_charm(
     try:
         logging.info("Adding TLS relation...")
         juju.integrate(f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
-    except Exception:
+    except jubilant.CLIError:
         logging.info("TLS relation already there...")
     logging.info("Waiting for active status...")
     juju.wait(
@@ -119,7 +119,7 @@ def dovecot_charm_manual_storage(
     try:
         logging.info("Adding TLS relation...")
         juju.integrate(f"{charm_name}:certificates", f"{tls_charm}:certificates")
-    except Exception:
+    except jubilant.CLIError:
         logging.info("TLS relation already there...")
 
     logging.info("Waiting for blocked status...")
@@ -140,3 +140,63 @@ def tls_charm(juju: jubilant.Juju) -> str:
         logging.info(f"{tls_app} already deployed, skipping deployment.")
 
     return tls_app
+
+
+@pytest.fixture(scope="module")
+def dovecot_charm_dual_unit(
+    charm: str,
+    juju: jubilant.Juju,
+    tls_charm: str,
+) -> str:
+    """Build and deploy the charm."""
+    logging.info(f"Checking for existing application {APP_NAME}...")
+    luks_key = token_hex(16)
+
+    if not juju.status().apps.get(APP_NAME):
+        logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
+
+        secret_id = juju.cli("add-secret", "dovecot-luks-key", f"key={luks_key}").strip()
+        logging.info(f"Created LUKS secret: {secret_id}")
+
+        config = {
+            "mailname": "example.com",
+            "postmaster-address": "postmaster@example.com",
+            "primary-unit": f"{APP_NAME}/0",
+            "luks-auto-provisioning": True,
+            "luks-key": secret_id,
+        }
+        charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
+        juju.deploy(
+            charm_path,
+            app=APP_NAME,
+            config=config,
+            constraints={"virt-type": "virtual-machine"},
+            trust=True,
+            num_units=2,
+        )
+    else:
+        if len(juju.status().apps[APP_NAME].units) < 2:
+            logging.info("Adding the second unit...")
+            juju.add_unit(APP_NAME, num_units=1)
+
+        def two_units_active(status):
+            app = status.apps.get(APP_NAME)
+            if not app or len(app.units) < 2:
+                return False
+            return jubilant.all_active(status)
+
+        logging.info("Waiting for 2 units to be active...")
+        juju.wait(two_units_active, timeout=10 * 60)
+
+    juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
+    try:
+        logging.info("Adding TLS relation...")
+        juju.integrate(f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
+    except jubilant.CLIError:
+        logging.info("TLS relation already there...")
+    logging.info("Waiting for active status...")
+    juju.wait(
+        lambda status: jubilant.all_active(status, APP_NAME, tls_charm),
+        timeout=10 * 60,
+    )
+    return APP_NAME

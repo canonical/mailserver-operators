@@ -29,3 +29,9 @@ class ConfigurationError(CharmBlockedError):
     """Raised when charm or service configuration is invalid or fails."""
 
     pass
+
+
+class HASetupError(CharmBlockedError):
+    """Raised when HA setup (SSH keys, sync scripts, sshd config, etc.) fails."""
+
+    pass

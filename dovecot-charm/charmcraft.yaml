@@ -83,9 +83,10 @@ config:
       type: string
     sync-schedule:
       description: |
-        Cron schedule for syncing mail from primary to secondary units.
-        Format: standard cron expression (e.g., "*/30 * * * *" for every 30 minutes).
-      default: "*/30 * * * *"
+        Systemd OnCalendar expression for syncing mail from primary to secondary units.
+        Format: systemd calendar syntax (e.g., "*:0/30" for every 30 minutes,
+        "hourly", "daily"). See systemd.time(7) for full syntax reference.
+      default: "daily"
       type: string
 
 actions:
@@ -97,3 +98,5 @@ actions:
         description: The queue to clear (deferred or all).
         default: deferred
         enum: [deferred, all]
+  force-sync:
+    description: Manually trigger synchronization of mail to the secondary unit.

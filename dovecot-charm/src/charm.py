@@ -8,12 +8,12 @@ import logging
 import shutil
 import subprocess  # nosec
 import typing
+from functools import cached_property
 from pathlib import Path
 
 import jinja2
 import ops
-from charmhelpers.core import host
-from charmlibs import apt, systemd
+from charmlibs import apt
 from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
@@ -23,22 +23,18 @@ from ops.main import main
 from ops.model import BlockedStatus, MaintenanceStatus
 
 from constants import (
-    DOVECOT_CONF_TARGET,
-    DOVECOT_CONF_TEMPLATE,
-    ENCRYPTED_MOUNTPOINT,
     HOSTNAME_FILE,
-    MAIL_ROOT,
     MAILNAME_FILE,
     PEER_RELATION_NAME,
-    PROCMAILRC_TARGET,
-    PROCMAILRC_TEMPLATE,
     REQUIRED_PACKAGES,
+    SYNC_TO_SECONDARY_TARGET,
     TEMPLATES_DIR,
-    TLS_CERT_DIR,
 )
 from dovecot_config import DovecotConfig, DovecotConfigInvalidError, DovecotConfigSecretError
-from exceptions import CharmBlockedError, ConfigurationError
-from storage import ensure_storage_ready, teardown_detaching_storage
+from dovecot_setup import DovecotSetup
+from exceptions import CharmBlockedError, ConfigurationError, HASetupError
+from ha import HAManager
+from storage import StorageManager
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +45,10 @@ class DovecotCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
-        # Events
+        self._storage = StorageManager(self)
+        self._dovecot_setup = DovecotSetup(self)
+        self._ha = HAManager(self)
+
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.start, self._reconcile)
         self.framework.observe(self.on.config_changed, self._reconcile)
@@ -57,17 +56,18 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
         self.framework.observe(self.on.mail_data_storage_attached, self._reconcile)
         self.framework.observe(self.on.mail_data_storage_detaching, self._reconcile)
+        self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._reconcile)
+        self.framework.observe(self.on.force_sync_action, self._on_force_sync)
 
         self.framework.observe(
             self.on[PEER_RELATION_NAME].relation_created,
             self._on_peer_relation_created,
         )
-        # Template system
+
         self.jinja = jinja2.Environment(
             loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True
         )
 
-        # TLS certificates integration
         self._tls = None
         mailname = self.config.get("mailname", "")
         if mailname:
@@ -107,6 +107,23 @@ class DovecotCharm(CharmBase):
         relation_data = event.relation.data[self.unit]
         relation_data["unit-name"] = self.unit.name
 
+    @cached_property
+    def _is_primary(self) -> bool:
+        """Return True if this unit is the configured primary unit."""
+        return self.unit.name == self.config.get("primary-unit", "")
+
+    @cached_property
+    def _secondary_hostname(self) -> typing.Optional[str]:
+        """Return the hostname of the first remote peer unit, or None."""
+        relation = self.model.get_relation(PEER_RELATION_NAME)
+        if not relation:
+            return None
+        for unit in relation.units:
+            hostname = relation.data[unit].get("hostname")
+            if hostname:
+                return hostname
+        return None
+
     def _get_dovecot_config(self) -> DovecotConfig:
         """Craft the DovecotConfig from charm configuration and validate it.
 
@@ -135,30 +152,45 @@ class DovecotCharm(CharmBase):
         self._reconcile(event)
 
     def _reconcile(self, event):
-        """Reconcile charm state for install, upgrade, config-changed, and storage events."""
+        """Reconcile charm state."""
         self.unit.status = MaintenanceStatus("Configuring charm")
+        if len(self.get_units()) > 2:
+            self.unit.status = BlockedStatus(
+                "Only one primary and one secondary unit are supported; remove extra units"
+            )
+            return
         try:
             dovecot_config = self._get_dovecot_config()
-            ensure_storage_ready(self, dovecot_config=dovecot_config)
-            teardown_detaching_storage(self)
+            self._storage.ensure_storage_ready(dovecot_config)
+            self._storage.teardown_detaching_storage()
         except CharmBlockedError as e:
             self.unit.status = BlockedStatus(str(e))
             return
-        if not shutil.which("doveconf"):
+        if not self._dovecot_setup.is_installed():
             logger.warning("Dovecot not installed yet, deferring configuration")
             return
         try:
-            self._setup_tls(dovecot_config)
-            self._setup_dovecot(dovecot_config)
-            self._setup_procmail()
+            self._dovecot_setup.setup_tls(dovecot_config)
+            self._dovecot_setup.setup_dovecot(dovecot_config)
+            self._dovecot_setup.setup_procmail()
         except ConfigurationError as e:
+            self.unit.status = BlockedStatus(str(e))
+            return
+        try:
+            self._ha.setup_ssh_keys()
+            self._ha.sync_authorized_keys()
+            self._ha.sync_known_hosts()
+            if self._is_primary:
+                self._ha.install_mail_sync_script()
+                self._ha.setup_mail_sync_timer(dovecot_config)
+        except HASetupError as e:
             self.unit.status = BlockedStatus(str(e))
             return
         self._open_ports()
         self.unit.status = ops.ActiveStatus()
 
     def _install(self):
-        """Perform basic installation."""
+        """Install required packages and set up mailname."""
         self.unit.status = MaintenanceStatus("Installing required dependencies")
         apt.update()
         apt.add_package(REQUIRED_PACKAGES)
@@ -171,80 +203,6 @@ class DovecotCharm(CharmBase):
         self.unit.open_port("tcp", 995)
         self.unit.open_port("tcp", 4190)
         self.unit.open_port("tcp", 9900)
-
-    def _setup_dovecot(self, dovecot_config: DovecotConfig) -> None:
-        """Set up and configure dovecot.
-
-        Raises:
-            ConfigurationError: If dovecot configuration validation fails.
-        """
-        self.unit.status = MaintenanceStatus("Setting up and configuring dovecot")
-        template_context = {
-            "dovecot_chroot": ENCRYPTED_MOUNTPOINT,
-            "mail_root": MAIL_ROOT,
-            "mailname": dovecot_config.mailname,
-            "postmaster_address": dovecot_config.postmaster_address,
-        }
-        template = self.jinja.get_template(DOVECOT_CONF_TEMPLATE)
-        contents = template.render(template_context)
-        host.write_file(DOVECOT_CONF_TARGET, contents, perms=0o644)
-        if not self._validate_dovecot_config(dovecot_config):
-            raise ConfigurationError("Invalid Dovecot configuration, check logs for details")
-        systemd.service_reload("dovecot", restart_on_failure=True)
-        self.unit.status = MaintenanceStatus("Dovecot configuration updated")
-
-    def _validate_dovecot_config(self, config: DovecotConfig) -> bool:
-        """Validate the Dovecot configuration.
-
-        Returns:
-            bool: True if configuration is valid, False otherwise.
-        """
-        try:
-            # The command and arguments are fixed literals with no user-controlled input.
-            subprocess.run(
-                ["/usr/bin/doveconf", "-c", DOVECOT_CONF_TARGET],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            return True
-        except subprocess.CalledProcessError as e:
-            logger.exception(f"Failed to validate dovecot configuration: {e}")
-            return False
-
-    def _setup_procmail(self) -> None:
-        """Set up and configure procmail default file.
-
-        Raises:
-            ConfigurationError: If postfix configuration fails.
-        """
-        self.unit.status = MaintenanceStatus("Setting up and configuring procmail")
-
-        # Ensure mail_root exists with permissions for delivery
-        mail_root = Path(MAIL_ROOT)
-        mail_root.mkdir(parents=True, exist_ok=True)
-        mail_root.chmod(0o1777)
-
-        template_context = {
-            "mail_root": MAIL_ROOT,
-        }
-        template = self.jinja.get_template(PROCMAILRC_TEMPLATE)
-        contents = template.render(template_context)
-        host.write_file(PROCMAILRC_TARGET, contents, perms=0o644)
-
-        # Configure Postfix to use procmail
-        try:
-            # The command and arguments are fixed literals with no user-controlled input.
-            subprocess.run(
-                ["/usr/sbin/postconf", "-e", 'mailbox_command=/usr/bin/procmail -a "$EXTENSION"'],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            systemd.service_reload("postfix", restart_on_failure=True)
-        except subprocess.CalledProcessError as e:
-            logger.exception(f"Failed to configure postfix: {e}")
-            raise ConfigurationError(f"Failed to configure postfix: {e.stderr}") from e
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""
@@ -262,53 +220,52 @@ class DovecotCharm(CharmBase):
             logger.info("Running clear-queue action: Deleting deferred mail from Postfix queue.")
 
         try:
-            # The command and arguments are fixed literals with no user-controlled input.
             result = subprocess.run(command, check=True, capture_output=True, text=True)
             event.set_results({"status": "success", "output": result.stdout})
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to clear Postfix queue: {e.stderr}")
             event.fail(f"Failed to run postsuper: {e.stderr}")
 
-    def _setup_tls(self, dovecot_config: DovecotConfig) -> None:
-        """Write TLS cert+key to disk from the certificates relation.
+    def _on_force_sync(self, event):
+        """Force synchronization with secondary unit."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
 
-        Called from _reconcile before _setup_dovecot so the cert files are
-        present when dovecot.conf is rendered and validated.
-
-        Raises:
-            ConfigurationError: If no TLS relation exists or the certificate
-                has not been issued yet.
-        """
-        if not self._tls:
-            raise ConfigurationError(
-                "TLS certificates relation not available. "
-                "Integrate with a TLS provider using the 'certificates' relation."
+        if not self._secondary_hostname:
+            event.fail(
+                "Secondary unit hostname is not yet known. "
+                "Ensure a second unit is deployed and has joined the peer relation."
             )
+            return
 
-        cert_request = CertificateRequestAttributes(
-            common_name=dovecot_config.mailname,
-            sans_dns=frozenset([dovecot_config.mailname]),
-        )
-        provider_cert, private_key = self._tls.get_assigned_certificate(cert_request)
-        if not provider_cert or not private_key:
-            raise ConfigurationError(
-                "TLS certificate not yet available from the certificates relation."
+        if not Path(SYNC_TO_SECONDARY_TARGET).exists():
+            event.fail(
+                "Sync script not yet installed. "
+                "Please wait for the charm to reach active state before running force-sync."
             )
+            return
 
-        TLS_CERT_DIR.mkdir(parents=True, exist_ok=True)
-        cert_path = TLS_CERT_DIR / f"{dovecot_config.mailname}.pem"
-        key_path = TLS_CERT_DIR / f"{dovecot_config.mailname}.key"
-
-        cert_content = str(provider_cert.certificate)
-        if provider_cert.ca:
-            cert_content += "\n" + str(provider_cert.ca)
-        cert_path.write_text(cert_content)
-        cert_path.chmod(0o644)
-        logger.info(f"TLS certificate written to {cert_path}")
-
-        key_path.write_text(str(private_key))
-        key_path.chmod(0o600)
-        logger.info(f"TLS private key written to {key_path}")
+        try:
+            logger.info(f"Running manual sync: {SYNC_TO_SECONDARY_TARGET}")
+            subprocess.run([SYNC_TO_SECONDARY_TARGET], check=True, capture_output=True, text=True)
+            event.set_results({"result": "Sync completed successfully"})
+        except subprocess.CalledProcessError as e:
+            parts = [
+                f"Sync failed with exit code {e.returncode} while running "
+                f"{' '.join(e.cmd) if isinstance(e.cmd, (list, tuple)) else e.cmd}"
+            ]
+            if e.stderr and e.stderr.strip():
+                parts.append(f"stderr: {e.stderr.strip()}")
+            if e.stdout and e.stdout.strip():
+                parts.append(f"stdout: {e.stdout.strip()}")
+            msg = ". ".join(parts)
+            logger.error(msg)
+            event.fail(msg)
+        except FileNotFoundError as e:
+            msg = f"Sync failed: {e}"
+            logger.error(msg)
+            event.fail(msg)
 
 
 if __name__ == "__main__":  # pragma: nocover
