@@ -18,11 +18,11 @@ from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
 )
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import BlockedStatus, MaintenanceStatus
 
-from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from constants import (
     HOSTNAME_FILE,
     MAILNAME_FILE,
