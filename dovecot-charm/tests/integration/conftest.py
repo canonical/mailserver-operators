@@ -79,6 +79,8 @@ def dovecot_charm(
         juju.wait(
             lambda status: jubilant.all_agents_idle(status, APP_NAME),
             timeout=10 * 60,
+            successes=5,
+            delay=10,
         )
         logging.info("all agents idle.")
     juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
@@ -125,6 +127,8 @@ def dovecot_charm_manual_storage(
         juju.wait(
             lambda status: jubilant.all_agents_idle(status, APP_NAME),
             timeout=10 * 60,
+            successes=5,
+            delay=10,
         )
         logging.info("all agents idle.")
     try:
@@ -189,6 +193,8 @@ def dovecot_charm_dual_unit(
         juju.wait(
             lambda status: jubilant.all_agents_idle(status, APP_NAME),
             timeout=10 * 60,
+            successes=5,
+            delay=10,
         )
         logging.info("all agents idle.")
     else:
