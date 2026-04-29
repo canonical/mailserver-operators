@@ -25,7 +25,6 @@ from ops.model import BlockedStatus, MaintenanceStatus
 
 from constants import (
     HOSTNAME_FILE,
-    MAIL_ROOT,
     MAILNAME_FILE,
     PEER_RELATION_NAME,
     REQUIRED_PACKAGES,
