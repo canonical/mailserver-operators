@@ -8,7 +8,19 @@ on:
 
 jobs:
   publish-to-edge:
+    strategy:
+      matrix:
+        configuration:
+          [
+            {
+              working-directory: "./dovecot-charm",
+              channel: "latest/edge",
+              tag-prefix: "dovecot",
+            },
+          ]
     uses: canonical/operator-workflows/.github/workflows/publish_charm.yaml@main
     secrets: inherit
     with:
-      channel: latest/edge
+      channel: ${{ matrix.configuration.channel }}
+      working-directory: ${{ matrix.configuration.working-directory }}
+      tag-prefix: ${{ matrix.configuration.tag-prefix }}
