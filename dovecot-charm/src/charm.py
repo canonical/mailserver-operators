@@ -258,22 +258,27 @@ class DovecotCharm(CharmBase):
             result_path = archive_dir
             if compress:
                 tar_path = f"{GDPR_ARCHIVE_DIR}/{username}.tar.gz"
-                subprocess.run(
-                    [TAR_BIN, "-czf", tar_path, "-C", GDPR_ARCHIVE_DIR, username],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
+                try:
+                    subprocess.run(
+                        [TAR_BIN, "-czf", tar_path, "-C", GDPR_ARCHIVE_DIR, username],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    shutil.rmtree(archive_dir, ignore_errors=True)
+                    raise
                 shutil.rmtree(archive_dir)
                 result_path = tar_path
                 logger.info(f"Archive compressed to {tar_path}")
 
             event.set_results({"status": "success", "path": result_path})
         except FileNotFoundError as e:
-            msg = f"Required binary not found: {e.filename}. Is dovecot-core installed?"
-            logger.error(msg)
+            msg = "Please wait for the charm to finish installing before running this action."
+            logger.error(f"Binary not found: {e.filename}")
             event.fail(msg)
         except subprocess.CalledProcessError as e:
+            shutil.rmtree(archive_dir, ignore_errors=True)
             msg = f"Failed to archive mailbox for '{username}': {e.stderr}"
             logger.error(msg)
             event.fail(msg)
@@ -307,8 +312,8 @@ class DovecotCharm(CharmBase):
                 {"status": "success", "message": f"Mailbox for '{username}' deleted"}
             )
         except FileNotFoundError as e:
-            msg = f"Required binary not found: {e.filename}. Is dovecot-core installed?"
-            logger.error(msg)
+            msg = "Please wait for the charm to finish installing before running this action."
+            logger.error(f"Binary not found: {e.filename}")
             event.fail(msg)
         except subprocess.CalledProcessError as e:
             msg = f"Failed to delete mailbox for '{username}': {e.stderr}"
@@ -341,23 +346,22 @@ class DovecotCharm(CharmBase):
                 )
             else:
                 mbox_path = f"{export_dir}/{username}.mbox"
-                result = subprocess.run(
-                    [
-                        DOVEADM_BIN,
-                        "fetch",
-                        "-u",
-                        username,
-                        "text",
-                        "mailbox",
-                        "*",
-                        "all",
-                    ],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-                with open(mbox_path, "w") as f:
-                    f.write(result.stdout)
+                with open(mbox_path, "wb") as f:
+                    subprocess.run(
+                        [
+                            DOVEADM_BIN,
+                            "fetch",
+                            "-u",
+                            username,
+                            "text",
+                            "mailbox",
+                            "*",
+                            "all",
+                        ],
+                        check=True,
+                        stdout=f,
+                        stderr=subprocess.PIPE,
+                    )
 
             tar_path = f"{GDPR_TAKEOUT_DIR}/{username}-takeout.tar.gz"
             subprocess.run(
@@ -371,13 +375,16 @@ class DovecotCharm(CharmBase):
             logger.info(f"Takeout export created at {tar_path}")
             event.set_results({"status": "success", "path": tar_path})
         except FileNotFoundError as e:
-            msg = f"Required binary not found: {e.filename}. Is dovecot-core installed?"
-            logger.error(msg)
+            msg = "Please wait for the charm to finish installing before running this action."
+            logger.error(f"Binary not found: {e.filename}")
             event.fail(msg)
         except subprocess.CalledProcessError as e:
             msg = f"Failed to export mailbox for '{username}': {e.stderr}"
             logger.error(msg)
             event.fail(msg)
+        finally:
+            if os.path.isdir(export_dir):
+                shutil.rmtree(export_dir, ignore_errors=True)
 
     def _on_force_sync(self, event):
         """Force synchronization with secondary unit."""

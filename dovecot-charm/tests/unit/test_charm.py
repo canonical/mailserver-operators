@@ -4,7 +4,7 @@
 import dataclasses
 from pathlib import Path
 from subprocess import CalledProcessError  # nosec
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import ops
 import ops.testing
@@ -236,12 +236,14 @@ def test_force_sync_script_not_installed(ctx, base_state):
     "compress,expected_suffix",
     [(True, "alice.tar.gz"), (False, "alice")],
 )
-def test_gdpr_archive(ctx, base_state, compress, expected_suffix):
+def test_gdpr_archive(ctx, base_state, tmp_path, compress, expected_suffix):
     """gdpr-archive succeeds and returns the expected path based on compress flag."""
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "alice").mkdir()
     with (
+        patch("charm.GDPR_ARCHIVE_DIR", str(archive_dir)),
         patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
-        patch("charm.os.makedirs"),
-        patch("charm.shutil.rmtree"),
     ):
         ctx.run(
             ctx.on.action("gdpr-archive", params={"username": "alice", "compress": compress}),
@@ -251,14 +253,16 @@ def test_gdpr_archive(ctx, base_state, compress, expected_suffix):
     assert expected_suffix in ctx.action_results["path"]
 
 
-def test_gdpr_archive_failure(ctx, base_state):
+def test_gdpr_archive_failure(ctx, base_state, tmp_path):
     """gdpr-archive must fail when doveadm backup exits non-zero."""
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
     with (
+        patch("charm.GDPR_ARCHIVE_DIR", str(archive_dir)),
         patch(
             "charm.subprocess.run",
             side_effect=CalledProcessError(1, "doveadm", stderr="error"),
         ),
-        patch("charm.os.makedirs"),
         pytest.raises(ops.testing.ActionFailed) as exc_info,
     ):
         ctx.run(
@@ -278,25 +282,27 @@ def test_gdpr_delete_no_confirm(ctx, base_state):
     assert "confirm" in exc_info.value.message.lower()
 
 
-def test_gdpr_delete_confirmed(ctx, base_state):
+def test_gdpr_delete_confirmed(ctx, base_state, tmp_path):
     """gdpr-delete with confirm=true expunges mail and removes the mail directory."""
+    mail_dir = tmp_path / "alice"
+    mail_dir.mkdir()
     with (
+        patch("charm.MAIL_ROOT", str(tmp_path)),
         patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
-        patch("charm.os.path.exists", return_value=True),
-        patch("charm.shutil.rmtree"),
     ):
         ctx.run(
             ctx.on.action("gdpr-delete", params={"username": "alice", "confirm": True}),
             base_state,
         )
     assert ctx.action_results["status"] == "success"
+    assert not mail_dir.exists()
 
 
-def test_gdpr_delete_no_mail_dir(ctx, base_state):
+def test_gdpr_delete_no_mail_dir(ctx, base_state, tmp_path):
     """gdpr-delete succeeds even when the mail directory does not exist."""
     with (
+        patch("charm.MAIL_ROOT", str(tmp_path)),
         patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
-        patch("charm.os.path.exists", return_value=False),
     ):
         ctx.run(
             ctx.on.action("gdpr-delete", params={"username": "alice", "confirm": True}),
@@ -322,13 +328,14 @@ def test_gdpr_delete_expunge_fails(ctx, base_state):
 
 
 @pytest.mark.parametrize("export_format", ["maildir", "mbox"])
-def test_gdpr_takeout(ctx, base_state, export_format):
+def test_gdpr_takeout(ctx, base_state, tmp_path, export_format):
     """gdpr-takeout succeeds for both maildir and mbox formats."""
+    takeout_dir = tmp_path / "takeout"
+    takeout_dir.mkdir()
+    (takeout_dir / "alice").mkdir()
     with (
-        patch("charm.subprocess.run", return_value=MagicMock(returncode=0, stdout="mail content")),
-        patch("charm.os.makedirs"),
-        patch("charm.shutil.rmtree"),
-        patch("builtins.open", mock_open()),
+        patch("charm.GDPR_TAKEOUT_DIR", str(takeout_dir)),
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
     ):
         ctx.run(
             ctx.on.action("gdpr-takeout", params={"username": "alice", "format": export_format}),
@@ -337,14 +344,16 @@ def test_gdpr_takeout(ctx, base_state, export_format):
     assert ctx.action_results["status"] == "success"
 
 
-def test_gdpr_takeout_failure(ctx, base_state):
+def test_gdpr_takeout_failure(ctx, base_state, tmp_path):
     """gdpr-takeout must fail when doveadm exits non-zero."""
+    takeout_dir = tmp_path / "takeout"
+    takeout_dir.mkdir()
     with (
+        patch("charm.GDPR_TAKEOUT_DIR", str(takeout_dir)),
         patch(
             "charm.subprocess.run",
             side_effect=CalledProcessError(1, "doveadm", stderr="ghost"),
         ),
-        patch("charm.os.makedirs"),
         pytest.raises(ops.testing.ActionFailed) as exc_info,
     ):
         ctx.run(
@@ -354,10 +363,12 @@ def test_gdpr_takeout_failure(ctx, base_state):
     assert "ghost" in exc_info.value.message
 
 
-def test_gdpr_archive_binary_not_found(ctx, base_state):
+def test_gdpr_archive_binary_not_found(ctx, base_state, tmp_path):
     """gdpr-archive must fail clearly when doveadm binary is missing."""
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
     with (
-        patch("charm.os.makedirs"),
+        patch("charm.GDPR_ARCHIVE_DIR", str(archive_dir)),
         patch(
             "charm.subprocess.run",
             side_effect=FileNotFoundError(2, "No such file", "/usr/bin/doveadm"),
@@ -368,4 +379,4 @@ def test_gdpr_archive_binary_not_found(ctx, base_state):
             ctx.on.action("gdpr-archive", params={"username": "alice", "compress": False}),
             base_state,
         )
-    assert "not found" in exc_info.value.message.lower()
+    assert "wait for the charm" in exc_info.value.message.lower()

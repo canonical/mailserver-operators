@@ -121,7 +121,7 @@ actions:
         type: boolean
         default: false
         description: Must be set to true to proceed with deletion.
-    required: [username, confirm]
+    required: [username]
   gdpr-takeout:
     description: Export a user's mail data in a portable format (GDPR data portability).
     params:
