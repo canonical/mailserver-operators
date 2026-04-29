@@ -1,3 +1,5 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
 # Prometheus alert rules for imap-server charm
 # Adapted from canonical-is-prometheus/is/mail.rules
 # COS agent automatically injects juju_model/juju_unit topology labels
