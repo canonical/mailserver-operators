@@ -107,10 +107,6 @@ def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
     _assert_queue_empty(juju, unit_name)
 
 
-# ---------------------------------------------------------------------------
-# GDPR action helpers
-# ---------------------------------------------------------------------------
-
 GDPR_TEST_USER = "gdpr-testuser"
 GDPR_TEST_PASSWORD = secrets.token_hex(16)
 MAIL_ROOT = "/srv/mail"
@@ -136,7 +132,6 @@ def _setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, passwo
         ),
         unit=unit_name,
     )
-    # Inject one test message so there is mail to archive/export/delete
     juju.exec(
         (
             f"printf 'From: {user}@example.com\\nSubject: GDPR test\\n\\ntest body\\n' | "
@@ -152,64 +147,31 @@ def _teardown_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str) -> 
     juju.exec(f"rm -rf {MAIL_ROOT}/{user}", unit=unit_name)
 
 
-# ---------------------------------------------------------------------------
-# GDPR archive action
-# ---------------------------------------------------------------------------
-
-
+@pytest.mark.parametrize("compress", [True, False])
 @pytest.mark.usefixtures("dovecot_charm")
-def test_gdpr_archive_compressed(juju: jubilant.Juju, dovecot_charm: str):
-    """gdpr-archive with compress=True creates a .tar.gz archive on the unit."""
+def test_gdpr_archive(juju: jubilant.Juju, dovecot_charm: str, compress: bool):
+    """gdpr-archive creates the expected output based on compress flag."""
     unit_name = f"{dovecot_charm}/0"
     _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
     try:
-        logging.info("Running gdpr-archive action (compress=True)...")
         result = juju.run(
             unit_name,
             "gdpr-archive",
-            params={"username": GDPR_TEST_USER, "compress": True},
+            params={"username": GDPR_TEST_USER, "compress": compress},
         )
         assert result.status == "completed"
         assert result.results.get("status") == "success"
         archive_path = result.results.get("path", "")
-        assert archive_path.endswith(".tar.gz"), f"Expected .tar.gz path, got: {archive_path}"
-        logging.info(f"Archive created at: {archive_path}")
-        # Verify the file actually exists on the unit
-        juju.exec(f"test -f {archive_path}", unit=unit_name)
+        if compress:
+            assert archive_path.endswith(".tar.gz")
+            juju.exec(f"test -f {archive_path}", unit=unit_name)
+        else:
+            assert not archive_path.endswith(".tar.gz")
+            juju.exec(f"test -d {archive_path}", unit=unit_name)
     finally:
         _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
         juju.exec(f"rm -f {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}.tar.gz", unit=unit_name)
         juju.exec(f"rm -rf {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}", unit=unit_name)
-
-
-@pytest.mark.usefixtures("dovecot_charm")
-def test_gdpr_archive_uncompressed(juju: jubilant.Juju, dovecot_charm: str):
-    """gdpr-archive with compress=False creates an uncompressed backup directory."""
-    unit_name = f"{dovecot_charm}/0"
-    _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
-    try:
-        logging.info("Running gdpr-archive action (compress=False)...")
-        result = juju.run(
-            unit_name,
-            "gdpr-archive",
-            params={"username": GDPR_TEST_USER, "compress": False},
-        )
-        assert result.status == "completed"
-        assert result.results.get("status") == "success"
-        archive_path = result.results.get("path", "")
-        assert not archive_path.endswith(".tar.gz"), (
-            f"Expected directory path, got: {archive_path}"
-        )
-        logging.info(f"Archive directory at: {archive_path}")
-        juju.exec(f"test -d {archive_path}", unit=unit_name)
-    finally:
-        _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
-        juju.exec(f"rm -rf {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}", unit=unit_name)
-
-
-# ---------------------------------------------------------------------------
-# GDPR delete action
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.usefixtures("dovecot_charm")
@@ -218,7 +180,6 @@ def test_gdpr_delete_requires_confirm(juju: jubilant.Juju, dovecot_charm: str):
     unit_name = f"{dovecot_charm}/0"
     _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
     try:
-        logging.info("Running gdpr-delete without confirmation...")
         result = juju.run(
             unit_name,
             "gdpr-delete",
@@ -226,7 +187,6 @@ def test_gdpr_delete_requires_confirm(juju: jubilant.Juju, dovecot_charm: str):
         )
         assert result.status == "failed"
         assert "confirm" in result.message.lower()
-        # Mail directory must still exist
         juju.exec(f"test -d {MAIL_ROOT}/{GDPR_TEST_USER}", unit=unit_name)
     finally:
         _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
@@ -238,7 +198,6 @@ def test_gdpr_delete_confirmed(juju: jubilant.Juju, dovecot_charm: str):
     unit_name = f"{dovecot_charm}/0"
     _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
     try:
-        logging.info("Running gdpr-delete with confirmation...")
         result = juju.run(
             unit_name,
             "gdpr-delete",
@@ -246,62 +205,27 @@ def test_gdpr_delete_confirmed(juju: jubilant.Juju, dovecot_charm: str):
         )
         assert result.status == "completed"
         assert result.results.get("status") == "success"
-        # Mail directory must be gone
-        juju.exec(
-            f"test ! -d {MAIL_ROOT}/{GDPR_TEST_USER}",
-            unit=unit_name,
-        )
-        logging.info(f"Mail directory for {GDPR_TEST_USER} removed as expected")
+        juju.exec(f"test ! -d {MAIL_ROOT}/{GDPR_TEST_USER}", unit=unit_name)
     finally:
-        # User account cleanup (mail dir already gone on success path)
         juju.exec(f"userdel {GDPR_TEST_USER} 2>/dev/null || true", unit=unit_name)
 
 
-# ---------------------------------------------------------------------------
-# GDPR takeout action
-# ---------------------------------------------------------------------------
-
-
+@pytest.mark.parametrize("export_format", ["maildir", "mbox"])
 @pytest.mark.usefixtures("dovecot_charm")
-def test_gdpr_takeout_maildir(juju: jubilant.Juju, dovecot_charm: str):
-    """gdpr-takeout with format=maildir creates a tarball of the user's mail in Maildir format."""
+def test_gdpr_takeout(juju: jubilant.Juju, dovecot_charm: str, export_format: str):
+    """gdpr-takeout creates a tarball for the given export format."""
     unit_name = f"{dovecot_charm}/0"
     _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
     try:
-        logging.info("Running gdpr-takeout action (format=maildir)...")
         result = juju.run(
             unit_name,
             "gdpr-takeout",
-            params={"username": GDPR_TEST_USER, "format": "maildir"},
+            params={"username": GDPR_TEST_USER, "format": export_format},
         )
         assert result.status == "completed"
         assert result.results.get("status") == "success"
         takeout_path = result.results.get("path", "")
-        assert takeout_path.endswith(".tar.gz"), f"Expected .tar.gz path, got: {takeout_path}"
-        logging.info(f"Takeout archive at: {takeout_path}")
-        juju.exec(f"test -f {takeout_path}", unit=unit_name)
-    finally:
-        _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
-        juju.exec(f"rm -f {GDPR_TAKEOUT_DIR}/{GDPR_TEST_USER}-takeout.tar.gz", unit=unit_name)
-
-
-@pytest.mark.usefixtures("dovecot_charm")
-def test_gdpr_takeout_mbox(juju: jubilant.Juju, dovecot_charm: str):
-    """gdpr-takeout with format=mbox creates a tarball containing an mbox file."""
-    unit_name = f"{dovecot_charm}/0"
-    _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
-    try:
-        logging.info("Running gdpr-takeout action (format=mbox)...")
-        result = juju.run(
-            unit_name,
-            "gdpr-takeout",
-            params={"username": GDPR_TEST_USER, "format": "mbox"},
-        )
-        assert result.status == "completed"
-        assert result.results.get("status") == "success"
-        takeout_path = result.results.get("path", "")
-        assert takeout_path.endswith(".tar.gz"), f"Expected .tar.gz path, got: {takeout_path}"
-        logging.info(f"Takeout archive at: {takeout_path}")
+        assert takeout_path.endswith(".tar.gz")
         juju.exec(f"test -f {takeout_path}", unit=unit_name)
     finally:
         _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)

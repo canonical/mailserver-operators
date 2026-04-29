@@ -14,10 +14,6 @@ from testing import DovecotTestCharm, NoOpDovecotSetup, NoOpHAManager
 from constants import SYNC_TO_SECONDARY_TARGET
 from exceptions import ConfigurationError, HASetupError
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 PEER_RELATION_NAME = "replicas"
 
 
@@ -46,11 +42,6 @@ def _sync_script_exists_patch(exists: bool):
     return _patched
 
 
-# ---------------------------------------------------------------------------
-# Reconcile — status and ports
-# ---------------------------------------------------------------------------
-
-
 def test_reconcile_sets_active_on_success(ctx, base_state):
     """Reconcile must reach ActiveStatus when all setup steps succeed."""
     state_out = ctx.run(ctx.on.config_changed(), base_state)
@@ -62,11 +53,6 @@ def test_reconcile_opens_mail_ports(ctx, base_state):
     state_out = ctx.run(ctx.on.config_changed(), base_state)
     expected = {ops.testing.TCPPort(p) for p in [993, 995, 4190, 9900]}
     assert state_out.opened_ports == expected
-
-
-# ---------------------------------------------------------------------------
-# Reconcile — blocked on setup failures
-# ---------------------------------------------------------------------------
 
 
 def test_reconcile_blocks_when_dovecot_setup_fails(ctx, base_state):
@@ -111,11 +97,6 @@ def test_reconcile_blocks_when_ha_setup_fails(ctx, base_state):
     assert "SSH keygen failed" in state_out.unit_status.message
 
 
-# ---------------------------------------------------------------------------
-# HA: _is_primary
-# ---------------------------------------------------------------------------
-
-
 def test_is_primary_true_when_unit_matches_config(ctx, base_state):
     """_is_primary returns True when primary-unit config matches this unit."""
     with ctx(ctx.on.config_changed(), base_state) as mgr:
@@ -127,11 +108,6 @@ def test_is_primary_false_when_unit_differs(ctx, base_state):
     state_in = dataclasses.replace(base_state, config=_non_primary_config(base_state.config))
     with ctx(ctx.on.config_changed(), state_in) as mgr:
         assert mgr.charm._is_primary is False
-
-
-# ---------------------------------------------------------------------------
-# HA: sync script installed only on primary
-# ---------------------------------------------------------------------------
 
 
 def test_reconcile_skips_sync_script_when_not_primary(ctx, base_state):
@@ -160,11 +136,6 @@ def test_reconcile_skips_sync_script_when_not_primary(ctx, base_state):
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
     assert not _SpyHA.install_called
     assert not _SpyHA.timer_called
-
-
-# ---------------------------------------------------------------------------
-# Clear-queue action
-# ---------------------------------------------------------------------------
 
 
 def test_clear_queue_deferred(ctx, base_state):
@@ -206,11 +177,6 @@ def test_clear_queue_failure(ctx, base_state):
     ):
         ctx.run(ctx.on.action("clear-queue", params={"queue": "deferred"}), base_state)
     assert "postsuper" in exc_info.value.message
-
-
-# ---------------------------------------------------------------------------
-# Force-sync action
-# ---------------------------------------------------------------------------
 
 
 def test_force_sync_success(ctx, base_state):
@@ -266,40 +232,23 @@ def test_force_sync_script_not_installed(ctx, base_state):
     assert "wait for the charm" in exc_info.value.message
 
 
-# ---------------------------------------------------------------------------
-# GDPR archive action
-# ---------------------------------------------------------------------------
-
-
-def test_gdpr_archive_compressed(ctx, base_state):
-    """gdpr-archive with compress=True produces a .tar.gz and cleans up the staging dir."""
-    mock_result = MagicMock(returncode=0)
+@pytest.mark.parametrize(
+    "compress,expected_suffix",
+    [(True, "alice.tar.gz"), (False, "alice")],
+)
+def test_gdpr_archive(ctx, base_state, compress, expected_suffix):
+    """gdpr-archive succeeds and returns the expected path based on compress flag."""
     with (
-        patch("charm.subprocess.run", return_value=mock_result),
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
         patch("charm.os.makedirs"),
         patch("charm.shutil.rmtree"),
     ):
         ctx.run(
-            ctx.on.action("gdpr-archive", params={"username": "alice", "compress": True}),
+            ctx.on.action("gdpr-archive", params={"username": "alice", "compress": compress}),
             base_state,
         )
     assert ctx.action_results["status"] == "success"
-    assert "alice.tar.gz" in ctx.action_results["path"]
-
-
-def test_gdpr_archive_uncompressed(ctx, base_state):
-    """gdpr-archive with compress=False returns the staging directory path directly."""
-    mock_result = MagicMock(returncode=0)
-    with (
-        patch("charm.subprocess.run", return_value=mock_result),
-        patch("charm.os.makedirs"),
-    ):
-        ctx.run(
-            ctx.on.action("gdpr-archive", params={"username": "alice", "compress": False}),
-            base_state,
-        )
-    assert ctx.action_results["status"] == "success"
-    assert "alice" in ctx.action_results["path"]
+    assert expected_suffix in ctx.action_results["path"]
 
 
 def test_gdpr_archive_failure(ctx, base_state):
@@ -317,11 +266,6 @@ def test_gdpr_archive_failure(ctx, base_state):
             base_state,
         )
     assert "error" in exc_info.value.message
-
-
-# ---------------------------------------------------------------------------
-# GDPR delete action
-# ---------------------------------------------------------------------------
 
 
 def test_gdpr_delete_no_confirm(ctx, base_state):
@@ -377,27 +321,9 @@ def test_gdpr_delete_expunge_fails(ctx, base_state):
     assert "oops" in exc_info.value.message
 
 
-# ---------------------------------------------------------------------------
-# GDPR takeout action
-# ---------------------------------------------------------------------------
-
-
-def test_gdpr_takeout_maildir(ctx, base_state):
-    """gdpr-takeout with format=maildir syncs via doveadm and produces a tarball."""
-    with (
-        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
-        patch("charm.os.makedirs"),
-        patch("charm.shutil.rmtree"),
-    ):
-        ctx.run(
-            ctx.on.action("gdpr-takeout", params={"username": "alice", "format": "maildir"}),
-            base_state,
-        )
-    assert ctx.action_results["status"] == "success"
-
-
-def test_gdpr_takeout_mbox(ctx, base_state):
-    """gdpr-takeout with format=mbox fetches mail and writes an mbox file."""
+@pytest.mark.parametrize("export_format", ["maildir", "mbox"])
+def test_gdpr_takeout(ctx, base_state, export_format):
+    """gdpr-takeout succeeds for both maildir and mbox formats."""
     with (
         patch("charm.subprocess.run", return_value=MagicMock(returncode=0, stdout="mail content")),
         patch("charm.os.makedirs"),
@@ -405,7 +331,7 @@ def test_gdpr_takeout_mbox(ctx, base_state):
         patch("builtins.open", mock_open()),
     ):
         ctx.run(
-            ctx.on.action("gdpr-takeout", params={"username": "alice", "format": "mbox"}),
+            ctx.on.action("gdpr-takeout", params={"username": "alice", "format": export_format}),
             base_state,
         )
     assert ctx.action_results["status"] == "success"
@@ -426,11 +352,6 @@ def test_gdpr_takeout_failure(ctx, base_state):
             base_state,
         )
     assert "ghost" in exc_info.value.message
-
-
-# ---------------------------------------------------------------------------
-# GDPR FileNotFoundError handling
-# ---------------------------------------------------------------------------
 
 
 def test_gdpr_archive_binary_not_found(ctx, base_state):
