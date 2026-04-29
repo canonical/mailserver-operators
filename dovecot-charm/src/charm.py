@@ -278,12 +278,12 @@ class DovecotCharm(CharmBase):
             event.set_results({"status": "success", "path": result_path})
         except FileNotFoundError as e:
             msg = "Please wait for the charm to finish installing before running this action."
-            logger.error(f"Binary not found: {e.filename}")
+            logger.exception(f"Binary not found: {e.filename}")
             event.fail(msg)
         except subprocess.CalledProcessError as e:
             shutil.rmtree(archive_dir, ignore_errors=True)
             msg = f"Failed to archive mailbox for '{username}': {e.stderr}"
-            logger.error(msg)
+            logger.exception(msg)
             event.fail(msg)
 
     def _on_gdpr_delete(self, event):
@@ -319,11 +319,11 @@ class DovecotCharm(CharmBase):
             )
         except FileNotFoundError as e:
             msg = "Please wait for the charm to finish installing before running this action."
-            logger.error(f"Binary not found: {e.filename}")
+            logger.exception(f"Binary not found: {e.filename}")
             event.fail(msg)
         except subprocess.CalledProcessError as e:
             msg = f"Failed to delete mailbox for '{username}': {e.stderr}"
-            logger.error(msg)
+            logger.exception(msg)
             event.fail(msg)
 
     def _on_gdpr_takeout(self, event):
@@ -389,12 +389,12 @@ class DovecotCharm(CharmBase):
             event.set_results({"status": "success", "path": tar_path})
         except FileNotFoundError as e:
             msg = "Please wait for the charm to finish installing before running this action."
-            logger.error(f"Binary not found: {e.filename}")
+            logger.exception(f"Binary not found: {e.filename}")
             event.fail(msg)
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode(errors="replace") if isinstance(e.stderr, bytes) else e.stderr
             msg = f"Failed to export mailbox for '{username}': {stderr}"
-            logger.error(msg)
+            logger.exception(msg)
             event.fail(msg)
         finally:
             if os.path.isdir(export_dir):
@@ -434,11 +434,11 @@ class DovecotCharm(CharmBase):
             if e.stdout and e.stdout.strip():
                 parts.append(f"stdout: {e.stdout.strip()}")
             msg = ". ".join(parts)
-            logger.error(msg)
+            logger.exception(msg)
             event.fail(msg)
         except FileNotFoundError as e:
             msg = f"Sync failed: {e}"
-            logger.error(msg)
+            logger.exception(msg)
             event.fail(msg)
 
 
