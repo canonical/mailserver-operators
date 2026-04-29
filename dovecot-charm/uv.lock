@@ -484,9 +484,7 @@ static = [
 ]
 unit = [
     { name = "coverage" },
-    { name = "cryptography" },
     { name = "ops", extra = ["testing"] },
-    { name = "pydantic" },
     { name = "pytest" },
 ]
 
@@ -531,9 +529,7 @@ lint = [
 static = [{ name = "bandit", extras = ["toml"] }]
 unit = [
     { name = "coverage", extras = ["toml"] },
-    { name = "cryptography" },
     { name = "ops", extras = ["testing"] },
-    { name = "pydantic" },
     { name = "pytest" },
 ]
 

@@ -39,9 +39,7 @@ lint = [
 ]
 unit = [
   "coverage[toml]",
-  "cryptography",
   "ops[testing]",
-  "pydantic",
   "pytest",
 ]
 static = [
