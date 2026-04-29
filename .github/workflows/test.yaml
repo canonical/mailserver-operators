@@ -12,3 +12,4 @@ jobs:
       with-uv: true
       working-directory: dovecot-charm
       runs-on-base: ubuntu-24.04
+      python-version: 3.12
