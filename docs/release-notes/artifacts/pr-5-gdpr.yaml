@@ -1,0 +1,18 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Version of the artifact schema
+version_schema: 2
+
+changes:
+- title: Added GDPR compliance actions (archive, delete, takeout)
+  author: alithethird
+  type: major
+  description: Added three Juju actions for GDPR compliance. gdpr-archive backs up a user's mailbox via doveadm backup with optional tar.gz compression. gdpr-delete permanently expunges all mail and removes the mail directory (requires confirm=true). gdpr-takeout exports a user's mail in maildir or mbox format as a portable tarball.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/16"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: true
