@@ -445,6 +445,7 @@ dependencies = [
     { name = "charmlibs-apt" },
     { name = "charmlibs-interfaces-tls-certificates" },
     { name = "charmlibs-systemd" },
+    { name = "cosl" },
     { name = "cryptography" },
     { name = "jinja2" },
     { name = "ops" },
@@ -482,7 +483,6 @@ static = [
     { name = "bandit" },
 ]
 unit = [
-    { name = "cosl" },
     { name = "coverage" },
     { name = "cryptography" },
     { name = "ops", extra = ["testing"] },
@@ -496,6 +496,7 @@ requires-dist = [
     { name = "charmlibs-apt", specifier = "==1.0.0.post0" },
     { name = "charmlibs-interfaces-tls-certificates", specifier = ">=1.8.1" },
     { name = "charmlibs-systemd", specifier = "==1.0.0" },
+    { name = "cosl", specifier = "==1.9.1" },
     { name = "cryptography", specifier = ">=46.0.6" },
     { name = "jinja2" },
     { name = "ops", specifier = "==3.7.0" },
@@ -529,7 +530,6 @@ lint = [
 ]
 static = [{ name = "bandit", extras = ["toml"] }]
 unit = [
-    { name = "cosl" },
     { name = "coverage", extras = ["toml"] },
     { name = "cryptography" },
     { name = "ops", extras = ["testing"] },
