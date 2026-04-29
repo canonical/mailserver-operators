@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import logging
+import secrets
 import time
 
 import jubilant
@@ -111,7 +112,7 @@ def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
 # ---------------------------------------------------------------------------
 
 GDPR_TEST_USER = "gdpr-testuser"
-GDPR_TEST_PASSWORD = "Test" + "Pass123!"  # nosec B105 - test-only credential
+GDPR_TEST_PASSWORD = secrets.token_hex(16)
 MAIL_ROOT = "/srv/mail"
 GDPR_ARCHIVE_DIR = f"{MAIL_ROOT}/archives"
 GDPR_TAKEOUT_DIR = f"{MAIL_ROOT}/takeout"

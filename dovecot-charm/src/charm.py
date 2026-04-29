@@ -77,10 +77,6 @@ class DovecotCharm(CharmBase):
             loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True
         )
 
-        # GDPR archive/takeout directories
-        self.gdpr_archive_dir = GDPR_ARCHIVE_DIR
-        self.gdpr_takeout_dir = GDPR_TAKEOUT_DIR
-
         self._tls = None
         mailname = self.config.get("mailname", "")
         if mailname:
@@ -243,7 +239,7 @@ class DovecotCharm(CharmBase):
         """Archive a user's mailbox for long-term retention."""
         username = event.params["username"]
         compress = event.params.get("compress", True)
-        archive_dir = f"{self.gdpr_archive_dir}/{username}"
+        archive_dir = f"{GDPR_ARCHIVE_DIR}/{username}"
 
         logger.info(f"GDPR archive: archiving mailbox for user '{username}'")
 
@@ -260,9 +256,9 @@ class DovecotCharm(CharmBase):
 
             result_path = archive_dir
             if compress:
-                tar_path = f"{self.gdpr_archive_dir}/{username}.tar.gz"
+                tar_path = f"{GDPR_ARCHIVE_DIR}/{username}.tar.gz"
                 subprocess.run(
-                    [TAR_BIN, "-czf", tar_path, "-C", self.gdpr_archive_dir, username],
+                    [TAR_BIN, "-czf", tar_path, "-C", GDPR_ARCHIVE_DIR, username],
                     check=True,
                     capture_output=True,
                     text=True,
@@ -272,6 +268,10 @@ class DovecotCharm(CharmBase):
                 logger.info(f"Archive compressed to {tar_path}")
 
             event.set_results({"status": "success", "path": result_path})
+        except FileNotFoundError as e:
+            msg = f"Required binary not found: {e.filename}. Is dovecot-core installed?"
+            logger.error(msg)
+            event.fail(msg)
         except subprocess.CalledProcessError as e:
             msg = f"Failed to archive mailbox for '{username}': {e.stderr}"
             logger.error(msg)
@@ -305,6 +305,10 @@ class DovecotCharm(CharmBase):
             event.set_results(
                 {"status": "success", "message": f"Mailbox for '{username}' deleted"}
             )
+        except FileNotFoundError as e:
+            msg = f"Required binary not found: {e.filename}. Is dovecot-core installed?"
+            logger.error(msg)
+            event.fail(msg)
         except subprocess.CalledProcessError as e:
             msg = f"Failed to delete mailbox for '{username}': {e.stderr}"
             logger.error(msg)
@@ -314,7 +318,7 @@ class DovecotCharm(CharmBase):
         """Export a user's mail data in a portable format (GDPR data portability)."""
         username = event.params["username"]
         export_format = event.params.get("format", "maildir")
-        export_dir = f"{self.gdpr_takeout_dir}/{username}"
+        export_dir = f"{GDPR_TAKEOUT_DIR}/{username}"
 
         logger.info(f"GDPR takeout: exporting mailbox for user '{username}' as {export_format}")
 
@@ -354,9 +358,9 @@ class DovecotCharm(CharmBase):
                 with open(mbox_path, "w") as f:
                     f.write(result.stdout)
 
-            tar_path = f"{self.gdpr_takeout_dir}/{username}-takeout.tar.gz"
+            tar_path = f"{GDPR_TAKEOUT_DIR}/{username}-takeout.tar.gz"
             subprocess.run(
-                [TAR_BIN, "-czf", tar_path, "-C", self.gdpr_takeout_dir, username],
+                [TAR_BIN, "-czf", tar_path, "-C", GDPR_TAKEOUT_DIR, username],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -365,6 +369,10 @@ class DovecotCharm(CharmBase):
 
             logger.info(f"Takeout export created at {tar_path}")
             event.set_results({"status": "success", "path": tar_path})
+        except FileNotFoundError as e:
+            msg = f"Required binary not found: {e.filename}. Is dovecot-core installed?"
+            logger.error(msg)
+            event.fail(msg)
         except subprocess.CalledProcessError as e:
             msg = f"Failed to export mailbox for '{username}': {e.stderr}"
             logger.error(msg)

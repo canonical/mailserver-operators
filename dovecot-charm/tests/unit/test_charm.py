@@ -426,3 +426,25 @@ def test_gdpr_takeout_failure(ctx, base_state):
             base_state,
         )
     assert "ghost" in exc_info.value.message
+
+
+# ---------------------------------------------------------------------------
+# GDPR FileNotFoundError handling
+# ---------------------------------------------------------------------------
+
+
+def test_gdpr_archive_binary_not_found(ctx, base_state):
+    """gdpr-archive must fail clearly when doveadm binary is missing."""
+    with (
+        patch("charm.os.makedirs"),
+        patch(
+            "charm.subprocess.run",
+            side_effect=FileNotFoundError(2, "No such file", "/usr/bin/doveadm"),
+        ),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-archive", params={"username": "alice", "compress": False}),
+            base_state,
+        )
+    assert "not found" in exc_info.value.message.lower()

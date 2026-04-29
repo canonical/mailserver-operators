@@ -46,7 +46,7 @@ directory, satisfying the right to erasure. The action requires ``confirm=true``
 to be set explicitly to prevent accidental data loss.
 
 ``gdpr-takeout`` exports a user's mail in a portable format (``maildir`` or
-``mbox``) and packages it as a ``.tar.gz`` tarball under ``/tmp/gdpr-takeout/``,
+``mbox``) and packages it as a ``.tar.gz`` tarball under ``/srv/mail/takeout/``,
 satisfying the right to data portability.
 
 Relevant links:
