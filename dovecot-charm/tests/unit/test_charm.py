@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import dataclasses
+import json
 from pathlib import Path
 from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
@@ -266,14 +267,25 @@ def test_force_sync_script_not_installed(ctx, base_state):
     assert "wait for the charm" in exc_info.value.message
 
 
-# --- COS observability tests ---
+def test_cos_agent_relation_data_populated(ctx, base_state):
+    """On cos-agent relation-joined, the unit databag must contain
+    the scrape job for port 9900 and non-empty alert rules and dashboard entries.
+    """
+    cos_relation = ops.testing.Relation("cos-agent")
+    state_in = dataclasses.replace(base_state, relations={cos_relation})
 
+    state_out = ctx.run(ctx.on.relation_joined(cos_relation), state_in)
 
-def test_cos_agent_provider_initialized(ctx, base_state):
-    with patch("charm.DovecotCharm._install"), ctx(ctx.on.config_changed(), base_state) as mgr:
-        assert mgr.charm._grafana_agent is not None
+    relation_out = state_out.get_relation(cos_relation.id)
+    raw = relation_out.local_unit_data.get("config")
+    assert raw is not None, "COSAgentProvider did not write 'config' key to unit databag"
 
-
-def test_cos_metrics_endpoint_port(ctx, base_state):
-    with patch("charm.DovecotCharm._install"), ctx(ctx.on.config_changed(), base_state) as mgr:
-        assert mgr.charm._grafana_agent is not None
+    data = json.loads(raw)
+    scrape_jobs = data.get("metrics_scrape_jobs", [])
+    assert any(
+        job.get("static_configs", [{}])[0].get("targets", [""])[0].endswith(":9900")
+        for job in scrape_jobs
+    ), f"Expected scrape job on port 9900, got: {scrape_jobs}"
+    assert data.get("metrics_alert_rules"), "metrics_alert_rules should be populated"
+    assert data.get("log_alert_rules"), "log_alert_rules should be populated"
+    assert data.get("dashboards"), "dashboards should be populated"
