@@ -80,6 +80,7 @@ def dovecot_charm(
             lambda status: jubilant.all_agents_idle(status, APP_NAME),
             timeout=10 * 60,
         )
+        logging.info("all agents idle.")
     juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
     try:
         logging.info("Adding TLS relation...")
@@ -120,7 +121,12 @@ def dovecot_charm_manual_storage(
             config=config,
             constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
         )
-
+        logging.info("Waiting for all agents to be idle...")
+        juju.wait(
+            lambda status: jubilant.all_agents_idle(status, APP_NAME),
+            timeout=10 * 60,
+        )
+        logging.info("all agents idle.")
     try:
         logging.info("Adding TLS relation...")
         juju.integrate(f"{charm_name}:certificates", f"{tls_charm}:certificates")
@@ -184,6 +190,7 @@ def dovecot_charm_dual_unit(
             lambda status: jubilant.all_agents_idle(status, APP_NAME),
             timeout=10 * 60,
         )
+        logging.info("all agents idle.")
     else:
         if len(juju.status().apps[APP_NAME].units) < 2:
             logging.info("Adding the second unit...")
