@@ -60,3 +60,7 @@ SSHD_DROPIN_DIR = Path("/etc/ssh/sshd_config.d")
 SSHD_DROPIN_FILE = SSHD_DROPIN_DIR / "99-dovecot-ha.conf"
 SSH_DIR = Path("/root/.ssh")
 SSH_HOST_KEY_FILE = Path("/etc/ssh/ssh_host_ed25519_key.pub")
+
+# GDPR action paths
+GDPR_ARCHIVE_DIR = "/srv/mail/archives"
+GDPR_TAKEOUT_DIR = "/tmp/gdpr-takeout"  # noqa: S108

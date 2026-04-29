@@ -24,7 +24,10 @@ from ops.main import main
 from ops.model import BlockedStatus, MaintenanceStatus
 
 from constants import (
+    GDPR_ARCHIVE_DIR,
+    GDPR_TAKEOUT_DIR,
     HOSTNAME_FILE,
+    MAIL_ROOT,
     MAILNAME_FILE,
     PEER_RELATION_NAME,
     REQUIRED_PACKAGES,
@@ -73,8 +76,8 @@ class DovecotCharm(CharmBase):
         )
 
         # GDPR archive/takeout directories
-        self.gdpr_archive_dir = "/srv/mail/archives"
-        self.gdpr_takeout_dir = "/tmp/gdpr-takeout"  # noqa: S108
+        self.gdpr_archive_dir = GDPR_ARCHIVE_DIR
+        self.gdpr_takeout_dir = GDPR_TAKEOUT_DIR
 
         self._tls = None
         mailname = self.config.get("mailname", "")

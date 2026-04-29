@@ -113,6 +113,8 @@ def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
 GDPR_TEST_USER = "gdpr-testuser"
 GDPR_TEST_PASSWORD = "TestPass123!"
 MAIL_ROOT = "/srv/mail"
+GDPR_ARCHIVE_DIR = "/srv/mail/archives"
+GDPR_TAKEOUT_DIR = "/tmp/gdpr-takeout"  # noqa: S108
 
 
 def _setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
@@ -175,8 +177,8 @@ def test_gdpr_archive_compressed(juju: jubilant.Juju, dovecot_charm: str):
         juju.exec(f"test -f {archive_path}", unit=unit_name)
     finally:
         _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
-        juju.exec(f"rm -f /srv/mail/archives/{GDPR_TEST_USER}.tar.gz", unit=unit_name)
-        juju.exec(f"rm -rf /srv/mail/archives/{GDPR_TEST_USER}", unit=unit_name)
+        juju.exec(f"rm -f {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}.tar.gz", unit=unit_name)
+        juju.exec(f"rm -rf {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}", unit=unit_name)
 
 
 @pytest.mark.usefixtures("dovecot_charm")
@@ -199,7 +201,7 @@ def test_gdpr_archive_uncompressed(juju: jubilant.Juju, dovecot_charm: str):
         juju.exec(f"test -d {archive_path}", unit=unit_name)
     finally:
         _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
-        juju.exec(f"rm -rf /srv/mail/archives/{GDPR_TEST_USER}", unit=unit_name)
+        juju.exec(f"rm -rf {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}", unit=unit_name)
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +279,7 @@ def test_gdpr_takeout_maildir(juju: jubilant.Juju, dovecot_charm: str):
         juju.exec(f"test -f {takeout_path}", unit=unit_name)
     finally:
         _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
-        juju.exec(f"rm -f /tmp/gdpr-takeout/{GDPR_TEST_USER}-takeout.tar.gz", unit=unit_name)  # noqa: S108
+        juju.exec(f"rm -f {GDPR_TAKEOUT_DIR}/{GDPR_TEST_USER}-takeout.tar.gz", unit=unit_name)  # noqa: S108
 
 
 @pytest.mark.usefixtures("dovecot_charm")
@@ -300,4 +302,4 @@ def test_gdpr_takeout_mbox(juju: jubilant.Juju, dovecot_charm: str):
         juju.exec(f"test -f {takeout_path}", unit=unit_name)
     finally:
         _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
-        juju.exec(f"rm -f /tmp/gdpr-takeout/{GDPR_TEST_USER}-takeout.tar.gz", unit=unit_name)  # noqa: S108
+        juju.exec(f"rm -f {GDPR_TAKEOUT_DIR}/{GDPR_TEST_USER}-takeout.tar.gz", unit=unit_name)  # noqa: S108
