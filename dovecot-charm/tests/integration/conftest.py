@@ -153,7 +153,10 @@ def tls_charm(juju: jubilant.Juju) -> str:
         juju.deploy(tls_app, channel="1/stable")
     else:
         logging.info(f"{tls_app} already deployed, skipping deployment.")
-
+    juju.wait(
+        lambda status: jubilant.all_active(status, tls_charm),
+        timeout=10 * 60,
+    )
     return tls_app
 
 
