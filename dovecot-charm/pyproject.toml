@@ -13,7 +13,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "cosl=1.9.1",
+    "cosl==1.9.1",
     "ops==3.7.0",
     "charmhelpers>=1.2.1",
     "charmlibs-apt==1.0.0.post0",
