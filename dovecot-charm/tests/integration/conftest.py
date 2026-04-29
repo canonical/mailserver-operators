@@ -140,7 +140,7 @@ def tls_charm(juju: jubilant.Juju) -> str:
     tls_app = "self-signed-certificates"
     if tls_app not in juju.status().apps:
         logging.info("Deploying self-signed-certificates...")
-        juju.deploy(tls_app, channel="latest/stable")
+        juju.deploy(tls_app, channel="1/stable")
     else:
         logging.info(f"{tls_app} already deployed, skipping deployment.")
 
