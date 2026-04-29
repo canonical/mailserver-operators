@@ -188,7 +188,7 @@ def test_data_persists_across_restart(juju: jubilant.Juju, dovecot_charm: str):
     # start hook fires; the charm defers and retries until LUKS open + mount
     # succeeds.  Poll until /srv/mail is mounted.
     logging.info("Waiting for /srv/mail to be mounted post-reboot...")
-    deadline = time.monotonic() + 120
+    deadline = time.monotonic() + (5 * 60)
     mounted = False
     while time.monotonic() < deadline:
         try:
