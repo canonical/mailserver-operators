@@ -1,0 +1,231 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "9.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "loki",
+      "name": "Loki",
+      "version": "1.0.0"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Service Status",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "panels": []
+    },
+    {
+      "title": "Dovecot Exporter Up",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "targets": [
+        {
+          "expr": "dovecot_up{juju_charm=\"imap-server\"}",
+          "legendFormat": "{{ juju_unit }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}}},
+            {"type": "value", "options": {"1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1}
+    },
+    {
+      "title": "Connected IMAP Sessions",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "targets": [
+        {
+          "expr": "dovecot_imap_connections{juju_charm=\"imap-server\"}",
+          "legendFormat": "{{ juju_unit }}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 6, "y": 1}
+    },
+    {
+      "title": "Connected POP3 Sessions",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "targets": [
+        {
+          "expr": "dovecot_pop3_connections{juju_charm=\"imap-server\"}",
+          "legendFormat": "{{ juju_unit }}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 1}
+    },
+    {
+      "title": "Authentication",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9},
+      "panels": []
+    },
+    {
+      "title": "Auth Success Rate",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "targets": [
+        {
+          "expr": "rate(dovecot_auth_success_total{juju_charm=\"imap-server\"}[5m])",
+          "legendFormat": "success {{ juju_unit }}"
+        },
+        {
+          "expr": "rate(dovecot_auth_failures_total{juju_charm=\"imap-server\"}[5m])",
+          "legendFormat": "failures {{ juju_unit }}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10}
+    },
+    {
+      "title": "Auth Failures (Absolute)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "targets": [
+        {
+          "expr": "increase(dovecot_auth_failures_total{juju_charm=\"imap-server\"}[1h])",
+          "legendFormat": "{{ juju_unit }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "red", "value": 50}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10}
+    },
+    {
+      "title": "Storage",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 18},
+      "panels": []
+    },
+    {
+      "title": "Mail Storage Usage (/srv/mail)",
+      "type": "gauge",
+      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "targets": [
+        {
+          "expr": "1 - (node_filesystem_avail_bytes{mountpoint=\"/srv/mail\"} / node_filesystem_size_bytes{mountpoint=\"/srv/mail\"})",
+          "legendFormat": "{{ juju_unit }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.7},
+              {"color": "orange", "value": 0.85},
+              {"color": "red", "value": 0.95}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 19}
+    },
+    {
+      "title": "Mail Storage Free Bytes",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "targets": [
+        {
+          "expr": "node_filesystem_avail_bytes{mountpoint=\"/srv/mail\"}",
+          "legendFormat": "{{ juju_unit }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      },
+      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 19}
+    },
+    {
+      "title": "Logs",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 27},
+      "panels": []
+    },
+    {
+      "title": "Mail Logs",
+      "type": "logs",
+      "datasource": {"type": "loki", "uid": "${lokids}"},
+      "targets": [
+        {
+          "expr": "{filename=\"/var/log/mail.log\", juju_charm=\"imap-server\"}"
+        }
+      ],
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 28}
+    }
+  ],
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": ["imap-server", "mail", "dovecot"],
+  "templating": {
+    "list": [
+      {
+        "name": "prometheusds",
+        "type": "datasource",
+        "query": "prometheus"
+      },
+      {
+        "name": "lokids",
+        "type": "datasource",
+        "query": "loki"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "IMAP Server",
+  "uid": "imap-server-overview"
+}

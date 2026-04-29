@@ -7,6 +7,10 @@ base: ubuntu@24.04
 platforms:
   amd64:
 
+charm-libs:
+  - lib: grafana-agent.cos_agent
+    version: "0"
+
 name: dovecot-charm
 
 summary: Dovecot IMAP/POP3 mail server charm
@@ -25,6 +29,7 @@ parts:
     source: .
     stage:
     - templates
+    - src
 
 storage:
   mail-data:
@@ -42,6 +47,10 @@ peers:
 requires:
   certificates:
     interface: tls-certificates
+
+provides:
+  cos-agent:
+    interface: cos_agent
 
 config:
   options:

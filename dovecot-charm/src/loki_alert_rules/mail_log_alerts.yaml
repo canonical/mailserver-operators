@@ -1,0 +1,57 @@
+# Loki alert rules for imap-server charm
+# These fire on log patterns indicating mail service issues
+groups:
+  - name: DovecotLogAlerts
+    rules:
+      - alert: DovecotAuthFailureSpike
+        expr: >-
+          sum(rate({filename="/var/log/mail.log"}
+          |~ "auth-worker.*authentication failure" [5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate of Dovecot authentication failures"
+          description: >-
+            More than 10 authentication failures per second have been
+            detected on {{ $labels.juju_unit }} over the last 5 minutes.
+            This may indicate a brute-force attack.
+
+      - alert: DovecotFatalError
+        expr: >-
+          count_over_time({filename="/var/log/mail.log"}
+          |~ "dovecot.*Fatal|dovecot.*panic" [15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Dovecot fatal error detected"
+          description: >-
+            A fatal or panic error was logged by Dovecot on
+            {{ $labels.juju_unit }}. Immediate investigation required.
+
+      - alert: DovecotOutOfMemory
+        expr: >-
+          count_over_time({filename="/var/log/mail.log"}
+          |~ "dovecot.*out of memory|dovecot.*Cannot allocate" [15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Dovecot out of memory"
+          description: >-
+            Dovecot reported an out-of-memory condition on
+            {{ $labels.juju_unit }}.
+
+      - alert: PostfixDeferredQueueGrowing
+        expr: >-
+          sum(count_over_time({filename="/var/log/mail.log"}
+          |~ "status=deferred" [1h])) > 100
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Postfix deferred queue is growing"
+          description: >-
+            More than 100 deferred messages detected on
+            {{ $labels.juju_unit }} in the last hour.

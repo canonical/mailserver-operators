@@ -22,6 +22,7 @@ from ops.charm import CharmBase
 from ops.main import main
 from ops.model import BlockedStatus, MaintenanceStatus
 
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from constants import (
     HOSTNAME_FILE,
     MAILNAME_FILE,
@@ -83,6 +84,17 @@ class DovecotCharm(CharmBase):
                 refresh_events=[self.on.config_changed],
             )
             self.framework.observe(self._tls.on.certificate_available, self._reconcile)
+
+        # COS observability
+        self._grafana_agent = COSAgentProvider(
+            self,
+            relation_name="cos-agent",
+            metrics_endpoints=[{"path": "/metrics", "port": 9900}],
+            metrics_rules_dir="./src/prometheus_alert_rules",
+            logs_rules_dir="./src/loki_alert_rules",
+            dashboard_dirs=["./src/grafana_dashboards"],
+            refresh_events=[self.on.config_changed],
+        )
 
     def get_units(self) -> typing.List[str]:
         """Return a list of all units in the application.

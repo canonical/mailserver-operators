@@ -36,14 +36,25 @@ lint = [
   "types-pyyaml",
   "types-requests",
 ]
-unit = ["coverage[toml]", "ops[testing]", "pytest"]
-coverage-report = ["coverage[toml]", "pytest"]
-static = ["bandit[toml]"]
+unit = [
+  "cosl",
+  "coverage[toml]",
+  "cryptography",
+  "ops[testing]",
+  "pydantic",
+  "pytest",
+]
+coverage-report = [
+  "coverage[toml]",
+  "pytest",
+]
 integration = [
   "allure-pytest>=2.8.18",
   "allure-pytest-collection-report @ git+https://github.com/canonical/data-platform-workflows@v24.0.0#subdirectory=python/pytest_plugins/allure_pytest_collection_report",
   "jubilant==1.8.0",
   "pytest",
+  "requests",
+  "tenacity",
 ]
 
 [tool.uv]
@@ -121,6 +132,17 @@ lint.per-file-ignores."tests/*" = [
   "D415",
   "D417",
   "S",
+]
+lint.per-file-ignores."src/charms/*" = [
+  "B006",
+  "B028",
+  "RUF100",
+  "S101",
+  "SIM102",
+  "SIM103",
+  "UP015",
+  "UP032",
+  "UP042",
 ]
 lint.flake8-copyright.author = "Canonical Ltd."
 lint.flake8-copyright.min-file-size = 1

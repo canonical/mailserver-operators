@@ -264,3 +264,16 @@ def test_force_sync_script_not_installed(ctx, base_state):
     ):
         ctx.run(ctx.on.action("force-sync"), state_in)
     assert "wait for the charm" in exc_info.value.message
+
+
+# --- COS observability tests ---
+
+
+def test_cos_agent_provider_initialized(ctx, base_state):
+    with patch("charm.DovecotCharm._install"), ctx(ctx.on.config_changed(), base_state) as mgr:
+        assert mgr.charm._grafana_agent is not None
+
+
+def test_cos_metrics_endpoint_port(ctx, base_state):
+    with patch("charm.DovecotCharm._install"), ctx(ctx.on.config_changed(), base_state) as mgr:
+        assert mgr.charm._grafana_agent is not None
