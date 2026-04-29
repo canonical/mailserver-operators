@@ -222,6 +222,15 @@ def test_gdpr_takeout(juju: jubilant.Juju, dovecot_charm: str, export_format: st
         takeout_path = result.results.get("path", "")
         assert takeout_path.endswith(".tar.gz")
         juju.exec(f"test -f {takeout_path}", unit=unit_name)
+
+        if export_format == "mbox":
+            # Extract and verify the mbox file has at least one valid envelope line.
+            extract_dir = f"{GDPR_TAKEOUT_DIR}/{GDPR_TEST_USER}-verify"
+            juju.exec(f"mkdir -p {extract_dir}", unit=unit_name)
+            juju.exec(f"tar -xzf {takeout_path} -C {extract_dir}", unit=unit_name)
+            mbox_path = f"{extract_dir}/{GDPR_TEST_USER}/{GDPR_TEST_USER}.mbox"
+            juju.exec(f"grep -q '^From ' {mbox_path}", unit=unit_name)
+            juju.exec(f"rm -rf {extract_dir}", unit=unit_name)
     finally:
         _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
         juju.exec(f"rm -f {GDPR_TAKEOUT_DIR}/{GDPR_TEST_USER}-takeout.tar.gz", unit=unit_name)

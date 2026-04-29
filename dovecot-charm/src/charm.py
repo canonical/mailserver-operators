@@ -359,22 +359,18 @@ class DovecotCharm(CharmBase):
                 )
             else:  # export_format == "mbox"
                 mbox_path = f"{export_dir}/{username}.mbox"
-                with open(mbox_path, "wb") as f:
-                    subprocess.run(
-                        [
-                            DOVEADM_BIN,
-                            "fetch",
-                            "-u",
-                            username,
-                            "text",
-                            "mailbox",
-                            "*",
-                            "all",
-                        ],
-                        check=True,
-                        stdout=f,
-                        stderr=subprocess.PIPE,
-                    )
+                subprocess.run(
+                    [
+                        DOVEADM_BIN,
+                        "sync",
+                        "-u",
+                        username,
+                        f"mbox:{mbox_path}:INBOX={mbox_path}",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
 
             tar_path = f"{GDPR_TAKEOUT_DIR}/{username}-takeout.tar.gz"
             subprocess.run(
