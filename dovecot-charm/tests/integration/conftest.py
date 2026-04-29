@@ -156,6 +156,8 @@ def tls_charm(juju: jubilant.Juju) -> str:
     juju.wait(
         lambda status: jubilant.all_active(status, tls_app),
         timeout=10 * 60,
+        successes=5,
+        delay=10,
     )
     return tls_app
 
