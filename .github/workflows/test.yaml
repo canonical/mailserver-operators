@@ -11,3 +11,4 @@ jobs:
       self-hosted-runner: false
       with-uv: true
       working-directory: dovecot-charm
+      runs-on-base: ubuntu-24.04
