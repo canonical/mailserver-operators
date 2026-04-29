@@ -74,6 +74,7 @@ def dovecot_charm(
             config=config,
             constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
         )
+        juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
         logging.info("Waiting for all agents to be idle...")
         juju.wait(
             lambda status: jubilant.all_agents_idle(status, APP_NAME),
@@ -177,6 +178,7 @@ def dovecot_charm_dual_unit(
             constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
             num_units=2,
         )
+        juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
         logging.info("Waiting for all agents to be idle...")
         juju.wait(
             lambda status: jubilant.all_agents_idle(status, APP_NAME),
