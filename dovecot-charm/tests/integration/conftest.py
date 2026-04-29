@@ -72,8 +72,7 @@ def dovecot_charm(
             charm_path,
             app=APP_NAME,
             config=config,
-            constraints={"virt-type": "virtual-machine", "mem": "2048M", "cpu": "2"},
-            trust=True,
+            constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
         )
     juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
     try:
@@ -113,8 +112,7 @@ def dovecot_charm_manual_storage(
             charm_path,
             app=charm_name,
             config=config,
-            constraints={"virt-type": "virtual-machine", "mem": "2048M", "cpu": "2"},
-            trust=True,
+            constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
         )
 
     try:
@@ -171,8 +169,7 @@ def dovecot_charm_dual_unit(
             charm_path,
             app=APP_NAME,
             config=config,
-            constraints={"virt-type": "virtual-machine", "mem": "2048M", "cpu": "2"},
-            trust=True,
+            constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
             num_units=2,
         )
     else:
