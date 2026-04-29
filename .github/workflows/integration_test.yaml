@@ -11,6 +11,7 @@ jobs:
       canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
+      extra-arguments: '-x --log-format="%(asctime)s %(levelname)s %(message)s"'
       provider: lxd
       trivy-fs-enabled: false
       trivy-image-config: "trivy.yaml"
