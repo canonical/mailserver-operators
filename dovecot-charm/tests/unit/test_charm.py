@@ -363,6 +363,23 @@ def test_gdpr_takeout_failure(ctx, base_state, tmp_path):
     assert "ghost" in exc_info.value.message
 
 
+def test_gdpr_takeout_invalid_format(ctx, base_state, tmp_path):
+    """gdpr-takeout must fail fast when an unknown format is requested."""
+    takeout_dir = tmp_path / "takeout"
+    takeout_dir.mkdir()
+    with (
+        patch("charm.GDPR_TAKEOUT_DIR", str(takeout_dir)),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-takeout", params={"username": "alice", "format": "pdf"}),
+            base_state,
+        )
+    assert "pdf" in exc_info.value.message
+    assert "maildir" in exc_info.value.message
+    assert "mbox" in exc_info.value.message
+
+
 def test_gdpr_archive_binary_not_found(ctx, base_state, tmp_path):
     """gdpr-archive must fail clearly when doveadm binary is missing."""
     archive_dir = tmp_path / "archives"

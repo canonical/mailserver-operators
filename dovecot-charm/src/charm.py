@@ -326,6 +326,10 @@ class DovecotCharm(CharmBase):
         export_format = event.params.get("format", "maildir")
         export_dir = f"{GDPR_TAKEOUT_DIR}/{username}"
 
+        if export_format not in ("maildir", "mbox"):
+            event.fail(f"Invalid format parameter '{export_format}', must be 'maildir' or 'mbox'")
+            return
+
         logger.info(f"GDPR takeout: exporting mailbox for user '{username}' as {export_format}")
 
         try:
@@ -344,7 +348,7 @@ class DovecotCharm(CharmBase):
                     capture_output=True,
                     text=True,
                 )
-            else:
+            else:  # export_format == "mbox"
                 mbox_path = f"{export_dir}/{username}.mbox"
                 with open(mbox_path, "wb") as f:
                     subprocess.run(
