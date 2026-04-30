@@ -16,7 +16,7 @@ from exceptions import ConfigurationError
 @pytest.fixture
 def tls_ctx():
     """Context using TLSTestDovecotCharm: real DovecotSetup, no-op storage/HA."""
-    return ops.testing.Context(TLSTestDovecotCharm, meta=_META, app_name="dovecot-charm")
+    return ops.testing.Context(TLSTestDovecotCharm, meta=_META, app_name="dovecot")
 
 
 def test_no_tls_cert_yet_blocks(tls_ctx, base_state):

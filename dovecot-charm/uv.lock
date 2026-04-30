@@ -421,7 +421,7 @@ wheels = [
 ]
 
 [[package]]
-name = "dovecot-charm"
+name = "dovecot"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [

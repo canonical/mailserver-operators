@@ -192,8 +192,16 @@ class DovecotCharm(CharmBase):
     def _install(self):
         """Install required packages and set up mailname."""
         self.unit.status = MaintenanceStatus("Installing required dependencies")
-        apt.update()
-        apt.add_package(REQUIRED_PACKAGES)
+        try:
+            apt.update()
+        except Exception:
+            logger.exception("apt-get update failed")
+            raise
+        try:
+            apt.add_package(REQUIRED_PACKAGES)
+        except Exception:
+            logger.exception("Failed to install required packages")
+            raise
         shutil.copy(HOSTNAME_FILE, MAILNAME_FILE)
         self.unit.status = MaintenanceStatus("Charm installation done")
 

@@ -10,7 +10,7 @@ import pytest
 
 logger = logging.getLogger(__name__)
 
-APP_NAME = "dovecot-charm"
+APP_NAME = "dovecot"
 
 
 @pytest.fixture(scope="session", name="juju")

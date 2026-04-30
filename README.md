@@ -20,10 +20,10 @@ See the [basic deployment tutorial](https://github.com/canonical/mailserver-oper
 ### Deploy
 
 ```bash
-juju deploy dovecot-charm \
+juju deploy dovecot \
   --config mailname=mail.example.com \
   --config postmaster-address=postmaster@example.com \
-  --config primary-unit=dovecot-charm/0
+  --config primary-unit=dovecot/0
 ```
 
 ### Basic operations
@@ -32,16 +32,16 @@ juju deploy dovecot-charm \
 
 ```bash
 # Clear only deferred messages (default)
-juju run dovecot-charm/0 clear-queue
+juju run dovecot/0 clear-queue
 
 # Clear all queued messages
-juju run dovecot-charm/0 clear-queue queue=all
+juju run dovecot/0 clear-queue queue=all
 ```
 
 **Adjust the mail sync schedule** (default: every 30 minutes):
 
 ```bash
-juju config dovecot-charm sync-schedule="*/15 * * * *"
+juju config dovecot sync-schedule="*/15 * * * *"
 ```
 
 See [`charmcraft.yaml`](dovecot-charm/charmcraft.yaml) for all available configuration options.
