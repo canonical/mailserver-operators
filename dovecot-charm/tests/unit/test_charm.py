@@ -31,8 +31,8 @@ def _secondary_relation(hostname: str = "10.0.0.2") -> ops.testing.PeerRelation:
 
 
 def _non_primary_config(base_config: dict) -> dict:
-    """Return config where primary-unit doesn't match this unit (dovecot-charm/0)."""
-    return {**base_config, "primary-unit": "dovecot-charm/99"}
+    """Return config where primary-unit doesn't match this unit (dovecot/0)."""
+    return {**base_config, "primary-unit": "dovecot/99"}
 
 
 def _sync_script_exists_patch(exists: bool):
@@ -137,11 +137,11 @@ def test_is_primary_false_when_unit_differs(ctx, base_state):
 
 def test_reconcile_skips_sync_script_when_not_primary(ctx, base_state):
     """When this unit is NOT primary, sync script and timer are not installed."""
-    # primary-unit must be a known unit; use the secondary (unit id 1 = dovecot-charm/1)
-    # so that this unit (dovecot-charm/0) is not primary.
+    # primary-unit must be a known unit; use the secondary (unit id 1 = dovecot/1)
+    # so that this unit (dovecot/0) is not primary.
     state_in = dataclasses.replace(
         base_state,
-        config={**base_state.config, "primary-unit": "dovecot-charm/1"},
+        config={**base_state.config, "primary-unit": "dovecot/1"},
         relations={_secondary_relation()},
     )
 

@@ -62,9 +62,7 @@ def test_tls_dovecot_config_references_cert(juju, dovecot_charm):
     """Verify dovecot configuration references the cert."""
     unit_name = f"{dovecot_charm}/0"
 
-    dovecot_conf = juju.exec(
-        "cat", "/etc/dovecot/conf.d/99-local-dovecot-charm.conf", unit=unit_name
-    )
+    dovecot_conf = juju.exec("cat", "/etc/dovecot/conf.d/99-local-dovecot.conf", unit=unit_name)
     logging.info("Checking dovecot SSL configuration...")
     assert "ssl_cert" in dovecot_conf.stdout
     assert "example.com" in dovecot_conf.stdout
