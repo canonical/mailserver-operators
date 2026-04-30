@@ -13,6 +13,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
+    "cosl==1.9.1",
     "ops==3.7.0",
     "charmhelpers>=1.2.1",
     "charmlibs-apt==1.0.0.post0",
@@ -36,14 +37,25 @@ lint = [
   "types-pyyaml",
   "types-requests",
 ]
-unit = ["coverage[toml]", "ops[testing]", "pytest"]
-coverage-report = ["coverage[toml]", "pytest"]
-static = ["bandit[toml]"]
+unit = [
+  "coverage[toml]",
+  "ops[testing]",
+  "pytest",
+]
+static = [
+  "bandit[toml]",
+]
+coverage-report = [
+  "coverage[toml]",
+  "pytest",
+]
 integration = [
   "allure-pytest>=2.8.18",
   "allure-pytest-collection-report @ git+https://github.com/canonical/data-platform-workflows@v24.0.0#subdirectory=python/pytest_plugins/allure_pytest_collection_report",
   "jubilant==1.8.0",
   "pytest",
+  "requests",
+  "tenacity",
 ]
 
 [tool.uv]

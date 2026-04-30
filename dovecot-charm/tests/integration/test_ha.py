@@ -154,7 +154,6 @@ def _wait_for_sync_trigger(
     )
 
 
-@pytest.mark.timeout(30 * 60)
 def test_force_sync_action(juju: jubilant.Juju, dovecot_charm_dual_unit: str):
     """force-sync action replicates mail from primary to secondary via doveadm backup."""
     status = juju.status()

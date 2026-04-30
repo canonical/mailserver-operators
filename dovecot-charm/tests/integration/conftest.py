@@ -71,8 +71,7 @@ def dovecot_charm(
             charm_path,
             app=APP_NAME,
             config=config,
-            constraints={"virt-type": "virtual-machine"},
-            trust=True,
+            constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
         )
     juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
     try:
@@ -112,10 +111,8 @@ def dovecot_charm_manual_storage(
             charm_path,
             app=charm_name,
             config=config,
-            constraints={"virt-type": "virtual-machine"},
-            trust=True,
+            constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
         )
-
     try:
         logging.info("Adding TLS relation...")
         juju.integrate(f"{charm_name}:certificates", f"{tls_charm}:certificates")
@@ -135,7 +132,7 @@ def tls_charm(juju: jubilant.Juju) -> str:
     tls_app = "self-signed-certificates"
     if tls_app not in juju.status().apps:
         logging.info("Deploying self-signed-certificates...")
-        juju.deploy(tls_app, channel="latest/stable")
+        juju.deploy(tls_app, channel="1/stable")
     else:
         logging.info(f"{tls_app} already deployed, skipping deployment.")
 

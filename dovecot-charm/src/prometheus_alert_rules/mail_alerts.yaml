@@ -1,0 +1,51 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+# Prometheus alert rules for dovecot-charm
+# %%juju_topology%% is replaced at runtime by the cos-agent library with
+# juju_model, juju_model_uuid and juju_application label matchers.
+groups:
+  - name: DovecotAlerts
+    rules:
+      - alert: DovecotExporterDown
+        expr: up{%%juju_topology%%,instance=~".*:9166"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Dovecot exporter is down"
+          description: >-
+            The Dovecot metrics endpoint on {{ $labels.juju_unit }} has been
+            unreachable for more than 5 minutes.
+
+      - alert: DovecotHighAuthFailureRate
+        expr: >-
+          rate(dovecot_auth_failure_total{%%juju_topology%%}[5m])
+          /
+          (
+            (rate(dovecot_auth_success_total{%%juju_topology%%}[5m]) or rate(dovecot_auth_failure_total{%%juju_topology%%}[5m]) * 0)
+            + rate(dovecot_auth_failure_total{%%juju_topology%%}[5m])
+          )
+          > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High authentication failure rate on {{ $labels.juju_unit }}"
+          description: >-
+            More than 50% of authentication attempts on {{ $labels.juju_unit }}
+            (service: {{ $labels.service }}) are failing. Possible brute-force attack.
+
+  - name: MailStorageAlerts
+    rules:
+      - alert: MailStorageAlmostFull
+        expr: >-
+          (node_filesystem_avail_bytes{%%juju_topology%%,mountpoint="/srv/mail"}
+          / node_filesystem_size_bytes{%%juju_topology%%,mountpoint="/srv/mail"}) < 0.3
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mail storage is almost full (<10% free)"
+          description: >-
+            The /srv/mail filesystem on {{ $labels.juju_unit }} has less
+            than 10% free space remaining.

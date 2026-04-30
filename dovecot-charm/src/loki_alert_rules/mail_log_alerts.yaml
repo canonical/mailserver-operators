@@ -1,0 +1,72 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+# Loki alert rules for dovecot-charm
+# Stream selector {filename="/var/log/syslog"} is scoped per Loki tenant by the
+# COS stack — no topology label injection needed in the query expression.
+groups:
+  - name: DovecotLogAlerts
+    rules:
+      - alert: DovecotAuthFailureSpike
+        expr: >-
+          sum(rate({filename="/var/log/syslog"} |~ "dovecot:"
+          |~ "auth failed|pam_authenticate.*failed" [5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate of Dovecot authentication failures"
+          description: >-
+            More than 5 authentication failure log lines per second have been
+            detected in the last 5 minutes. This may indicate a brute-force attack.
+
+      - alert: DovecotFatalError
+        expr: >-
+          count_over_time({filename="/var/log/syslog"} |~ "dovecot:"
+          |~ "(?i)fatal|(?i)panic" [15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Dovecot fatal error detected"
+          description: >-
+            A fatal or panic error was logged by Dovecot. Immediate investigation required.
+
+      - alert: DovecotOutOfMemory
+        expr: >-
+          count_over_time({filename="/var/log/syslog"} |~ "dovecot:"
+          |~ "out of memory|Cannot allocate" [15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Dovecot out of memory"
+          description: >-
+            Dovecot reported an out-of-memory condition.
+
+      - alert: PostfixDeferredQueueGrowing
+        expr: >-
+          sum(count_over_time({filename="/var/log/syslog"}
+          |~ "status=deferred" [1h])) > 100
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Postfix deferred queue is growing"
+          description: >-
+            More than 100 deferred messages detected in the last hour.
+            Mail delivery may be impaired.
+
+      - alert: DovecotDsyncStale
+        expr: >-
+          absent_over_time({filename="/var/log/syslog"}
+          |~ "sync-to-secondary" [24h]) == 1
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dovecot dsync has not run in 24 hours"
+          description: >-
+            No mail sync (sync-to-secondary) log entry has been seen in the last
+            24 hours. Mail replication to the secondary may be broken, or the HA
+            timer may not be running. On a single-unit deployment this alert is
+            expected.

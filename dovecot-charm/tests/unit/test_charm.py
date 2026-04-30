@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import dataclasses
+import json
 from pathlib import Path
 from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
@@ -51,7 +52,7 @@ def test_reconcile_sets_active_on_success(ctx, base_state):
 def test_reconcile_opens_mail_ports(ctx, base_state):
     """All required IMAP/POP3/Sieve/metrics ports must be opened."""
     state_out = ctx.run(ctx.on.config_changed(), base_state)
-    expected = {ops.testing.TCPPort(p) for p in [993, 995, 4190, 9900]}
+    expected = {ops.testing.TCPPort(p) for p in [993, 995, 4190]}
     assert state_out.opened_ports == expected
 
 
@@ -230,6 +231,30 @@ def test_force_sync_script_not_installed(ctx, base_state):
     ):
         ctx.run(ctx.on.action("force-sync"), state_in)
     assert "wait for the charm" in exc_info.value.message
+
+
+def test_cos_agent_relation_data_populated(ctx, base_state):
+    """On cos-agent relation-joined, the unit databag must contain
+    the scrape job for port 9166 and non-empty alert rules and dashboard entries.
+    """
+    cos_relation = ops.testing.Relation("cos-agent")
+    state_in = dataclasses.replace(base_state, relations={cos_relation})
+
+    state_out = ctx.run(ctx.on.relation_joined(cos_relation), state_in)
+
+    relation_out = state_out.get_relation(cos_relation.id)
+    raw = relation_out.local_unit_data.get("config")
+    assert raw is not None, "COSAgentProvider did not write 'config' key to unit databag"
+
+    data = json.loads(raw)
+    scrape_jobs = data.get("metrics_scrape_jobs", [])
+    assert any(
+        job.get("static_configs", [{}])[0].get("targets", [""])[0].endswith(":9166")
+        for job in scrape_jobs
+    ), f"Expected scrape job on port 9166, got: {scrape_jobs}"
+    assert data.get("metrics_alert_rules"), "metrics_alert_rules should be populated"
+    assert data.get("log_alert_rules"), "log_alert_rules should be populated"
+    assert data.get("dashboards"), "dashboards should be populated"
 
 
 @pytest.mark.parametrize(

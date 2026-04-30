@@ -19,6 +19,7 @@ from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
 )
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import BlockedStatus, MaintenanceStatus
@@ -92,6 +93,16 @@ class DovecotCharm(CharmBase):
                 refresh_events=[self.on.config_changed],
             )
             self.framework.observe(self._tls.on.certificate_available, self._reconcile)
+
+        self._grafana_agent = COSAgentProvider(
+            self,
+            relation_name="cos-agent",
+            metrics_endpoints=[{"path": "/metrics", "port": 9166}],
+            metrics_rules_dir="./src/prometheus_alert_rules",
+            logs_rules_dir="./src/loki_alert_rules",
+            dashboard_dirs=["./src/grafana_dashboards"],
+            refresh_events=[self.on.config_changed],
+        )
 
     def get_units(self) -> typing.List[str]:
         """Return a list of all units in the application.
@@ -211,7 +222,6 @@ class DovecotCharm(CharmBase):
         self.unit.open_port("tcp", 993)
         self.unit.open_port("tcp", 995)
         self.unit.open_port("tcp", 4190)
-        self.unit.open_port("tcp", 9900)
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""
