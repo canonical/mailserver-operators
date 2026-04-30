@@ -9,6 +9,32 @@ import jubilant
 logger = logging.getLogger(__name__)
 
 
+def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
+    """Test the clear-queue action."""
+    unit_name = f"{dovecot_charm}/0"
+
+    try:
+        logger.info("Seeding one queued message before default clear-queue action...")
+        _seed_queue_with_test_mail(juju, unit_name)
+        logger.info("Seeding one deferred message before default clear-queue action...")
+        _seed_deferred_queue_with_test_mail(juju, unit_name)
+
+        logger.info("Running clear-queue action (defaults)...")
+        result = juju.run(unit_name, "clear-queue")
+        assert result.status == "completed"
+        logger.info("clear-queue (defaults) output: %s", result.results.get("output"))
+        _assert_deferred_queue_empty(juju, unit_name)
+        _assert_queue_non_empty(juju, unit_name)
+
+        logger.info("Running clear-queue action (all)...")
+        result = juju.run(unit_name, "clear-queue", params={"queue": "all"})
+        assert result.status == "completed"
+        logger.info("clear-queue (all) output: %s", result.results.get("output"))
+        _assert_queue_empty(juju, unit_name)
+    finally:
+        _cleanup_header_checks(juju, unit_name)
+
+
 def _log_queue_state(juju: jubilant.Juju, unit_name: str) -> None:
     """Log the current Postfix queue and deferred spool state for diagnostics."""
     try:
@@ -112,29 +138,3 @@ def _assert_deferred_queue_empty(juju: jubilant.Juju, unit_name: str):
 def _assert_queue_non_empty(juju: jubilant.Juju, unit_name: str):
     """Assert that Postfix reports a non-empty queue."""
     juju.exec("postqueue -p | grep -qv 'Mail queue is empty'", unit=unit_name)
-
-
-def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
-    """Test the clear-queue action."""
-    unit_name = f"{dovecot_charm}/0"
-
-    try:
-        logger.info("Seeding one queued message before default clear-queue action...")
-        _seed_queue_with_test_mail(juju, unit_name)
-        logger.info("Seeding one deferred message before default clear-queue action...")
-        _seed_deferred_queue_with_test_mail(juju, unit_name)
-
-        logger.info("Running clear-queue action (defaults)...")
-        result = juju.run(unit_name, "clear-queue")
-        assert result.status == "completed"
-        logger.info("clear-queue (defaults) output: %s", result.results.get("output"))
-        _assert_deferred_queue_empty(juju, unit_name)
-        _assert_queue_non_empty(juju, unit_name)
-
-        logger.info("Running clear-queue action (all)...")
-        result = juju.run(unit_name, "clear-queue", params={"queue": "all"})
-        assert result.status == "completed"
-        logger.info("clear-queue (all) output: %s", result.results.get("output"))
-        _assert_queue_empty(juju, unit_name)
-    finally:
-        _cleanup_header_checks(juju, unit_name)
