@@ -15,10 +15,6 @@ from testing import DovecotTestCharm, NoOpDovecotSetup, NoOpHAManager
 from constants import SYNC_TO_SECONDARY_TARGET
 from exceptions import ConfigurationError, HASetupError
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 PEER_RELATION_NAME = "replicas"
 
 
@@ -47,11 +43,6 @@ def _sync_script_exists_patch(exists: bool):
     return _patched
 
 
-# ---------------------------------------------------------------------------
-# Reconcile — status and ports
-# ---------------------------------------------------------------------------
-
-
 def test_reconcile_sets_active_on_success(ctx, base_state):
     """Reconcile must reach ActiveStatus when all setup steps succeed."""
     state_out = ctx.run(ctx.on.config_changed(), base_state)
@@ -63,11 +54,6 @@ def test_reconcile_opens_mail_ports(ctx, base_state):
     state_out = ctx.run(ctx.on.config_changed(), base_state)
     expected = {ops.testing.TCPPort(p) for p in [993, 995, 4190]}
     assert state_out.opened_ports == expected
-
-
-# ---------------------------------------------------------------------------
-# Reconcile — blocked on setup failures
-# ---------------------------------------------------------------------------
 
 
 def test_reconcile_blocks_when_dovecot_setup_fails(ctx, base_state):
@@ -112,11 +98,6 @@ def test_reconcile_blocks_when_ha_setup_fails(ctx, base_state):
     assert "SSH keygen failed" in state_out.unit_status.message
 
 
-# ---------------------------------------------------------------------------
-# HA: _is_primary
-# ---------------------------------------------------------------------------
-
-
 def test_is_primary_true_when_unit_matches_config(ctx, base_state):
     """_is_primary returns True when primary-unit config matches this unit."""
     with ctx(ctx.on.config_changed(), base_state) as mgr:
@@ -128,11 +109,6 @@ def test_is_primary_false_when_unit_differs(ctx, base_state):
     state_in = dataclasses.replace(base_state, config=_non_primary_config(base_state.config))
     with ctx(ctx.on.config_changed(), state_in) as mgr:
         assert mgr.charm._is_primary is False
-
-
-# ---------------------------------------------------------------------------
-# HA: sync script installed only on primary
-# ---------------------------------------------------------------------------
 
 
 def test_reconcile_skips_sync_script_when_not_primary(ctx, base_state):
@@ -161,11 +137,6 @@ def test_reconcile_skips_sync_script_when_not_primary(ctx, base_state):
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
     assert not _SpyHA.install_called
     assert not _SpyHA.timer_called
-
-
-# ---------------------------------------------------------------------------
-# Clear-queue action
-# ---------------------------------------------------------------------------
 
 
 def test_clear_queue_deferred(ctx, base_state):
@@ -207,11 +178,6 @@ def test_clear_queue_failure(ctx, base_state):
     ):
         ctx.run(ctx.on.action("clear-queue", params={"queue": "deferred"}), base_state)
     assert "postsuper" in exc_info.value.message
-
-
-# ---------------------------------------------------------------------------
-# Force-sync action
-# ---------------------------------------------------------------------------
 
 
 def test_force_sync_success(ctx, base_state):
@@ -289,3 +255,194 @@ def test_cos_agent_relation_data_populated(ctx, base_state):
     assert data.get("metrics_alert_rules"), "metrics_alert_rules should be populated"
     assert data.get("log_alert_rules"), "log_alert_rules should be populated"
     assert data.get("dashboards"), "dashboards should be populated"
+
+
+@pytest.mark.parametrize(
+    "action_name,params",
+    [
+        ("gdpr-archive", {"username": "alice", "compress": False}),
+        ("gdpr-delete", {"username": "alice", "confirm": True}),
+        ("gdpr-takeout", {"username": "alice", "format": "maildir"}),
+    ],
+)
+def test_gdpr_actions_require_primary(ctx, base_state, action_name, params):
+    """GDPR actions must fail immediately when run on a non-primary unit."""
+    non_primary_state = dataclasses.replace(
+        base_state,
+        config={**base_state.config, "primary-unit": "dovecot-charm/99"},
+    )
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(ctx.on.action(action_name, params=params), non_primary_state)
+    assert "primary" in exc_info.value.message.lower()
+
+
+@pytest.mark.parametrize(
+    "compress,expected_suffix",
+    [(True, "alice.tar.gz"), (False, "alice")],
+)
+def test_gdpr_archive(ctx, base_state, tmp_path, compress, expected_suffix):
+    """gdpr-archive succeeds and returns the expected path based on compress flag."""
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "alice").mkdir()
+    with (
+        patch("charm.GDPR_ARCHIVE_DIR", str(archive_dir)),
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+        patch("charm.prepare_user_dir"),
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-archive", params={"username": "alice", "compress": compress}),
+            base_state,
+        )
+    assert ctx.action_results["status"] == "success"
+    assert expected_suffix in ctx.action_results["path"]
+
+
+def test_gdpr_archive_failure(ctx, base_state, tmp_path):
+    """gdpr-archive must fail when doveadm backup exits non-zero."""
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    with (
+        patch("charm.GDPR_ARCHIVE_DIR", str(archive_dir)),
+        patch(
+            "charm.subprocess.run",
+            side_effect=CalledProcessError(1, "doveadm", stderr="error"),
+        ),
+        patch("charm.prepare_user_dir"),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-archive", params={"username": "alice", "compress": False}),
+            base_state,
+        )
+    assert "error" in exc_info.value.message
+
+
+def test_gdpr_delete_no_confirm(ctx, base_state):
+    """gdpr-delete must fail without explicit confirm=true."""
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(
+            ctx.on.action("gdpr-delete", params={"username": "alice", "confirm": False}),
+            base_state,
+        )
+    assert "confirm" in exc_info.value.message.lower()
+
+
+def test_gdpr_delete_confirmed(ctx, base_state, tmp_path):
+    """gdpr-delete with confirm=true expunges mail and removes the mail directory."""
+    mail_dir = tmp_path / "alice"
+    mail_dir.mkdir()
+    with (
+        patch("charm.MAIL_ROOT", str(tmp_path)),
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-delete", params={"username": "alice", "confirm": True}),
+            base_state,
+        )
+    assert ctx.action_results["status"] == "success"
+    assert not mail_dir.exists()
+
+
+def test_gdpr_delete_no_mail_dir(ctx, base_state, tmp_path):
+    """gdpr-delete succeeds even when the mail directory does not exist."""
+    with (
+        patch("charm.MAIL_ROOT", str(tmp_path)),
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-delete", params={"username": "alice", "confirm": True}),
+            base_state,
+        )
+    assert ctx.action_results["status"] == "success"
+
+
+def test_gdpr_delete_expunge_fails(ctx, base_state):
+    """gdpr-delete must fail when doveadm expunge exits non-zero."""
+    with (
+        patch(
+            "charm.subprocess.run",
+            side_effect=CalledProcessError(1, "doveadm", stderr="oops"),
+        ),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-delete", params={"username": "alice", "confirm": True}),
+            base_state,
+        )
+    assert "oops" in exc_info.value.message
+
+
+@pytest.mark.parametrize("export_format", ["maildir", "mbox"])
+def test_gdpr_takeout(ctx, base_state, tmp_path, export_format):
+    """gdpr-takeout succeeds for both maildir and mbox formats."""
+    takeout_dir = tmp_path / "takeout"
+    takeout_dir.mkdir()
+    (takeout_dir / "alice").mkdir()
+    with (
+        patch("charm.GDPR_TAKEOUT_DIR", str(takeout_dir)),
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+        patch("charm.prepare_user_dir"),
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-takeout", params={"username": "alice", "format": export_format}),
+            base_state,
+        )
+    assert ctx.action_results["status"] == "success"
+
+
+def test_gdpr_takeout_failure(ctx, base_state, tmp_path):
+    """gdpr-takeout must fail when doveadm exits non-zero."""
+    takeout_dir = tmp_path / "takeout"
+    takeout_dir.mkdir()
+    with (
+        patch("charm.GDPR_TAKEOUT_DIR", str(takeout_dir)),
+        patch(
+            "charm.subprocess.run",
+            side_effect=CalledProcessError(1, "doveadm", stderr="ghost"),
+        ),
+        patch("charm.prepare_user_dir"),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-takeout", params={"username": "alice", "format": "maildir"}),
+            base_state,
+        )
+    assert "ghost" in exc_info.value.message
+
+
+def test_gdpr_takeout_invalid_format(ctx, base_state, tmp_path):
+    """gdpr-takeout must fail fast when an unknown format is requested."""
+    takeout_dir = tmp_path / "takeout"
+    takeout_dir.mkdir()
+    with (
+        patch("charm.GDPR_TAKEOUT_DIR", str(takeout_dir)),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-takeout", params={"username": "alice", "format": "pdf"}),
+            base_state,
+        )
+    assert "pdf" in exc_info.value.message
+    assert "maildir" in exc_info.value.message
+    assert "mbox" in exc_info.value.message
+
+
+def test_gdpr_archive_binary_not_found(ctx, base_state, tmp_path):
+    """gdpr-archive must fail clearly when doveadm binary is missing."""
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    with (
+        patch("charm.GDPR_ARCHIVE_DIR", str(archive_dir)),
+        patch(
+            "charm.subprocess.run",
+            side_effect=FileNotFoundError(2, "No such file", "/usr/bin/doveadm"),
+        ),
+        patch("charm.prepare_user_dir"),
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(
+            ctx.on.action("gdpr-archive", params={"username": "alice", "compress": False}),
+            base_state,
+        )
+    assert "wait for the charm" in exc_info.value.message.lower()
