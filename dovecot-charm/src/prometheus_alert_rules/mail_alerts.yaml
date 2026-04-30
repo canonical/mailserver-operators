@@ -21,7 +21,10 @@ groups:
         expr: >-
           rate(dovecot_auth_failure_total{%%juju_topology%%}[5m])
           /
-          (rate(dovecot_auth_success_total{%%juju_topology%%}[5m]) + rate(dovecot_auth_failure_total{%%juju_topology%%}[5m]))
+          (
+            (rate(dovecot_auth_success_total{%%juju_topology%%}[5m]) or rate(dovecot_auth_failure_total{%%juju_topology%%}[5m]) * 0)
+            + rate(dovecot_auth_failure_total{%%juju_topology%%}[5m])
+          )
           > 0.5
         for: 5m
         labels:
