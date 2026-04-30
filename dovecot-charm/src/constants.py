@@ -12,7 +12,7 @@ TEMPLATES_DIR = Path(__file__).parent.parent.joinpath("templates")
 
 # Dovecot config
 DOVECOT_CONF_TEMPLATE = "dovecot.conf.tmpl"
-DOVECOT_CONF_TARGET = "/etc/dovecot/conf.d/99-local-dovecot-charm.conf"
+DOVECOT_CONF_TARGET = "/etc/dovecot/conf.d/99-local-dovecot.conf"
 
 # Procmail config
 PROCMAILRC_TEMPLATE = "procmailrc.tmpl"
@@ -43,7 +43,7 @@ PEER_RELATION_NAME = "replicas"
 # State file that persists the block-device path across reboots so that the
 # start hook can re-open LUKS without relying on `storage-get` (which fails
 # when Juju has not yet re-provisioned the storage after a VM restart).
-STORAGE_DEV_PATH_FILE = "/var/lib/dovecot-charm/storage-dev-path"
+STORAGE_DEV_PATH_FILE = "/var/lib/dovecot/storage-dev-path"
 
 TLS_CERT_DIR = Path("/etc/dovecot/private")
 

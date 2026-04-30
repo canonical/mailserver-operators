@@ -61,7 +61,7 @@ def test_from_charm_primary_unit_does_not_exist_raises_value_error(base_state):
 _VALID_BASE = {
     "mailname": "example.com",
     "postmaster_address": "admin@example.com",
-    "primary_unit": "dovecot-charm/0",
+    "primary_unit": "dovecot/0",
 }
 
 

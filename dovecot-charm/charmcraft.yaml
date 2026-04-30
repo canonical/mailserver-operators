@@ -7,7 +7,7 @@ base: ubuntu@24.04
 platforms:
   amd64:
 
-name: dovecot-charm
+name: dovecot
 
 summary: Dovecot IMAP/POP3 mail server charm
 
@@ -77,7 +77,7 @@ config:
       type: string
     primary-unit:
       description: |
-        The primary unit in a replicated charm deployment (e.g., 'dovecot-charm/0').
+        The primary unit in a replicated charm deployment (e.g., 'dovecot/0').
         Only the primary unit receives incoming mail; replicas are read-only.
       default: ""
       type: string
