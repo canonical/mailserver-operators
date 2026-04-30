@@ -33,13 +33,13 @@ _META = yaml.safe_load((_CHARM_ROOT / "charmcraft.yaml").read_text())
 
 @pytest.fixture
 def ctx():
-    return ops.testing.Context(DovecotTestCharm, meta=_META, app_name="dovecot-charm")
+    return ops.testing.Context(DovecotTestCharm, meta=_META, app_name="dovecot")
 
 
 @pytest.fixture
 def storage_ctx():
     """Context using StorageTestDovecotCharm: real StorageManager, no-op dovecot/HA."""
-    return ops.testing.Context(StorageTestDovecotCharm, meta=_META, app_name="dovecot-charm")
+    return ops.testing.Context(StorageTestDovecotCharm, meta=_META, app_name="dovecot")
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def base_state():
         config={
             "mailname": "example.com",
             "postmaster-address": "admin@example.com",
-            "primary-unit": "dovecot-charm/0",
+            "primary-unit": "dovecot/0",
             "luks-auto-provisioning": True,
             "luks-key": luks_secret.id,
         },

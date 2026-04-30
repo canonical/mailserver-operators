@@ -132,11 +132,6 @@ def test_gdpr_takeout(juju: jubilant.Juju, dovecot_charm: str, export_format: st
         juju.exec(f"rm -f {GDPR_TAKEOUT_DIR}/{GDPR_TEST_USER}-takeout.tar.gz", unit=unit_name)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 def _poll(juju: jubilant.Juju, unit_name: str, cmd: str, timeout: int = 60) -> None:
     """Poll a shell command on the unit until it exits 0, or raise after timeout."""
     deadline = time.monotonic() + timeout
