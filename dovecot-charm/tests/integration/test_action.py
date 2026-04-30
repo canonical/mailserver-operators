@@ -74,13 +74,13 @@ def test_gdpr_delete_requires_confirm(juju: jubilant.Juju, dovecot_charm: str):
     unit_name = f"{dovecot_charm}/0"
     _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
     try:
-        result = juju.run(
-            unit_name,
-            "gdpr-delete",
-            params={"username": GDPR_TEST_USER, "confirm": False},
-        )
-        assert result.status == "failed"
-        assert "confirm" in result.message.lower()
+        with pytest.raises(jubilant.TaskError) as exc_info:
+            juju.run(
+                unit_name,
+                "gdpr-delete",
+                params={"username": GDPR_TEST_USER, "confirm": False},
+            )
+        assert "confirm" in str(exc_info.value).lower()
         juju.exec(f"test -d {MAIL_ROOT}/{GDPR_TEST_USER}", unit=unit_name)
     finally:
         _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)

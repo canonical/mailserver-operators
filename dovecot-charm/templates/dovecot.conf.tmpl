@@ -3,6 +3,11 @@ valid_chroot_dirs = {{ dovecot_chroot }}
 mail_location = maildir:{{ mail_root }}/%u/Maildir
 first_valid_uid = 1000
 last_valid_uid = 60000
+
+namespace inbox {
+  separator = /
+  inbox = yes
+}
 default_process_limit = 100
 default_client_limit = 1000
 default_vsz_limit = 256M

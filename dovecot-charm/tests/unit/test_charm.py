@@ -263,6 +263,7 @@ def test_gdpr_archive(ctx, base_state, tmp_path, compress, expected_suffix):
     with (
         patch("charm.GDPR_ARCHIVE_DIR", str(archive_dir)),
         patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+        patch("charm.prepare_user_dir"),
     ):
         ctx.run(
             ctx.on.action("gdpr-archive", params={"username": "alice", "compress": compress}),
@@ -282,6 +283,7 @@ def test_gdpr_archive_failure(ctx, base_state, tmp_path):
             "charm.subprocess.run",
             side_effect=CalledProcessError(1, "doveadm", stderr="error"),
         ),
+        patch("charm.prepare_user_dir"),
         pytest.raises(ops.testing.ActionFailed) as exc_info,
     ):
         ctx.run(
@@ -355,6 +357,7 @@ def test_gdpr_takeout(ctx, base_state, tmp_path, export_format):
     with (
         patch("charm.GDPR_TAKEOUT_DIR", str(takeout_dir)),
         patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+        patch("charm.prepare_user_dir"),
     ):
         ctx.run(
             ctx.on.action("gdpr-takeout", params={"username": "alice", "format": export_format}),
@@ -373,6 +376,7 @@ def test_gdpr_takeout_failure(ctx, base_state, tmp_path):
             "charm.subprocess.run",
             side_effect=CalledProcessError(1, "doveadm", stderr="ghost"),
         ),
+        patch("charm.prepare_user_dir"),
         pytest.raises(ops.testing.ActionFailed) as exc_info,
     ):
         ctx.run(
@@ -409,6 +413,7 @@ def test_gdpr_archive_binary_not_found(ctx, base_state, tmp_path):
             "charm.subprocess.run",
             side_effect=FileNotFoundError(2, "No such file", "/usr/bin/doveadm"),
         ),
+        patch("charm.prepare_user_dir"),
         pytest.raises(ops.testing.ActionFailed) as exc_info,
     ):
         ctx.run(
