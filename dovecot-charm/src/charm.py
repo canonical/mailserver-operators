@@ -5,6 +5,7 @@
 """Dovecot charm."""
 
 import logging
+import os
 import shutil
 import subprocess  # nosec
 import typing
@@ -23,7 +24,11 @@ from ops.main import main
 from ops.model import BlockedStatus, MaintenanceStatus
 
 from constants import (
+    DOVEADM_BIN,
+    GDPR_ARCHIVE_DIR,
+    GDPR_TAKEOUT_DIR,
     HOSTNAME_FILE,
+    MAIL_ROOT,
     MAILNAME_FILE,
     PEER_RELATION_NAME,
     REQUIRED_PACKAGES,
@@ -35,6 +40,7 @@ from dovecot_setup import DovecotSetup
 from exceptions import CharmBlockedError, ConfigurationError, HASetupError
 from ha import HAManager
 from storage import StorageManager
+from utils import create_tarball, prepare_user_dir
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +60,9 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._reconcile)
         self.framework.observe(self.on.upgrade_charm, self._on_install)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
+        self.framework.observe(self.on.gdpr_archive_action, self._on_gdpr_archive)
+        self.framework.observe(self.on.gdpr_delete_action, self._on_gdpr_delete)
+        self.framework.observe(self.on.gdpr_takeout_action, self._on_gdpr_takeout)
         self.framework.observe(self.on.mail_data_storage_attached, self._reconcile)
         self.framework.observe(self.on.mail_data_storage_detaching, self._reconcile)
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._reconcile)
@@ -226,6 +235,152 @@ class DovecotCharm(CharmBase):
             logger.exception(f"Failed to clear Postfix queue: {e.stderr}")
             event.fail(f"Failed to run postsuper: {e.stderr}")
 
+    def _on_gdpr_archive(self, event):
+        """Archive a user's mailbox for long-term retention."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
+        username = event.params["username"]
+        compress = event.params.get("compress", True)
+        archive_dir = f"{GDPR_ARCHIVE_DIR}/{username}"
+
+        try:
+            prepare_user_dir(archive_dir, username)
+        except KeyError:
+            event.fail(f"System user '{username}' does not exist.")
+            return
+
+        logger.info(f"GDPR archive: archiving mailbox for user '{username}'")
+
+        try:
+            subprocess.run(
+                [DOVEADM_BIN, "backup", "-u", username, f"mdbox:{archive_dir}/"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError:
+            shutil.rmtree(archive_dir, ignore_errors=True)
+            msg = "Please wait for the charm to finish installing before running this action."
+            logger.exception(f"doveadm binary not found: {DOVEADM_BIN}")
+            event.fail(msg)
+            return
+        except subprocess.CalledProcessError as e:
+            shutil.rmtree(archive_dir, ignore_errors=True)
+            msg = f"Failed to archive mailbox for '{username}': {e.stderr}"
+            logger.exception(msg)
+            event.fail(msg)
+            return
+
+        logger.info(f"Mailbox for '{username}' backed up to {archive_dir}")
+
+        result_path = archive_dir
+        if compress:
+            tar_path = f"{GDPR_ARCHIVE_DIR}/{username}.tar.gz"
+            create_tarball(tar_path, GDPR_ARCHIVE_DIR, username)
+            shutil.rmtree(archive_dir)
+            result_path = tar_path
+            logger.info(f"Archive compressed to {tar_path}")
+
+        event.set_results({"status": "success", "path": result_path})
+
+    def _on_gdpr_delete(self, event):
+        """Permanently delete a user's mailbox (GDPR right to erasure)."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
+        username = event.params["username"]
+        confirm = event.params.get("confirm", False)
+
+        if not confirm:
+            event.fail("Deletion not confirmed. Set confirm=true to proceed.")
+            return
+
+        logger.warning(f"GDPR delete: permanently deleting mailbox for user '{username}'")
+
+        try:
+            subprocess.run(
+                [DOVEADM_BIN, "expunge", "-u", username, "mailbox", "*", "all"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError:
+            msg = "Please wait for the charm to finish installing before running this action."
+            logger.exception(f"doveadm binary not found: {DOVEADM_BIN}")
+            event.fail(msg)
+            return
+        except subprocess.CalledProcessError as e:
+            msg = f"Failed to delete mailbox for '{username}': {e.stderr}"
+            logger.exception(msg)
+            event.fail(msg)
+            return
+
+        logger.info(f"All mail expunged for user '{username}'")
+
+        user_mail_dir = os.path.join(MAIL_ROOT, username)
+        if os.path.exists(user_mail_dir):
+            shutil.rmtree(user_mail_dir)
+            logger.info(f"Mail directory removed: {user_mail_dir}")
+
+        event.set_results({"status": "success", "message": f"Mailbox for '{username}' deleted"})
+
+    def _on_gdpr_takeout(self, event):
+        """Export a user's mail data in a portable format (GDPR data portability)."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
+        username = event.params["username"]
+        export_format = event.params.get("format", "maildir")
+        export_dir = f"{GDPR_TAKEOUT_DIR}/{username}"
+
+        if export_format not in ("maildir", "mbox"):
+            event.fail(f"Invalid format parameter '{export_format}', must be 'maildir' or 'mbox'")
+            return
+
+        try:
+            prepare_user_dir(export_dir, username)
+        except KeyError:
+            event.fail(f"System user '{username}' does not exist.")
+            return
+
+        logger.info(f"GDPR takeout: exporting mailbox for user '{username}' as {export_format}")
+
+        try:
+            if export_format == "maildir":
+                dest = f"maildir:{export_dir}/:LAYOUT=fs"
+            else:  # mbox
+                dest = f"mbox:{export_dir}/:INBOX={export_dir}/INBOX"
+
+            subprocess.run(
+                [DOVEADM_BIN, "sync", "-u", username, dest],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError:
+            shutil.rmtree(export_dir, ignore_errors=True)
+            msg = "Please wait for the charm to finish installing before running this action."
+            logger.exception(f"doveadm binary not found: {DOVEADM_BIN}")
+            event.fail(msg)
+            return
+        except subprocess.CalledProcessError as e:
+            shutil.rmtree(export_dir, ignore_errors=True)
+            stderr = e.stderr.decode(errors="replace") if isinstance(e.stderr, bytes) else e.stderr
+            msg = f"Failed to export mailbox for '{username}': {stderr}"
+            logger.exception(msg)
+            event.fail(msg)
+            return
+
+        try:
+            tar_path = f"{GDPR_TAKEOUT_DIR}/{username}-takeout.tar.gz"
+            create_tarball(tar_path, GDPR_TAKEOUT_DIR, username)
+        finally:
+            shutil.rmtree(export_dir, ignore_errors=True)
+
+        logger.info(f"Takeout export created at {tar_path}")
+        event.set_results({"status": "success", "path": tar_path})
+
     def _on_force_sync(self, event):
         """Force synchronization with secondary unit."""
         if not self._is_primary:
@@ -260,11 +415,11 @@ class DovecotCharm(CharmBase):
             if e.stdout and e.stdout.strip():
                 parts.append(f"stdout: {e.stdout.strip()}")
             msg = ". ".join(parts)
-            logger.error(msg)
+            logger.exception(msg)
             event.fail(msg)
         except FileNotFoundError as e:
             msg = f"Sync failed: {e}"
-            logger.error(msg)
+            logger.exception(msg)
             event.fail(msg)
 
 

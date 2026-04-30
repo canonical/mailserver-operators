@@ -14,7 +14,7 @@ jobs:
           [
             {
               working-directory: "./dovecot-charm",
-              channel: "latest/edge",
+              channel: "2.3/edge",
               tag-prefix: "dovecot",
             },
           ]
