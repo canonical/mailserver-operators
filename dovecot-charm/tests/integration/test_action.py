@@ -253,7 +253,7 @@ def _setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, passwo
     juju.exec(
         (
             f"printf 'From: {user}@example.com\\nSubject: GDPR test\\n\\ntest body\\n' | "
-            f"doveadm deliver -u {user} -m INBOX"
+            f"doveadm save -u {user} -m INBOX"
         ),
         unit=unit_name,
     )
