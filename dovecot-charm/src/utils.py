@@ -52,4 +52,4 @@ def create_tarball(tar_path: str, base_dir: str, arcname: str) -> None:
     """
     with tarfile.open(tar_path, "w:gz") as tf:
         tf.add(os.path.join(base_dir, arcname), arcname=arcname)
-    os.chmod(tar_path, 0o600)
+    os.chmod(tar_path, 0o644)
