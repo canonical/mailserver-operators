@@ -15,8 +15,8 @@ jobs:
       provider: lxd
       trivy-fs-enabled: false
       trivy-image-config: "trivy.yaml"
-      self-hosted-runner: false
-      self-hosted-runner-label: "edge"
+      self-hosted-runner: true
+      self-hosted-runner-label: "large"
       juju-channel: '3/stable'
       with-uv: true
       working-directory: dovecot-charm
