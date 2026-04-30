@@ -29,7 +29,7 @@ def juju_fixture(request: pytest.FixtureRequest):
         return
 
     keep_models = typing.cast(bool, request.config.getoption("--keep-models"))
-    with jubilant.temp_model(keep=keep_models) as juju:
+    with jubilant.temp_model(keep=keep_models, config={"automatically-retry-hooks": True}) as juju:
         juju.wait_timeout = 10 * 60
         yield juju
         return
@@ -139,6 +139,10 @@ def tls_charm(juju: jubilant.Juju) -> str:
     else:
         logging.info(f"{tls_app} already deployed, skipping deployment.")
 
+    juju.wait(
+        lambda status: status.apps[tls_app].is_active,
+        timeout=10 * 60,
+    )
     return tls_app
 
 
@@ -166,27 +170,15 @@ def dovecot_charm_dual_unit(
             "luks-key": secret_id,
         }
         charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
+        # Deploy the primary unit only; the second unit is added after the primary
+        # is fully active to avoid concurrent install load and peer-relation races.
         juju.deploy(
             charm_path,
             app=APP_NAME,
             config=config,
             constraints={"virt-type": "virtual-machine"},
             trust=True,
-            num_units=2,
         )
-    else:
-        if len(juju.status().apps[APP_NAME].units) < 2:
-            logging.info("Adding the second unit...")
-            juju.add_unit(APP_NAME, num_units=1)
-
-        def two_units_active(status):
-            app = status.apps.get(APP_NAME)
-            if not app or len(app.units) < 2:
-                return False
-            return jubilant.all_active(status)
-
-        logging.info("Waiting for 2 units to be active...")
-        juju.wait(two_units_active, timeout=10 * 60)
 
     juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
     try:
@@ -194,9 +186,23 @@ def dovecot_charm_dual_unit(
         juju.integrate(f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
     except jubilant.CLIError:
         logging.info("TLS relation already there...")
-    logging.info("Waiting for active status...")
+
+    logging.info("Waiting for primary unit to be active...")
     juju.wait(
         lambda status: jubilant.all_active(status, APP_NAME, tls_charm),
         timeout=10 * 60,
     )
+
+    if len(juju.status().apps[APP_NAME].units) < 2:
+        logging.info("Adding the second unit...")
+        juju.add_unit(APP_NAME, num_units=1)
+
+    def two_units_active(status):
+        app = status.apps.get(APP_NAME)
+        if not app or len(app.units) < 2:
+            return False
+        return jubilant.all_active(status)
+
+    logging.info("Waiting for 2 units to be active...")
+    juju.wait(two_units_active, timeout=10 * 60)
     return APP_NAME
