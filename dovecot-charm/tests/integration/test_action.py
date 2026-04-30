@@ -75,7 +75,9 @@ def _cleanup_header_checks(juju: jubilant.Juju, unit_name: str):
 
 def _seed_deferred_queue_with_test_mail(juju: jubilant.Juju, unit_name: str):
     """Queue one deferred message by temporarily deferring SMTP transports."""
-    juju.exec("sudo postconf -e 'relayhost = [10.255.255.255]' && sudo postfix reload", unit=unit_name)
+    juju.exec(
+        "sudo postconf -e 'relayhost = [10.255.255.255]' && sudo postfix reload", unit=unit_name
+    )
     try:
         juju.exec(
             "printf 'Subject: deferred-test\\n\\nmessage body\\n' | "
