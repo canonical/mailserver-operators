@@ -40,7 +40,7 @@ groups:
       - alert: MailStorageAlmostFull
         expr: >-
           (node_filesystem_avail_bytes{%%juju_topology%%,mountpoint="/srv/mail"}
-          / node_filesystem_size_bytes{%%juju_topology%%,mountpoint="/srv/mail"}) < 0.1
+          / node_filesystem_size_bytes{%%juju_topology%%,mountpoint="/srv/mail"}) < 0.3
         for: 10m
         labels:
           severity: critical
