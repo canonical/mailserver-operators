@@ -50,7 +50,7 @@
       },
       "targets": [
         {
-          "expr": "up{instance=~\".*:9900\"}",
+          "expr": "up{instance=~\".*:9166\"}",
           "legendFormat": "{{juju_unit}}"
         }
       ],

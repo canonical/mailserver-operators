@@ -61,7 +61,7 @@ def test_reconcile_sets_active_on_success(ctx, base_state):
 def test_reconcile_opens_mail_ports(ctx, base_state):
     """All required IMAP/POP3/Sieve/metrics ports must be opened."""
     state_out = ctx.run(ctx.on.config_changed(), base_state)
-    expected = {ops.testing.TCPPort(p) for p in [993, 995, 4190, 9900]}
+    expected = {ops.testing.TCPPort(p) for p in [993, 995, 4190]}
     assert state_out.opened_ports == expected
 
 
@@ -269,7 +269,7 @@ def test_force_sync_script_not_installed(ctx, base_state):
 
 def test_cos_agent_relation_data_populated(ctx, base_state):
     """On cos-agent relation-joined, the unit databag must contain
-    the scrape job for port 9900 and non-empty alert rules and dashboard entries.
+    the scrape job for port 9166 and non-empty alert rules and dashboard entries.
     """
     cos_relation = ops.testing.Relation("cos-agent")
     state_in = dataclasses.replace(base_state, relations={cos_relation})
@@ -283,9 +283,9 @@ def test_cos_agent_relation_data_populated(ctx, base_state):
     data = json.loads(raw)
     scrape_jobs = data.get("metrics_scrape_jobs", [])
     assert any(
-        job.get("static_configs", [{}])[0].get("targets", [""])[0].endswith(":9900")
+        job.get("static_configs", [{}])[0].get("targets", [""])[0].endswith(":9166")
         for job in scrape_jobs
-    ), f"Expected scrape job on port 9900, got: {scrape_jobs}"
+    ), f"Expected scrape job on port 9166, got: {scrape_jobs}"
     assert data.get("metrics_alert_rules"), "metrics_alert_rules should be populated"
     assert data.get("log_alert_rules"), "log_alert_rules should be populated"
     assert data.get("dashboards"), "dashboards should be populated"

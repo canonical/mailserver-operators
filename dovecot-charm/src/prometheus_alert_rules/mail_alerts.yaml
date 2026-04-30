@@ -7,7 +7,7 @@ groups:
   - name: DovecotAlerts
     rules:
       - alert: DovecotExporterDown
-        expr: up{%%juju_topology%%,instance=~".*:9900"} == 0
+        expr: up{%%juju_topology%%,instance=~".*:9166"} == 0
         for: 5m
         labels:
           severity: critical

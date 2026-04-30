@@ -88,7 +88,7 @@ class DovecotCharm(CharmBase):
         self._grafana_agent = COSAgentProvider(
             self,
             relation_name="cos-agent",
-            metrics_endpoints=[{"path": "/metrics", "port": 9900}],
+            metrics_endpoints=[{"path": "/metrics", "port": 9166}],
             metrics_rules_dir="./src/prometheus_alert_rules",
             logs_rules_dir="./src/loki_alert_rules",
             dashboard_dirs=["./src/grafana_dashboards"],
@@ -213,7 +213,6 @@ class DovecotCharm(CharmBase):
         self.unit.open_port("tcp", 993)
         self.unit.open_port("tcp", 995)
         self.unit.open_port("tcp", 4190)
-        self.unit.open_port("tcp", 9900)
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""

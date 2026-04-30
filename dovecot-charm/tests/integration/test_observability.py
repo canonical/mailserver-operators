@@ -14,7 +14,7 @@ def test_dovecot_metrics(juju: jubilant.Juju, dovecot_charm: str):
     units = status.apps[dovecot_charm].units.values()
     assert units, "No units found for the Dovecot charm application"
     for unit in units:
-        metrics = requests.get(f"http://{unit.public_address}:9900/metrics", timeout=5).text
+        metrics = requests.get(f"http://{unit.public_address}:9166/metrics", timeout=5).text
         assert "dovecot_build_info" in metrics, "dovecot_build_info metric should be present"
         assert 'version="' in metrics, "dovecot_build_info should contain version info"
         assert "process_start_time_seconds" in metrics, (
