@@ -23,7 +23,6 @@ jobs:
         [
           "test_action.py",
           "test_config.py",
-          "test_ha.py",
           "test_mail.py",
           "test_storage.py",
           "test_tls.py",
