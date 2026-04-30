@@ -1,86 +1,43 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
-# Prometheus alert rules for imap-server charm
-# Adapted from canonical-is-prometheus/is/mail.rules
-# COS agent automatically injects juju_model/juju_unit topology labels
+# Prometheus alert rules for dovecot-charm
+# %%juju_topology%% is replaced at runtime by the cos-agent library with
+# juju_model, juju_model_uuid and juju_application label matchers.
 groups:
   - name: DovecotAlerts
     rules:
-      - alert: DovecotMasterProcessDown
-        expr: up{job="juju_imap-server"} == 0
+      - alert: DovecotExporterDown
+        expr: up{%%juju_topology%%,instance=~".*:9900"} == 0
         for: 5m
         labels:
           severity: critical
         annotations:
-          summary: "Dovecot master process is down"
+          summary: "Dovecot exporter is down"
           description: >-
-            The Dovecot master process on {{ $labels.juju_unit }} has been
+            The Dovecot metrics endpoint on {{ $labels.juju_unit }} has been
             unreachable for more than 5 minutes.
 
-      - alert: DovecotExporterDown
-        expr: absent(dovecot_up{job="juju_imap-server"})
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Dovecot exporter is not responding"
-          description: >-
-            The dovecot_exporter metrics endpoint on {{ $labels.juju_unit }}
-            has not reported in for 5 minutes.
-
-  - name: MailPortAlerts
-    rules:
-      - alert: IMAPSSLPortUnresponsive
-        expr: probe_success{instance=~".*:993"} == 0
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "IMAP SSL port 993 is unresponsive"
-          description: >-
-            TCP probe to port 993 (IMAP SSL) on {{ $labels.instance }} has
-            been failing for more than 5 minutes.
-
-      - alert: POP3SSLPortUnresponsive
-        expr: probe_success{instance=~".*:995"} == 0
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "POP3 SSL port 995 is unresponsive"
-          description: >-
-            TCP probe to port 995 (POP3 SSL) on {{ $labels.instance }} has
-            been failing for more than 5 minutes.
-
-      - alert: SievePortUnresponsive
-        expr: probe_success{instance=~".*:4190"} == 0
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Sieve port 4190 is unresponsive"
-          description: >-
-            TCP probe to port 4190 (ManageSieve) on {{ $labels.instance }}
-            has been failing for more than 5 minutes.
-
-  - name: MailSyncAlerts
-    rules:
-      - alert: MailLastDsyncStale
+      - alert: DovecotHighAuthFailureRate
         expr: >-
-          (time() - dovecot_last_dsync_timestamp{job="juju_imap-server"}) > 86400
-        for: 10m
+          rate(dovecot_auth_failure_total{%%juju_topology%%}[5m])
+          /
+          (rate(dovecot_auth_success_total{%%juju_topology%%}[5m]) + rate(dovecot_auth_failure_total{%%juju_topology%%}[5m]))
+          > 0.5
+        for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Last dsync is stale (>24h)"
+          summary: "High authentication failure rate on {{ $labels.juju_unit }}"
           description: >-
-            The last dsync timestamp on {{ $labels.juju_unit }} is older
-            than 24 hours. Mail replication may be broken.
+            More than 50% of authentication attempts on {{ $labels.juju_unit }}
+            (service: {{ $labels.service }}) are failing. Possible brute-force attack.
 
+  - name: MailStorageAlerts
+    rules:
       - alert: MailStorageAlmostFull
         expr: >-
-          (node_filesystem_avail_bytes{mountpoint="/srv/mail"}
-          / node_filesystem_size_bytes{mountpoint="/srv/mail"}) < 0.1
+          (node_filesystem_avail_bytes{%%juju_topology%%,mountpoint="/srv/mail"}
+          / node_filesystem_size_bytes{%%juju_topology%%,mountpoint="/srv/mail"}) < 0.1
         for: 10m
         labels:
           severity: critical
