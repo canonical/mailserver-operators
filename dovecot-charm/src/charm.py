@@ -8,6 +8,7 @@ import logging
 import os
 import shutil
 import subprocess  # nosec
+import tarfile
 import typing
 from functools import cached_property
 from pathlib import Path
@@ -33,7 +34,6 @@ from constants import (
     PEER_RELATION_NAME,
     REQUIRED_PACKAGES,
     SYNC_TO_SECONDARY_TARGET,
-    TAR_BIN,
     TEMPLATES_DIR,
 )
 from dovecot_config import DovecotConfig, DovecotConfigInvalidError, DovecotConfigSecretError
@@ -43,6 +43,19 @@ from ha import HAManager
 from storage import StorageManager
 
 logger = logging.getLogger(__name__)
+
+
+def _create_tarball(tar_path: str, base_dir: str, arcname: str) -> None:
+    """Create a gzip-compressed tarball of a directory using the Python tarfile module.
+
+    Args:
+        tar_path: destination path for the .tar.gz file.
+        base_dir: directory that contains the source tree to archive.
+        arcname: name of the top-level entry inside the archive (relative to base_dir).
+    """
+    with tarfile.open(tar_path, "w:gz") as tf:
+        tf.add(os.path.join(base_dir, arcname), arcname=arcname)
+    os.chmod(tar_path, 0o600)
 
 
 class DovecotCharm(CharmBase):
@@ -261,16 +274,7 @@ class DovecotCharm(CharmBase):
             result_path = archive_dir
             if compress:
                 tar_path = f"{GDPR_ARCHIVE_DIR}/{username}.tar.gz"
-                try:
-                    subprocess.run(
-                        [TAR_BIN, "-czf", tar_path, "-C", GDPR_ARCHIVE_DIR, username],
-                        check=True,
-                        capture_output=True,
-                        text=True,
-                    )
-                except (subprocess.CalledProcessError, FileNotFoundError):
-                    shutil.rmtree(archive_dir, ignore_errors=True)
-                    raise
+                _create_tarball(tar_path, GDPR_ARCHIVE_DIR, username)
                 shutil.rmtree(archive_dir)
                 result_path = tar_path
                 logger.info(f"Archive compressed to {tar_path}")
@@ -285,6 +289,9 @@ class DovecotCharm(CharmBase):
             msg = f"Failed to archive mailbox for '{username}': {e.stderr}"
             logger.exception(msg)
             event.fail(msg)
+        except Exception:
+            shutil.rmtree(archive_dir, ignore_errors=True)
+            raise
 
     def _on_gdpr_delete(self, event):
         """Permanently delete a user's mailbox (GDPR right to erasure)."""
@@ -342,7 +349,8 @@ class DovecotCharm(CharmBase):
         logger.info(f"GDPR takeout: exporting mailbox for user '{username}' as {export_format}")
 
         try:
-            os.makedirs(export_dir, exist_ok=True)
+            os.makedirs(export_dir, mode=0o700, exist_ok=True)
+            os.chmod(export_dir, 0o700)
 
             if export_format == "maildir":
                 subprocess.run(
@@ -373,13 +381,7 @@ class DovecotCharm(CharmBase):
                 )
 
             tar_path = f"{GDPR_TAKEOUT_DIR}/{username}-takeout.tar.gz"
-            subprocess.run(
-                [TAR_BIN, "-czf", tar_path, "-C", GDPR_TAKEOUT_DIR, username],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            shutil.rmtree(export_dir)
+            _create_tarball(tar_path, GDPR_TAKEOUT_DIR, username)
 
             logger.info(f"Takeout export created at {tar_path}")
             event.set_results({"status": "success", "path": tar_path})

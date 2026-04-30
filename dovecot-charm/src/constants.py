@@ -64,5 +64,4 @@ SSH_HOST_KEY_FILE = Path("/etc/ssh/ssh_host_ed25519_key.pub")
 # GDPR action paths
 GDPR_ARCHIVE_DIR = "/srv/mail/archives"
 GDPR_TAKEOUT_DIR = "/srv/mail/takeout"
-TAR_BIN = "/usr/bin/tar"
 DOVEADM_BIN = "/usr/bin/doveadm"
