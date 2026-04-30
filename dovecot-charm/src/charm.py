@@ -347,19 +347,13 @@ class DovecotCharm(CharmBase):
         logger.info(f"GDPR takeout: exporting mailbox for user '{username}' as {export_format}")
 
         try:
-            command = [DOVEADM_BIN, "sync", "-u", username, f"maildir:{export_dir}/:LAYOUT=fs"]
-            if export_format == "mbox":
-                mbox_path = f"{export_dir}/{username}.mbox"
-                command = [
-                    DOVEADM_BIN,
-                    "sync",
-                    "-u",
-                    username,
-                    f"mbox:{mbox_path}:INBOX={mbox_path}",
-                ]
+            if export_format == "maildir":
+                dest = f"maildir:{export_dir}/:LAYOUT=fs"
+            else:  # mbox
+                dest = f"mbox:{export_dir}/:INBOX={export_dir}/INBOX"
 
             subprocess.run(
-                command,
+                [DOVEADM_BIN, "sync", "-u", username, dest],
                 check=True,
                 capture_output=True,
                 text=True,

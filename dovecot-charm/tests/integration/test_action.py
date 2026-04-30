@@ -126,7 +126,7 @@ def test_gdpr_takeout(juju: jubilant.Juju, gdpr_test_user: tuple, export_format:
             juju.scp(f"{unit_name}:{takeout_path}", local_tarball)
             with tarfile.open(local_tarball, "r:gz") as tar:
                 tar.extractall(path=tmp, filter="data")
-            mbox_path = os.path.join(tmp, username, f"{username}.mbox")
+            mbox_path = os.path.join(tmp, username, "INBOX")
             mbox_file = mailbox.mbox(mbox_path)
             assert len(mbox_file) >= 1, f"Expected at least 1 message, got {len(mbox_file)}"
 
