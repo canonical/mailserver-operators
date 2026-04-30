@@ -182,9 +182,9 @@ def test_data_persists_across_restart(juju: jubilant.Juju, dovecot_charm: str):
 
     # Wait for charm to re-settle after reboot
     logging.info("Waiting for charm to re-settle...")
-    # After reboot the Juju controller connection drops while the VM restarts.
-    # Poll juju status until it succeeds before calling juju.wait(), otherwise
-    # jubilant raises CLIError immediately on the first status attempt.
+    # After reboot the unit's Juju agent is temporarily unavailable while the
+    # VM restarts.  Poll juju status until it succeeds before calling
+    # juju.wait(), otherwise jubilant raises CLIError on the first attempt.
     deadline = time.monotonic() + 10 * 60
     while time.monotonic() < deadline:
         try:

@@ -347,21 +347,23 @@ class DovecotCharm(CharmBase):
         logger.info(f"GDPR takeout: exporting mailbox for user '{username}' as {export_format}")
 
         try:
-            if export_format == "maildir":
-                subprocess.run(
-                    [DOVEADM_BIN, "sync", "-u", username, f"maildir:{export_dir}/:LAYOUT=fs"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-            else:  # mbox
+            command = [DOVEADM_BIN, "sync", "-u", username, f"maildir:{export_dir}/:LAYOUT=fs"]
+            if export_format == "mbox":
                 mbox_path = f"{export_dir}/{username}.mbox"
-                subprocess.run(
-                    [DOVEADM_BIN, "sync", "-u", username, f"mbox:{mbox_path}:INBOX={mbox_path}"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
+                command = [
+                    DOVEADM_BIN,
+                    "sync",
+                    "-u",
+                    username,
+                    f"mbox:{mbox_path}:INBOX={mbox_path}",
+                ]
+
+            subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
         except FileNotFoundError:
             shutil.rmtree(export_dir, ignore_errors=True)
             msg = "Please wait for the charm to finish installing before running this action."

@@ -2,7 +2,11 @@
 # See LICENSE file for licensing details.
 
 import logging
+import mailbox
+import os
 import secrets
+import tarfile
+import tempfile
 import time
 
 import jubilant
@@ -15,6 +19,18 @@ GDPR_TEST_PASSWORD = secrets.token_hex(16)
 MAIL_ROOT = "/srv/mail"
 GDPR_ARCHIVE_DIR = f"{MAIL_ROOT}/archives"
 GDPR_TAKEOUT_DIR = f"{MAIL_ROOT}/takeout"
+
+
+@pytest.fixture()
+def gdpr_test_user(juju: jubilant.Juju, dovecot_charm: str):
+    """Create a GDPR test user with one message; tear down after the test."""
+    unit_name = f"{dovecot_charm}/0"
+    _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
+    yield unit_name, GDPR_TEST_USER
+    _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
+    juju.exec(f"rm -f {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}.tar.gz", unit=unit_name)
+    juju.exec(f"rm -rf {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}", unit=unit_name)
+    juju.exec(f"rm -f {GDPR_TAKEOUT_DIR}/{GDPR_TEST_USER}-takeout.tar.gz", unit=unit_name)
 
 
 def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
@@ -44,92 +60,75 @@ def test_clear_queue_action(juju: jubilant.Juju, dovecot_charm: str):
 
 
 @pytest.mark.parametrize("compress", [True, False])
-def test_gdpr_archive(juju: jubilant.Juju, dovecot_charm: str, compress: bool):
+def test_gdpr_archive(juju: jubilant.Juju, gdpr_test_user: tuple, compress: bool):
     """gdpr-archive creates the expected output based on compress flag."""
-    unit_name = f"{dovecot_charm}/0"
-    _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
-    try:
-        result = juju.run(
-            unit_name,
-            "gdpr-archive",
-            params={"username": GDPR_TEST_USER, "compress": compress},
-        )
-        assert result.status == "completed"
-        assert result.results.get("status") == "success"
-        archive_path = result.results.get("path", "")
-        if compress:
-            assert archive_path.endswith(".tar.gz")
-            juju.exec(f"test -f {archive_path}", unit=unit_name)
-        else:
-            assert not archive_path.endswith(".tar.gz")
-            juju.exec(f"test -d {archive_path}", unit=unit_name)
-    finally:
-        _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
-        juju.exec(f"rm -f {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}.tar.gz", unit=unit_name)
-        juju.exec(f"rm -rf {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}", unit=unit_name)
+    unit_name, username = gdpr_test_user
+    result = juju.run(
+        unit_name,
+        "gdpr-archive",
+        params={"username": username, "compress": compress},
+    )
+    assert result.status == "completed"
+    assert result.results.get("status") == "success"
+    archive_path = result.results.get("path", "")
+    if compress:
+        assert archive_path.endswith(".tar.gz")
+        juju.exec(f"test -f {archive_path}", unit=unit_name)
+    else:
+        assert not archive_path.endswith(".tar.gz")
+        juju.exec(f"test -d {archive_path}", unit=unit_name)
 
 
-def test_gdpr_delete_requires_confirm(juju: jubilant.Juju, dovecot_charm: str):
+def test_gdpr_delete_requires_confirm(juju: jubilant.Juju, gdpr_test_user: tuple):
     """gdpr-delete without confirm=true must fail with a clear error message."""
-    unit_name = f"{dovecot_charm}/0"
-    _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
-    try:
-        with pytest.raises(jubilant.TaskError) as exc_info:
-            juju.run(
-                unit_name,
-                "gdpr-delete",
-                params={"username": GDPR_TEST_USER, "confirm": False},
-            )
-        assert "confirm" in str(exc_info.value).lower()
-        juju.exec(f"test -d {MAIL_ROOT}/{GDPR_TEST_USER}", unit=unit_name)
-    finally:
-        _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
-
-
-def test_gdpr_delete_confirmed(juju: jubilant.Juju, dovecot_charm: str):
-    """gdpr-delete with confirm=true expunges all mail and removes the mail directory."""
-    unit_name = f"{dovecot_charm}/0"
-    _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
-    try:
-        result = juju.run(
+    unit_name, username = gdpr_test_user
+    with pytest.raises(jubilant.TaskError) as exc_info:
+        juju.run(
             unit_name,
             "gdpr-delete",
-            params={"username": GDPR_TEST_USER, "confirm": True},
+            params={"username": username, "confirm": False},
         )
-        assert result.status == "completed"
-        assert result.results.get("status") == "success"
-        juju.exec(f"test ! -d {MAIL_ROOT}/{GDPR_TEST_USER}", unit=unit_name)
-    finally:
-        _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
+    assert "confirm" in str(exc_info.value).lower()
+    juju.exec(f"test -d {MAIL_ROOT}/{username}", unit=unit_name)
+
+
+def test_gdpr_delete_confirmed(juju: jubilant.Juju, gdpr_test_user: tuple):
+    """gdpr-delete with confirm=true expunges all mail and removes the mail directory."""
+    unit_name, username = gdpr_test_user
+    result = juju.run(
+        unit_name,
+        "gdpr-delete",
+        params={"username": username, "confirm": True},
+    )
+    assert result.status == "completed"
+    assert result.results.get("status") == "success"
+    juju.exec(f"test ! -d {MAIL_ROOT}/{username}", unit=unit_name)
 
 
 @pytest.mark.parametrize("export_format", ["maildir", "mbox"])
-def test_gdpr_takeout(juju: jubilant.Juju, dovecot_charm: str, export_format: str):
+def test_gdpr_takeout(juju: jubilant.Juju, gdpr_test_user: tuple, export_format: str):
     """gdpr-takeout creates a tarball for the given export format."""
-    unit_name = f"{dovecot_charm}/0"
-    _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
-    try:
-        result = juju.run(
-            unit_name,
-            "gdpr-takeout",
-            params={"username": GDPR_TEST_USER, "format": export_format},
-        )
-        assert result.status == "completed"
-        assert result.results.get("status") == "success"
-        takeout_path = result.results.get("path", "")
-        assert takeout_path.endswith(".tar.gz")
-        juju.exec(f"test -f {takeout_path}", unit=unit_name)
+    unit_name, username = gdpr_test_user
+    result = juju.run(
+        unit_name,
+        "gdpr-takeout",
+        params={"username": username, "format": export_format},
+    )
+    assert result.status == "completed"
+    assert result.results.get("status") == "success"
+    takeout_path = result.results.get("path", "")
+    assert takeout_path.endswith(".tar.gz")
+    juju.exec(f"test -f {takeout_path}", unit=unit_name)
 
-        if export_format == "mbox":
-            extract_dir = f"{GDPR_TAKEOUT_DIR}/{GDPR_TEST_USER}-verify"
-            juju.exec(f"mkdir -p {extract_dir}", unit=unit_name)
-            juju.exec(f"tar -xzf {takeout_path} -C {extract_dir}", unit=unit_name)
-            mbox_path = f"{extract_dir}/{GDPR_TEST_USER}/{GDPR_TEST_USER}.mbox"
-            juju.exec(f"grep -q '^From ' {mbox_path}", unit=unit_name)
-            juju.exec(f"rm -rf {extract_dir}", unit=unit_name)
-    finally:
-        _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
-        juju.exec(f"rm -f {GDPR_TAKEOUT_DIR}/{GDPR_TEST_USER}-takeout.tar.gz", unit=unit_name)
+    if export_format == "mbox":
+        with tempfile.TemporaryDirectory() as tmp:
+            local_tarball = os.path.join(tmp, "takeout.tar.gz")
+            juju.scp(f"{unit_name}:{takeout_path}", local_tarball)
+            with tarfile.open(local_tarball, "r:gz") as tar:
+                tar.extractall(path=tmp, filter="data")
+            mbox_path = os.path.join(tmp, username, f"{username}.mbox")
+            mbox_file = mailbox.mbox(mbox_path)
+            assert len(mbox_file) >= 1, f"Expected at least 1 message, got {len(mbox_file)}"
 
 
 def _poll(juju: jubilant.Juju, unit_name: str, cmd: str, timeout: int = 60) -> None:
@@ -152,19 +151,19 @@ def _log_queue_state(juju: jubilant.Juju, unit_name: str) -> None:
     try:
         result = juju.exec("postqueue -p", unit=unit_name)
         logger.info("postqueue -p:\n%s", result.stdout)
-    except Exception:
+    except (jubilant.CLIError, jubilant.TaskError):
         logger.exception("Failed to capture postqueue -p")
     try:
         result = juju.exec(
             "sudo find /var/spool/postfix/deferred -type f | head -20", unit=unit_name
         )
         logger.info("deferred spool files:\n%s", result.stdout or "(empty)")
-    except Exception:
+    except (jubilant.CLIError, jubilant.TaskError):
         logger.exception("Failed to capture deferred spool state")
     try:
         result = juju.exec("sudo postconf relayhost header_checks", unit=unit_name)
         logger.info("postconf relayhost header_checks:\n%s", result.stdout)
-    except Exception:
+    except (jubilant.CLIError, jubilant.TaskError):
         logger.exception("Failed to capture postconf state")
 
 
