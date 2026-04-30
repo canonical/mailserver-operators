@@ -259,39 +259,40 @@ class DovecotCharm(CharmBase):
 
         logger.info(f"GDPR archive: archiving mailbox for user '{username}'")
 
-        try:
-            os.makedirs(archive_dir, mode=0o700, exist_ok=True)
-            os.chmod(archive_dir, 0o700)
+        os.makedirs(archive_dir, mode=0o700, exist_ok=True)
+        os.chmod(archive_dir, 0o700)
 
+        try:
             subprocess.run(
                 [DOVEADM_BIN, "backup", "-u", username, f"mdbox:{archive_dir}/"],
                 check=True,
                 capture_output=True,
                 text=True,
             )
-            logger.info(f"Mailbox for '{username}' backed up to {archive_dir}")
-
-            result_path = archive_dir
-            if compress:
-                tar_path = f"{GDPR_ARCHIVE_DIR}/{username}.tar.gz"
-                _create_tarball(tar_path, GDPR_ARCHIVE_DIR, username)
-                shutil.rmtree(archive_dir)
-                result_path = tar_path
-                logger.info(f"Archive compressed to {tar_path}")
-
-            event.set_results({"status": "success", "path": result_path})
-        except FileNotFoundError as e:
+        except FileNotFoundError:
+            shutil.rmtree(archive_dir, ignore_errors=True)
             msg = "Please wait for the charm to finish installing before running this action."
-            logger.exception(f"Binary not found: {e.filename}")
+            logger.exception(f"doveadm binary not found: {DOVEADM_BIN}")
             event.fail(msg)
+            return
         except subprocess.CalledProcessError as e:
             shutil.rmtree(archive_dir, ignore_errors=True)
             msg = f"Failed to archive mailbox for '{username}': {e.stderr}"
             logger.exception(msg)
             event.fail(msg)
-        except Exception:
-            shutil.rmtree(archive_dir, ignore_errors=True)
-            raise
+            return
+
+        logger.info(f"Mailbox for '{username}' backed up to {archive_dir}")
+
+        result_path = archive_dir
+        if compress:
+            tar_path = f"{GDPR_ARCHIVE_DIR}/{username}.tar.gz"
+            _create_tarball(tar_path, GDPR_ARCHIVE_DIR, username)
+            shutil.rmtree(archive_dir)
+            result_path = tar_path
+            logger.info(f"Archive compressed to {tar_path}")
+
+        event.set_results({"status": "success", "path": result_path})
 
     def _on_gdpr_delete(self, event):
         """Permanently delete a user's mailbox (GDPR right to erasure)."""
@@ -314,24 +315,25 @@ class DovecotCharm(CharmBase):
                 capture_output=True,
                 text=True,
             )
-            logger.info(f"All mail expunged for user '{username}'")
-
-            user_mail_dir = os.path.join(MAIL_ROOT, username)
-            if os.path.exists(user_mail_dir):
-                shutil.rmtree(user_mail_dir)
-                logger.info(f"Mail directory removed: {user_mail_dir}")
-
-            event.set_results(
-                {"status": "success", "message": f"Mailbox for '{username}' deleted"}
-            )
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             msg = "Please wait for the charm to finish installing before running this action."
-            logger.exception(f"Binary not found: {e.filename}")
+            logger.exception(f"doveadm binary not found: {DOVEADM_BIN}")
             event.fail(msg)
+            return
         except subprocess.CalledProcessError as e:
             msg = f"Failed to delete mailbox for '{username}': {e.stderr}"
             logger.exception(msg)
             event.fail(msg)
+            return
+
+        logger.info(f"All mail expunged for user '{username}'")
+
+        user_mail_dir = os.path.join(MAIL_ROOT, username)
+        if os.path.exists(user_mail_dir):
+            shutil.rmtree(user_mail_dir)
+            logger.info(f"Mail directory removed: {user_mail_dir}")
+
+        event.set_results({"status": "success", "message": f"Mailbox for '{username}' deleted"})
 
     def _on_gdpr_takeout(self, event):
         """Export a user's mail data in a portable format (GDPR data portability)."""
@@ -348,19 +350,13 @@ class DovecotCharm(CharmBase):
 
         logger.info(f"GDPR takeout: exporting mailbox for user '{username}' as {export_format}")
 
-        try:
-            os.makedirs(export_dir, mode=0o700, exist_ok=True)
-            os.chmod(export_dir, 0o700)
+        os.makedirs(export_dir, mode=0o700, exist_ok=True)
+        os.chmod(export_dir, 0o700)
 
+        try:
             if export_format == "maildir":
                 subprocess.run(
-                    [
-                        DOVEADM_BIN,
-                        "sync",
-                        "-u",
-                        username,
-                        f"maildir:{export_dir}/:LAYOUT=fs",
-                    ],
+                    [DOVEADM_BIN, "sync", "-u", username, f"maildir:{export_dir}/:LAYOUT=fs"],
                     check=True,
                     capture_output=True,
                     text=True,
@@ -368,35 +364,33 @@ class DovecotCharm(CharmBase):
             else:  # export_format == "mbox"
                 mbox_path = f"{export_dir}/{username}.mbox"
                 subprocess.run(
-                    [
-                        DOVEADM_BIN,
-                        "sync",
-                        "-u",
-                        username,
-                        f"mbox:{mbox_path}:INBOX={mbox_path}",
-                    ],
+                    [DOVEADM_BIN, "sync", "-u", username, f"mbox:{mbox_path}:INBOX={mbox_path}"],
                     check=True,
                     capture_output=True,
                     text=True,
                 )
-
-            tar_path = f"{GDPR_TAKEOUT_DIR}/{username}-takeout.tar.gz"
-            _create_tarball(tar_path, GDPR_TAKEOUT_DIR, username)
-
-            logger.info(f"Takeout export created at {tar_path}")
-            event.set_results({"status": "success", "path": tar_path})
-        except FileNotFoundError as e:
+        except FileNotFoundError:
+            shutil.rmtree(export_dir, ignore_errors=True)
             msg = "Please wait for the charm to finish installing before running this action."
-            logger.exception(f"Binary not found: {e.filename}")
+            logger.exception(f"doveadm binary not found: {DOVEADM_BIN}")
             event.fail(msg)
+            return
         except subprocess.CalledProcessError as e:
+            shutil.rmtree(export_dir, ignore_errors=True)
             stderr = e.stderr.decode(errors="replace") if isinstance(e.stderr, bytes) else e.stderr
             msg = f"Failed to export mailbox for '{username}': {stderr}"
             logger.exception(msg)
             event.fail(msg)
+            return
+
+        try:
+            tar_path = f"{GDPR_TAKEOUT_DIR}/{username}-takeout.tar.gz"
+            _create_tarball(tar_path, GDPR_TAKEOUT_DIR, username)
         finally:
-            if os.path.isdir(export_dir):
-                shutil.rmtree(export_dir, ignore_errors=True)
+            shutil.rmtree(export_dir, ignore_errors=True)
+
+        logger.info(f"Takeout export created at {tar_path}")
+        event.set_results({"status": "success", "path": tar_path})
 
     def _on_force_sync(self, event):
         """Force synchronization with secondary unit."""
