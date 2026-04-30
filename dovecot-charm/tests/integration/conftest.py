@@ -7,7 +7,6 @@ from secrets import token_hex
 
 import jubilant
 import pytest
-import requests
 
 logger = logging.getLogger(__name__)
 
