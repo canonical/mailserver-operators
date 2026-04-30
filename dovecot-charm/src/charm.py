@@ -85,7 +85,6 @@ class DovecotCharm(CharmBase):
             )
             self.framework.observe(self._tls.on.certificate_available, self._reconcile)
 
-        # COS observability
         self._grafana_agent = COSAgentProvider(
             self,
             relation_name="cos-agent",
