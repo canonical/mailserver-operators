@@ -74,15 +74,6 @@ def dovecot_charm(
             config=config,
             constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
         )
-        juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
-        logging.info("Waiting for all agents to be idle...")
-        juju.wait(
-            lambda status: jubilant.all_agents_idle(status, APP_NAME),
-            timeout=10 * 60,
-            successes=5,
-            delay=10,
-        )
-        logging.info("all agents idle.")
     juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
     try:
         logging.info("Adding TLS relation...")
@@ -123,14 +114,6 @@ def dovecot_charm_manual_storage(
             config=config,
             constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
         )
-        logging.info("Waiting for all agents to be idle...")
-        juju.wait(
-            lambda status: jubilant.all_agents_idle(status, APP_NAME),
-            timeout=10 * 60,
-            successes=5,
-            delay=10,
-        )
-        logging.info("all agents idle.")
     try:
         logging.info("Adding TLS relation...")
         juju.integrate(f"{charm_name}:certificates", f"{tls_charm}:certificates")
@@ -153,12 +136,6 @@ def tls_charm(juju: jubilant.Juju) -> str:
         juju.deploy(tls_app, channel="1/stable")
     else:
         logging.info(f"{tls_app} already deployed, skipping deployment.")
-    juju.wait(
-        lambda status: jubilant.all_active(status, tls_app),
-        timeout=10 * 60,
-        successes=5,
-        delay=10,
-    )
     return tls_app
 
 
@@ -193,15 +170,6 @@ def dovecot_charm_dual_unit(
             constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
             num_units=2,
         )
-        juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
-        logging.info("Waiting for all agents to be idle...")
-        juju.wait(
-            lambda status: jubilant.all_agents_idle(status, APP_NAME),
-            timeout=10 * 60,
-            successes=5,
-            delay=10,
-        )
-        logging.info("all agents idle.")
     else:
         if len(juju.status().apps[APP_NAME].units) < 2:
             logging.info("Adding the second unit...")
@@ -228,10 +196,3 @@ def dovecot_charm_dual_unit(
         timeout=10 * 60,
     )
     return APP_NAME
-
-
-@pytest.fixture(scope="module", name="session_with_retry")
-def session_with_retry_fixture():
-    """Return a requests session."""
-    session = requests.Session()
-    return session

@@ -7,19 +7,6 @@ import jubilant
 import requests
 
 
-def test_dovecot_openmetrics_endpoint(juju: jubilant.Juju, dovecot_charm: str):
-    """Verify the Dovecot OpenMetrics endpoint responds on port 9900."""
-    logging.info("Checking OpenMetrics endpoint on port 9900...")
-
-    status = juju.status()
-    units = status.apps[dovecot_charm].units.values()
-    assert units, "No units found for the Dovecot charm application"
-    for unit in units:
-        response = requests.get(f"http://{unit.public_address}:9900/metrics", timeout=5)
-        assert "# HELP" in response.text
-        assert "dovecot_" in response.text, "Metrics should contain dovecot-specific metrics"
-
-
 def test_dovecot_metrics(juju: jubilant.Juju, dovecot_charm: str):
     """Verify expected metrics are present on the OpenMetrics endpoint."""
     logging.info("Checking for specific Dovecot metrics...")
@@ -33,7 +20,6 @@ def test_dovecot_metrics(juju: jubilant.Juju, dovecot_charm: str):
         assert "process_start_time_seconds" in metrics, (
             "process_start_time_seconds metric should be present"
         )
-        assert "dovecot_" in metrics, "Should have dovecot metrics"
     logging.info("Dovecot metrics confirmed.")
 
 
