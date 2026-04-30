@@ -33,121 +33,197 @@
       "title": "Service Status",
       "type": "row",
       "collapsed": false,
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "panels": []
     },
     {
       "title": "Dovecot Exporter Up",
       "type": "stat",
-      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "targets": [
         {
-          "expr": "dovecot_up{juju_charm=\"imap-server\"}",
-          "legendFormat": "{{ juju_unit }}"
+          "expr": "up{instance=~\".*:9900\"}",
+          "legendFormat": "{{juju_unit}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}}},
-            {"type": "value", "options": {"1": {"text": "UP", "color": "green"}}}
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "red", "value": null},
-              {"color": "green", "value": 1}
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
-          }
+          },
+          "displayName": "${__field.labels.juju_unit}"
         }
       },
-      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1}
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none"
+      }
     },
     {
       "title": "Connected IMAP Sessions",
       "type": "timeseries",
-      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "targets": [
         {
-          "expr": "dovecot_imap_connections{juju_charm=\"imap-server\"}",
-          "legendFormat": "{{ juju_unit }}"
+          "expr": "increase(dovecot_auth_success_total{service=\"imap\",juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[$__range])",
+          "legendFormat": "{{juju_unit}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 6, "y": 1}
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      }
     },
     {
       "title": "Connected POP3 Sessions",
       "type": "timeseries",
-      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "targets": [
         {
-          "expr": "dovecot_pop3_connections{juju_charm=\"imap-server\"}",
-          "legendFormat": "{{ juju_unit }}"
+          "expr": "increase(dovecot_auth_success_total{service=\"pop3\",juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[$__range])",
+          "legendFormat": "{{juju_unit}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 1}
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      }
     },
     {
       "title": "Authentication",
       "type": "row",
       "collapsed": false,
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
       "panels": []
     },
     {
       "title": "Auth Success Rate",
       "type": "timeseries",
-      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "targets": [
         {
-          "expr": "rate(dovecot_auth_success_total{juju_charm=\"imap-server\"}[5m])",
-          "legendFormat": "success {{ juju_unit }}"
-        },
-        {
-          "expr": "rate(dovecot_auth_failures_total{juju_charm=\"imap-server\"}[5m])",
-          "legendFormat": "failures {{ juju_unit }}"
+          "expr": "rate(dovecot_auth_success_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[$__rate_interval])",
+          "legendFormat": "{{service}} {{juju_unit}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10}
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      }
     },
     {
-      "title": "Auth Failures (Absolute)",
-      "type": "stat",
-      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "title": "Auth Failure Rate",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "targets": [
         {
-          "expr": "increase(dovecot_auth_failures_total{juju_charm=\"imap-server\"}[1h])",
-          "legendFormat": "{{ juju_unit }}"
+          "expr": "rate(dovecot_auth_failure_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[$__rate_interval])",
+          "legendFormat": "{{service}} {{juju_unit}}"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 10},
-              {"color": "red", "value": 50}
-            ]
-          }
-        }
-      },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10}
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      }
     },
     {
       "title": "Storage",
       "type": "row",
       "collapsed": false,
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 18},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
       "panels": []
     },
     {
       "title": "Mail Storage Usage (/srv/mail)",
       "type": "gauge",
-      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "targets": [
         {
-          "expr": "1 - (node_filesystem_avail_bytes{mountpoint=\"/srv/mail\"} / node_filesystem_size_bytes{mountpoint=\"/srv/mail\"})",
+          "expr": "1 - (node_filesystem_avail_bytes{mountpoint=\"/srv/mail\",juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"} / node_filesystem_size_bytes{mountpoint=\"/srv/mail\",juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
           "legendFormat": "{{ juju_unit }}"
         }
       ],
@@ -159,23 +235,43 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 0.7},
-              {"color": "orange", "value": 0.85},
-              {"color": "red", "value": 0.95}
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.7
+              },
+              {
+                "color": "orange",
+                "value": 0.85
+              },
+              {
+                "color": "red",
+                "value": 0.95
+              }
             ]
           }
         }
       },
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 19}
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 19
+      }
     },
     {
       "title": "Mail Storage Free Bytes",
       "type": "timeseries",
-      "datasource": {"type": "prometheus", "uid": "${prometheusds}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "targets": [
         {
-          "expr": "node_filesystem_avail_bytes{mountpoint=\"/srv/mail\"}",
+          "expr": "node_filesystem_avail_bytes{mountpoint=\"/srv/mail\",juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "legendFormat": "{{ juju_unit }}"
         }
       ],
@@ -184,41 +280,151 @@
           "unit": "bytes"
         }
       },
-      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 19}
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 19
+      }
     },
     {
       "title": "Logs",
       "type": "row",
       "collapsed": false,
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 27},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
       "panels": []
     },
     {
       "title": "Mail Logs",
       "type": "logs",
-      "datasource": {"type": "loki", "uid": "${lokids}"},
+      "datasource": {
+        "type": "loki",
+        "uid": "${lokids}"
+      },
       "targets": [
         {
-          "expr": "{filename=\"/var/log/mail.log\", juju_charm=\"imap-server\"}"
+          "expr": "{filename=\"/var/log/syslog\", juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"} |~ \"dovecot:\""
         }
       ],
-      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 28}
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      }
     }
   ],
   "schemaVersion": 37,
   "style": "dark",
-  "tags": ["imap-server", "mail", "dovecot"],
+  "tags": [
+    "imap-server",
+    "mail",
+    "dovecot"
+  ],
   "templating": {
     "list": [
       {
-        "name": "prometheusds",
-        "type": "datasource",
-        "query": "prometheus"
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "lokids",
+        "label": "Loki datasource",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "type": "datasource"
       },
       {
-        "name": "lokids",
-        "type": "datasource",
-        "query": "loki"
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "prometheusds",
+        "label": "Prometheus datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "juju_model",
+        "label": "Juju model",
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up,juju_model)",
+        "query": {
+          "query": "label_values(up,juju_model)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "juju_model_uuid",
+        "label": "Juju model uuid",
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up{juju_model=~\"$juju_model\"},juju_model_uuid)",
+        "query": {
+          "query": "label_values(up{juju_model=~\"$juju_model\"},juju_model_uuid)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "juju_application",
+        "label": "Juju application",
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
+        "query": {
+          "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "juju_unit",
+        "label": "Juju unit",
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
+        "query": {
+          "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "sort": 0,
+        "type": "query"
       }
     ]
   },

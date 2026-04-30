@@ -7,7 +7,7 @@ groups:
     rules:
       - alert: DovecotAuthFailureSpike
         expr: >-
-          sum(rate({filename="/var/log/mail.log"}
+          sum(rate({filename="/var/log/syslog"} |~ "dovecot:"
           |~ "auth-worker.*authentication failure" [5m])) > 10
         for: 5m
         labels:
@@ -21,8 +21,8 @@ groups:
 
       - alert: DovecotFatalError
         expr: >-
-          count_over_time({filename="/var/log/mail.log"}
-          |~ "dovecot.*Fatal|dovecot.*panic" [15m]) > 0
+          count_over_time({filename="/var/log/syslog"} |~ "dovecot:"
+          |~ "Fatal|panic" [15m]) > 0
         for: 0m
         labels:
           severity: critical
@@ -34,8 +34,8 @@ groups:
 
       - alert: DovecotOutOfMemory
         expr: >-
-          count_over_time({filename="/var/log/mail.log"}
-          |~ "dovecot.*out of memory|dovecot.*Cannot allocate" [15m]) > 0
+          count_over_time({filename="/var/log/syslog"} |~ "dovecot:"
+          |~ "out of memory|Cannot allocate" [15m]) > 0
         for: 0m
         labels:
           severity: critical
@@ -47,7 +47,7 @@ groups:
 
       - alert: PostfixDeferredQueueGrowing
         expr: >-
-          sum(count_over_time({filename="/var/log/mail.log"}
+          sum(count_over_time({filename="/var/log/syslog"}
           |~ "status=deferred" [1h])) > 100
         for: 30m
         labels:

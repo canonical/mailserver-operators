@@ -119,10 +119,12 @@ service stats {
 # Recommended metrics for observability
 metric auth_success {
   filter = event=auth_request_finished AND success=yes
+  group_by = service
 }
 
 metric auth_failure {
-  filter = event=auth_request_finished AND success=no
+  filter = event=auth_request_finished AND NOT success=yes
+  group_by = service
 }
 
 metric imap_command {

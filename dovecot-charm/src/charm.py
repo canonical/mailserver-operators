@@ -96,8 +96,6 @@ class DovecotCharm(CharmBase):
             refresh_events=[self.on.config_changed],
         )
 
-        logger.info("JAVI resolve dev path: %s", self._storage._resolve_dev_path())
-
     def get_units(self) -> typing.List[str]:
         """Return a list of all units in the application.
 
