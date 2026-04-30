@@ -16,7 +16,7 @@ jobs:
       trivy-fs-enabled: false
       trivy-image-config: "trivy.yaml"
       self-hosted-runner: true
-      self-hosted-runner-label: "large"
+      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
       juju-channel: '3/stable'
       with-uv: true
       working-directory: dovecot-charm
