@@ -1,2 +1,5 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 *@example.com selector._domainkey.example.com
 *@other.example.com selector._domainkey.other.example.com
