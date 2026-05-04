@@ -1,0 +1,23 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+project: opendkim-snap
+
+backends:
+  craft:
+    type: craft
+    systems:
+      - ubuntu-24.04
+
+suites:
+  spread/general/:
+    summary: Snap smoke and upstream-inspired behavior tests
+    prepare-each: |
+      snap install "$CRAFT_ARTIFACT" --dangerous --jailmode
+    restore-each: |
+      snap remove --purge opendkim || true
+
+exclude:
+  - .git
+
+kill-timeout: 1h

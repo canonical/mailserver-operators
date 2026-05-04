@@ -1,0 +1,13 @@
+#!/bin/bash
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+set -e
+
+# Ensure directories exist in $SNAP_DATA for layouts
+mkdir -p "$SNAP_DATA/etc/dkimkeys"
+mkdir -p "$SNAP_DATA/run/opendkim"
+
+# Provide initial configuration file
+if [ ! -s "$SNAP_DATA/etc/opendkim.conf" ]; then
+    cp "$SNAP/etc/opendkim.conf" "$SNAP_DATA/etc/opendkim.conf"
+fi

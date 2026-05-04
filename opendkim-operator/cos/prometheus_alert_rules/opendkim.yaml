@@ -1,0 +1,16 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+---
+groups:
+  - name: opendkim
+    rules:
+      - alert: OpenDKIMProcess
+        expr: procstat_lookup_running{pattern="/usr/sbin/opendkim"} == 0
+        for: 15m
+        annotations:
+          description: >-
+            OpenDKIM process not running on host {{ $labels.host }}
+          summary: OpenDKIM process down {{ $labels.host }}
+        labels:
+          severity: critical
