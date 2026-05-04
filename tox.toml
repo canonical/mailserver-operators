@@ -125,6 +125,25 @@ commands = [
 ]
 dependency_groups = [ "integration" ]
 
+[env.stack-integration]
+description = "Run full-stack mailserver integration tests (all charms)"
+commands = [
+  [
+    "pytest",
+    "-v",
+    "--tb", "short",
+    "--log-cli-level=INFO",
+    "-s",
+    "{toxinidir}/tests/integration",
+    { replace = "posargs", extend = true },
+  ],
+]
+dependency_groups = [ "integration" ]
+
+[env.stack-integration.setenv]
+PYTHONPATH = "{toxinidir}/tests/integration"
+PY_COLORS = "1"
+
 [env.lint-fix]
 description = "Apply coding style standards to code"
 commands = [
