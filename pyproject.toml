@@ -134,8 +134,6 @@ ignore = ["W503", "E501", "D107"]
 per-file-ignores = [
     "tests/*:D100,D101,D102,D103,D104,D205,D212,D415",
     "dovecot-charm/tests/*:D100,D101,D102,D103,D104,D205,D212,D415",
-    "postfix-relay-operator/tests/*:D100,D101,D102,D103,D104,D205,D212,D415",
-    "postfix-relay-configurator-operator/tests/*:D100,D101,D102,D103,D104,D205,D212,D415",
 ]
 docstring-convention = "google"
 
