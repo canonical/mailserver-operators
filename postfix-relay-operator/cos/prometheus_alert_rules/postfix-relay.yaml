@@ -1,0 +1,27 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+---
+groups:
+  - name: postfix-relay
+    rules:
+      - alert: SMTPRelayPostfixMasterProcess
+        expr: procstat_lookup_running{pattern="/usr/lib/postfix/sbin/master"} == 0
+        for: 15m
+        annotations:
+          description: >-
+            Postfix master process not running on SMTP relay host {{ $labels.host }}
+          summary: SMTP relay Postfix master process down {{ $labels.host }}
+        labels:
+          severity: warning
+      - alert: SMTPRelayDeferredQueueBacklog
+        expr: >
+          sum by (juju_model, juju_unit, queue, host) (postfix_queue_length{queue="deferred"}
+          > clamp_min(avg_over_time(postfix_queue_length{queue="deferred"}[3d]), 20) * 5)
+        for: 30m
+        annotations:
+          description: >-
+            Abnormal backlog of msgs in Postfix's deferred queue. Larger than 5 times the 3-day average on host {{ $labels.host }}. Deliverability issues or delay, please investigate.
+          summary: SMTP relay abnormal backlog of msgs in the Postfix deferred queue {{ $labels.host }}
+        labels:
+          severity: warning

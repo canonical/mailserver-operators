@@ -1,0 +1,9 @@
+[Unit]
+Description=Dispatch a config changed event on inotify
+
+[Service]
+ExecStart=/etc/systemd/system/inotify-config-change.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
