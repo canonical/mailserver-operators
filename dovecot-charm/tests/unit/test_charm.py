@@ -277,6 +277,31 @@ def test_gdpr_actions_require_primary(ctx, base_state, action_name, params):
 
 
 @pytest.mark.parametrize(
+    "action_name,params",
+    [
+        ("gdpr-archive", {"username": "../alice", "compress": False}),
+        ("gdpr-delete", {"username": "../alice", "confirm": True}),
+        ("gdpr-takeout", {"username": "../alice", "format": "maildir"}),
+        ("gdpr-delete", {"username": "", "confirm": True}),
+        ("gdpr-delete", {"username": "..", "confirm": True}),
+        ("gdpr-delete", {"username": "alice\x00bob", "confirm": True}),
+    ],
+)
+def test_gdpr_actions_reject_unsafe_usernames(ctx, base_state, action_name, params):
+    """GDPR actions must reject usernames that are unsafe to use in paths."""
+    with (
+        patch("charm.subprocess.run") as run,
+        patch("charm.prepare_user_dir") as prepare_user_dir,
+        pytest.raises(ops.testing.ActionFailed) as exc_info,
+    ):
+        ctx.run(ctx.on.action(action_name, params=params), base_state)
+
+    assert "username" in exc_info.value.message
+    run.assert_not_called()
+    prepare_user_dir.assert_not_called()
+
+
+@pytest.mark.parametrize(
     "compress,expected_suffix",
     [(True, "alice.tar.gz"), (False, "alice")],
 )

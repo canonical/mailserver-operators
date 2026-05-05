@@ -46,6 +46,19 @@ from utils import create_tarball, prepare_user_dir
 logger = logging.getLogger(__name__)
 
 
+def _validate_action_username(username: str) -> str | None:
+    """Return an error message if an action username is unsafe."""
+    if not username:
+        return "username must not be empty."
+    if username in (".", ".."):
+        return "username must not be '.' or '..'."
+    if os.path.basename(username) != username:
+        return "username must not contain path separators."
+    if "\x00" in username:
+        return "username must not contain NUL bytes."
+    return None
+
+
 class DovecotCharm(CharmBase):
     """Dovecot IMAP/POP3 mail server charm."""
 
@@ -251,6 +264,10 @@ class DovecotCharm(CharmBase):
             event.fail("This action can only be run on the primary unit.")
             return
         username = event.params["username"]
+        username_error = _validate_action_username(username)
+        if username_error:
+            event.fail(username_error)
+            return
         compress = event.params.get("compress", True)
         archive_dir = f"{GDPR_ARCHIVE_DIR}/{username}"
 
@@ -300,6 +317,10 @@ class DovecotCharm(CharmBase):
             event.fail("This action can only be run on the primary unit.")
             return
         username = event.params["username"]
+        username_error = _validate_action_username(username)
+        if username_error:
+            event.fail(username_error)
+            return
         confirm = event.params.get("confirm", False)
 
         if not confirm:
@@ -341,6 +362,10 @@ class DovecotCharm(CharmBase):
             event.fail("This action can only be run on the primary unit.")
             return
         username = event.params["username"]
+        username_error = _validate_action_username(username)
+        if username_error:
+            event.fail(username_error)
+            return
         export_format = event.params.get("format", "maildir")
         export_dir = f"{GDPR_TAKEOUT_DIR}/{username}"
 

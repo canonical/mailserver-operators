@@ -1,11 +1,16 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import platform
 from pathlib import Path
 
 import ops.testing
 import pytest
 import yaml
+
+if not hasattr(platform, "linux_distribution"):
+    platform.linux_distribution = lambda: ("Ubuntu", "24.04", "noble")
+
 from testing import (
     DovecotTestCharm,
     NoOpDovecotSetup,
