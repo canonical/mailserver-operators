@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 terraform {
@@ -21,32 +21,53 @@ variable "model_uuid" {
   type = string
 }
 
-resource "juju_application" "redis" {
-  model_uuid = var.model_uuid
-  charm {
-    base    = "ubuntu@22.04"
-    channel = "latest/edge"
-    name    = "redis-k8s"
-  }
-}
-
-resource "juju_integration" "redis" {
+module "mail_stack" {
+  source     = "../.."
   model_uuid = var.model_uuid
 
-  application {
-    name = "netbox-k8s"
+  dovecot = {
+    charm    = "local:dovecot"
+    app_name = "dovecot"
   }
 
-  application {
-    name = juju_application.redis.name
+  postfix_relay = {
+    charm    = "local:postfix-relay"
+    app_name = "postfix-relay"
+  }
+
+  opendkim = {
+    charm    = "local:opendkim"
+    app_name = "opendkim"
+  }
+
+  postfix_relay_configurator = {
+    charm    = "local:postfix-relay-configurator"
+    app_name = "postfix-relay-configurator"
+  }
+
+  self_signed_certificates = {
+    channel  = "1/stable"
+    base     = "ubuntu@22.04"
+    app_name = "self-signed-certificates"
   }
 }
 
 # tflint-ignore: terraform_unused_declarations
-data "external" "app_status" {
-  program = ["bash", "${path.module}/wait-for-active.sh", var.model_uuid, "netbox-k8s", "3m"]
+data "external" "dovecot_status" {
+  program = ["bash", "${path.module}/wait-for-active.sh", var.model_uuid, module.mail_stack.app_names.dovecot, "12m"]
+}
 
-  depends_on = [
-    juju_integration.redis
-  ]
+# tflint-ignore: terraform_unused_declarations
+data "external" "postfix_relay_status" {
+  program = ["bash", "${path.module}/wait-for-active.sh", var.model_uuid, module.mail_stack.app_names.postfix_relay, "12m"]
+}
+
+# tflint-ignore: terraform_unused_declarations
+data "external" "self_signed_status" {
+  program = ["bash", "${path.module}/wait-for-active.sh", var.model_uuid, module.mail_stack.app_names.self_signed_certificates, "12m"]
+}
+
+# tflint-ignore: terraform_unused_declarations
+data "external" "opendkim_status" {
+  program = ["bash", "${path.module}/wait-for-active.sh", var.model_uuid, module.mail_stack.app_names.opendkim, "12m", "any"]
 }

@@ -50,6 +50,7 @@ jobs:
       canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
+      test-tox-env: stack-integration
       use-canonical-k8s: true
       provider: lxd
       self-hosted-runner: true

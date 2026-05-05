@@ -1,59 +1,63 @@
-<!-- Remember to update this file for your charm -- replace __charm_name__ with the appropriate name. -->
+# Mailserver stack Terraform module
 
-# __charm_name__ Terraform module
+This module deploys the machine charms used by the integration e2e topology:
 
-This folder contains a base [Terraform][Terraform] module for the __charm_name__ charm.
+- `dovecot`
+- `postfix-relay`
+- `opendkim`
+- `postfix-relay-configurator`
+- `self-signed-certificates`
 
-The module uses the [Terraform Juju provider][Terraform Juju provider] to model the charm
-deployment onto any Kubernetes environment managed by [Juju][Juju].
+The module also creates the required relations:
 
-## Module structure
+- `dovecot:certificates` <-> `self-signed-certificates:certificates`
+- `postfix-relay:certificates` <-> `self-signed-certificates:certificates`
+- `postfix-relay:milter` <-> `opendkim:milter`
+- `postfix-relay:juju-info` <-> `postfix-relay-configurator:juju-info`
 
-- **main.tf** - Defines the Juju application to be deployed.
-- **variables.tf** - Allows customization of the deployment. Also models the charm configuration, 
-  except for exposing the deployment options (Juju model name, channel or application name).
-- **output.tf** - Integrates the module with other Terraform modules, primarily
-  by defining potential integration endpoints (charm integrations), but also by exposing
-  the Juju application name.
-- **versions.tf** - Defines the Terraform provider version.
+## Notes
 
-## Using __charm_name__ base module in higher level modules
+- This module models deployment, baseline config, and integrations.
+- Runtime e2e setup steps (for example DKIM secret generation, `grant-secret`, SMTP test users)
+  remain test-time operations and are not managed by this module.
 
-If you want to use `__charm_name__` base module as part of your Terraform module, import it
-like shown below:
+## Usage
 
-```text
-data "juju_model" "my_model" {
-  name = var.model
+```hcl
+data "juju_model" "mail" {
+  name = var.model_name
 }
 
-module "__charm_name__" {
-  source = "git::https://github.com/canonical/__charm_name__-operator//terraform"
-  
-  model = juju_model.my_model.name
-  # (Customize configuration variables here if needed)
-}
-```
+module "mailserver_stack" {
+  source     = "git::https://github.com/canonical/mailserver-operators//terraform"
+  model_uuid = data.juju_model.mail.uuid
 
-Create integrations, for instance:
+  test_domain = "mailstack.internal"
 
-```text
-resource "juju_integration" "__charm_name__-loki" {
-  model = juju_model.my_model.name
-  application {
-    name     = module.__charm_name__.app_name
-    endpoint = module.__charm_name__.endpoints.logging
+  dovecot = {
+    app_name = "dovecot"
+    config = {
+      mailname           = "mailstack.internal"
+      postmaster-address = "postmaster@mailstack.internal"
+      primary-unit       = "dovecot/0"
+    }
   }
-  application {
-    name     = "loki-k8s"
-    endpoint = "logging"
+
+  transport_maps = {
+    "mailstack.internal" = "lmtp:inet:10.1.2.3:24"
   }
 }
 ```
 
-The complete list of available integrations can be found [in the Integrations tab][__charm_name__-integrations].
+## Inputs
 
-[Terraform]: https://developer.hashicorp.com/terraform
-[Terraform Juju provider]: https://registry.terraform.io/providers/juju/juju/latest
-[Juju]: https://juju.is
-[__charm_name__-integrations]: https://charmhub.io/__charm_name__/integrations
+- `model_uuid` (required): Juju model UUID.
+- `test_domain`: default mail domain used for baseline charm config.
+- `transport_maps`: map encoded and applied to postfix-relay-configurator.
+- `self_signed_certificates`, `dovecot`, `postfix_relay`, `opendkim`,
+  `postfix_relay_configurator`: per-application deployment options.
+
+## Outputs
+
+- `app_names`: deployed application names.
+- `endpoints`: relation endpoint names for downstream composition.
