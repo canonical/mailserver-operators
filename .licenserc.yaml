@@ -31,6 +31,7 @@ header:
   - '**/*.rst.j2'
   - 'docs/release-notes/template/*.yaml'
   - 'uv.lock'
+  - 'opendkim-snap/snap/local/opendkim.conf'
   - '**/templates/**'
   - '**/lib/**'
   comment: on-failure

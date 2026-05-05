@@ -1,0 +1,92 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: opendkim
+base: core24
+version: '2.11.0-beta2'
+summary: DKIM email signing and verification milter for MTAs
+description: |
+  OpenDKIM is an open-source implementation of the DKIM (DomainKeys Identified
+  Mail) sender authentication system. It provides a milter-based filter that
+  signs outgoing email with a private key and verifies incoming email signatures
+  against published DNS records, helping to authenticate the origin of messages
+  and protect against spoofing.
+grade: stable
+confinement: strict
+
+platforms:
+  amd64:
+
+apps:
+  opendkim:
+    command: usr/sbin/opendkim
+    plugs:
+      - network
+      - network-bind
+      - log-observe
+      - system-observe
+
+  daemon:
+    command: usr/sbin/opendkim -f -x /etc/opendkim.conf
+    daemon: simple
+    plugs:
+      - network
+      - network-bind
+      - log-observe
+      - system-observe
+
+  genkey:
+    command: usr/sbin/opendkim-genkey
+    environment:
+      PERL5LIB: $SNAP/usr/share/perl5:$SNAP/usr/share/perl/5.38.2:$SNAP/usr/lib/x86_64-linux-gnu/perl/5.38.2:$SNAP/usr/lib/x86_64-linux-gnu/perl5/5.38
+    plugs: [network, home]
+
+  testkey:
+    command: usr/sbin/opendkim-testkey
+    plugs: [network]
+
+layout:
+  /usr/share/dns/root.key:
+    bind-file: $SNAP/usr/share/dns/root.key
+  /etc/opendkim.conf:
+    bind-file: $SNAP_DATA/etc/opendkim.conf
+  /etc/dkimkeys:
+    bind: $SNAP_DATA/etc/dkimkeys
+
+parts:
+  opendkim:
+    plugin: autotools
+    source: https://github.com/trusteddomainproject/OpenDKIM.git
+    source-tag: 2.11.0-Beta2
+    build-packages:
+      - autoconf
+      - automake
+      - build-essential
+      - libmilter-dev
+      - libssl-dev
+      - libtool
+      - pkg-config
+    stage-packages:
+      - libmilter1.0.1
+      - openssl
+      - perl
+      - dns-root-data
+    autotools-configure-parameters:
+      - --prefix=/usr
+      - --sysconfdir=/etc
+      - --localstatedir=/var
+      - --sbindir=/usr/sbin
+    override-build: |
+      autoreconf -fi
+      craftctl default
+      mkdir -p $CRAFT_PART_INSTALL/etc/dkimkeys
+      mkdir -p $CRAFT_PART_INSTALL/run/opendkim
+
+      # Install curated default configuration (based on the Debian/Ubuntu
+      # opendkim package config, adapted for snap paths).
+      install -Dm644 $CRAFT_PROJECT_DIR/snap/local/opendkim.conf \
+        $CRAFT_PART_INSTALL/etc/opendkim.conf
+
+      # Fix perl shebangs for tools
+      grep -rl '^#!/usr/bin/perl' $CRAFT_PART_INSTALL/usr/sbin/ | \
+        xargs -r sed -i 's|^#!/usr/bin/perl|#!/usr/bin/env perl|'
