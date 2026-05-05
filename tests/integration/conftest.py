@@ -62,10 +62,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--charm-file",
         action="append",
         default=[],
-        help=(
-            "Path to a pre-built .charm file. "
-            "Pass this option multiple times (one per charm)."
-        ),
+        help=("Path to a pre-built .charm file. Pass this option multiple times (one per charm)."),
     )
     parser.addoption(
         "--keep-models",
@@ -87,9 +84,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Juju session fixture
-# ---------------------------------------------------------------------------
 @pytest.fixture(scope="session", name="juju")
 def juju_fixture(
     request: pytest.FixtureRequest,
