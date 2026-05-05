@@ -1,0 +1,98 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+type: charm
+name: opendkim
+title: Charmed OpenDKIM
+summary: Open source milter for providing DKIM service
+links:
+  documentation: https://discourse.charmhub.io/t/opendkim-docs-overview/19035
+  issues: https://github.com/canonical/opendkim-operator/issues
+  source: https://github.com/canonical/opendkim-operator
+  contact: https://launchpad.net/~canonical-is-devops
+
+description: |
+  A [Juju](https://juju.is/) [charm](https://juju.is/docs/olm/charmed-operators)
+  deploying and managing [OpenDKIM](http://www.opendkim.org/) on machines.
+
+  OpenDKIM is a community effort to develop and maintain a C library for
+  producing DKIM-aware applications and an open source milter for providing DKIM service.
+
+base: ubuntu@24.04
+platforms:
+  amd64:
+
+parts:
+  charm:
+    source: .
+    plugin: uv
+    build-snaps:
+    - astral-uv
+  dump:
+    plugin: dump
+    source: .
+    stage:
+    - templates
+    - cos
+provides:
+  milter:
+    interface: milter
+  cos-agent:
+    interface: cos_agent
+    limit: 1
+
+assumes:
+  - juju >= 3.6
+
+charm-libs:
+  - lib: grafana_agent.cos_agent
+    version: "0"
+
+config:
+  options:
+    signingtable:
+      type: string
+      description: |
+        Signing table mapping. This configuration is in YAML format. It is a list of
+        lines, being each line another list with two elements, the key and the value.
+        The file format is refile, so it can include regular expressions.
+        The folloging is an example of the signingtable:
+
+            - - "*@example.com"
+              - "selector._domainkey.example.com"
+            - - "*@other.example.com"
+              - "selector._domainkey.other.example.com"
+    keytable:
+      type: string
+      description: |
+        Key table mapping. This configuration is in YAML format. It is a list of
+        lines, being each line another list with two elements, the key and the value.
+        The following is an example of a keytable:
+
+            - - "selector._domainkey.example.com
+              - "example.com:selector:/etc/dkimkeys/key1.private"
+            - - "selector._domainkey.other.example.com"
+              - "other.example.com:selector:/etc/dkimkeys/key2.private"
+    private-keys:
+      type: secret
+      description: |
+        Secret that contains the private keys. The keys in the secret define the filename
+         without the '.private' extension, and the value the private key.
+    mode:
+      type: string
+      default: "sv"
+      description: |
+        Selects operating modes. The string is a concatenation of
+        characters that indicate which mode(s) of operation are
+        desired. Valid modes are s (signer) and v (verifier). The
+        default is sv
+
+        See http://www.opendkim.org/opendkim.conf.5.html
+    trusted-sources:
+      type: string
+      default: ""
+      description: |
+        Comma-separated list of trusted networks or hosts whose mail should
+        bypass DKIM verification. These are written to the InternalHosts file.
+        When empty (default), all hosts are trusted (InternalHosts 0.0.0.0/0).
+        Example: "10.0.0.0/8, 192.168.1.0/24, 172.16.0.0/12"

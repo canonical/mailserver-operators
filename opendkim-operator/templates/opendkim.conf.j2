@@ -1,0 +1,35 @@
+# This file is Juju managed - do not edit by hand #
+
+Socket {{socket}}
+
+PidFile /var/snap/opendkim/current/run/opendkim/opendkim.pid
+UMask 007
+
+Syslog yes
+SyslogSuccess yes
+LogResults yes
+LogWhy yes
+
+{%- if signing_mode %}
+
+KeyTable file:{{ keytable_path }}
+SigningTable refile:{{ signingtable_path }}
+Canonicalization {{ canonicalization }}
+SignHeaders {{ signheaders }}
+
+{%- endif %}
+
+{%- if mode != 'sv' %}
+
+Mode {{ mode }}
+
+{%- endif %}
+
+TrustAnchorFile /usr/share/dns/root.key
+
+{% if trusted_sources %}
+InternalHosts file:/var/snap/opendkim/current/etc/dkimkeys/internalhosts
+{% else %}
+InternalHosts {{ internalhosts }}
+{% endif %}
+

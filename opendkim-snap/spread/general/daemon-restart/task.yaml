@@ -1,0 +1,53 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+summary: Verify snap daemon is restarted automatically after being killed
+
+execute: |
+  conf_dir="/var/snap/opendkim/current/etc"
+  conf_file="$conf_dir/opendkim.conf"
+  run_dir="/var/snap/opendkim/current/run/opendkim"
+
+  mkdir -p "$conf_dir" "$run_dir"
+
+  cp ./opendkim.conf "$conf_file"
+
+  # Restart the daemon with our test config.
+  snap restart opendkim.daemon
+
+  echo "Waiting for daemon to be active..."
+  retry=0
+  while [ "$retry" -lt 30 ]; do
+    if snap services opendkim.daemon | grep -q "active"; then
+      break
+    fi
+    retry=$((retry + 1))
+    sleep 1
+  done
+  snap services opendkim.daemon | grep -q "active"
+
+  original_pid=$(pidof opendkim)
+  echo "Daemon running with PID $original_pid"
+  test -n "$original_pid"
+
+  echo "Killing daemon process with SIGKILL..."
+  kill -9 "$original_pid"
+
+  echo "Waiting for daemon to be restarted by snapd..."
+  retry=0
+  while [ "$retry" -lt 30 ]; do
+    new_pid=$(pidof opendkim 2>/dev/null || true)
+    if [ -n "$new_pid" ] && [ "$new_pid" != "$original_pid" ]; then
+      break
+    fi
+    retry=$((retry + 1))
+    sleep 1
+  done
+
+  new_pid=$(pidof opendkim)
+  echo "Daemon restarted with PID $new_pid"
+  test -n "$new_pid"
+  test "$new_pid" != "$original_pid"
+
+  echo "Verifying daemon is active..."
+  snap services opendkim.daemon | grep -q "active"

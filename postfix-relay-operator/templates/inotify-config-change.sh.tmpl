@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# The script is copied into the charm and executed as a service
+# shellcheck disable=SC2034
+inotifywait -mr /etc/postfix \
+    --include /etc/postfix/relay_access_sources \
+    --include /etc/postfix/relay_recipient_maps \
+    --include /etc/postfix/restrict_recipients \
+    --include /etc/postfix/restrict_senders \
+    --include /etc/postfix/sender_login_maps \
+    --include /etc/postfix/transport_maps \
+    --include /etc/postfix/virtual_alias_maps \
+    -e close_write -e create -e delete -e move --format '%w%f %e' | while read -r file event; do
+        juju-exec {{unit_name}} JUJU_DISPATCH_PATH='hooks/config-changed' ./dispatch
+done

@@ -1,0 +1,117 @@
+smtpd_banner = $myhostname ESMTP $mail_name (Ubuntu)
+biff = no
+
+append_dot_mydomain = no
+
+readme_directory = no
+
+# See http://www.postfix.org/COMPATIBILITY_README.html -- default to 2 on
+# fresh installs.
+compatibility_level = 2
+
+# TLS parameters
+tls_preempt_cipherlist = yes
+{%- if tls_cert_key != "" %}
+smtpd_tls_chain_files = {{tls_cert_key}}
+{%- else %}
+smtpd_tls_cert_file = {{tls_cert}}
+smtpd_tls_key_file = {{tls_key}}
+{%- endif %}
+smtpd_tls_dh1024_param_file = {{tls_dh_params}}
+{%- if tls_ciphers %}
+smtpd_tls_ciphers = {{tls_ciphers}}
+{%- endif %}
+{%- if tls_exclude_ciphers %}
+smtpd_tls_exclude_ciphers = {{tls_exclude_ciphers}}
+{%- endif %}
+smtpd_tls_loglevel = 1
+{%- if tls_ciphers %}
+smtpd_tls_mandatory_ciphers = {{tls_ciphers}}
+{%- endif %}
+{%- if tls_protocols %}
+smtpd_tls_mandatory_protocols = {{tls_protocols}}
+smtpd_tls_protocols = {{tls_protocols}}
+{%- endif %}
+smtpd_tls_received_header = yes
+{%- if tls_security_level %}
+smtpd_tls_security_level = {{tls_security_level}}
+{%- endif %}
+smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
+
+smtp_tls_CApath = /etc/ssl/certs
+smtp_tls_loglevel = 1
+smtp_tls_security_level = may
+smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
+smtp_tls_policy_maps = hash:/etc/postfix/tls_policy
+
+message_size_limit = 50000000
+strict_rfc821_envelopes = yes
+{%- if enable_rate_limits and enable_smtp_auth %}
+smtpd_client_auth_rate_limit = 8
+{%- endif %}
+smtpd_client_connection_count_limit = {{connection_limit}}
+{%- if enable_rate_limits %}
+smtpd_client_connection_rate_limit = 8
+smtpd_client_new_tls_session_rate_limit = 8
+{%- endif %}
+smtpd_helo_required = yes
+smtpd_relay_restrictions = {{smtpd_relay_restrictions}}
+myhostname = {{fqdn}}
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+mydestination = $myhostname, {{hostname}}, localhost.localdomain, localhost
+relayhost ={% if relayhost %} {{relayhost}}{% endif %}
+mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128{% if mynetworks %} {{mynetworks}}{% endif %}
+mailbox_size_limit = 0
+recipient_delimiter = +
+inet_interfaces = all
+inet_protocols = all
+
+{% if enable_smtp_auth -%}
+broken_sasl_auth_clients = yes
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_security_options = noanonymous
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+{% if enable_sender_login_map -%}
+smtpd_sender_login_maps = hash:/etc/postfix/sender_login
+{% endif -%}
+smtpd_tls_auth_only = yes
+{% endif -%}
+{% if smtpd_recipient_restrictions -%}
+smtpd_recipient_restrictions = {{smtpd_recipient_restrictions}}
+{% endif -%}
+{% if restrict_recipients -%}
+smtpd_restriction_classes = restricted
+{% endif -%}
+smtpd_sender_restrictions = {{smtpd_sender_restrictions}}
+{% if restrict_recipients -%}
+restricted = check_recipient_access hash:/etc/postfix/restricted_recipients, reject
+{% endif -%}
+{% if milter and milter != '' %}
+smtpd_milters = {{milter}}
+non_smtpd_milters = {{milter}}
+{% endif -%}
+{% if enable_spf %}
+policyd-spf_time_limit = 3600s
+{% endif -%}
+
+header_checks = regexp:/etc/postfix/header_checks
+smtp_header_checks = regexp:/etc/postfix/smtp_header_checks
+
+{%- if virtual_alias_domains %}
+virtual_alias_domains = {{virtual_alias_domains}}
+{%- endif %}
+{%- if relay_domains %}
+relay_domains = {{relay_domains}}
+{% endif %}
+
+{%- if transport_maps %}
+transport_maps = hash:/etc/postfix/transport_maps
+{% endif %}
+{%- if virtual_alias_maps -%}
+virtual_alias_maps = {{virtual_alias_maps_type}}:/etc/postfix/virtual_alias
+{% endif %}
+{% if relay_recipient_maps %}
+relay_recipient_maps = hash:/etc/postfix/relay_recipient
+{% endif %}
