@@ -1,0 +1,12 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+summary: Verify snap app commands are accessible and respond correctly
+
+execute: |
+  echo "Checking opendkim.genkey help..."
+  snap run opendkim.genkey --help
+
+  echo "Checking opendkim.testkey invocation..."
+  testkey_output=$(snap run opendkim.testkey 2>&1 || true)
+  echo "$testkey_output" | grep -q "opendkim-testkey:"

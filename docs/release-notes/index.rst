@@ -32,3 +32,7 @@ Releases
    :maxdepth: 1
 
    release-notes-0001
+   release-notes-0002
+   release-notes-0003
+   release-notes-0004
+   release-notes-0005

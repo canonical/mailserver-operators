@@ -1,0 +1,19 @@
+{%- if smtp_auth %}
+auth_mechanisms = plain login
+auth_verbose = yes
+
+service auth {
+    unix_listener {{path}} {
+        mode = 0660
+        user = postfix
+        group = postfix
+    }
+}
+
+passdb {
+    driver = {{passdb_driver}}
+    args = {{passdb_args}}
+}
+{% else %}
+## DISABLED
+{% endif %}

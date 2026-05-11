@@ -1,0 +1,85 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+type: "charm"
+name: postfix-relay-configurator
+title: Postfix relay Configurator
+subordinate: true
+summary: Subordinate charm for configuring the Postfix relay charm
+links:
+  issues: https://github.com/canonical/postfix-relay-operators/issues
+  source: https://github.com/canonical/postfix-relay-operators
+  contact: https://launchpad.net/~canonical-is-devops
+  documentation: https://discourse.charmhub.io/t/postfix-relay-configurator-documentation-overview/19017
+
+description: |
+  Installs the configuration files for the Postfix relay charm for
+  specific user, hosts, or networks.
+
+base: ubuntu@24.04
+platforms:
+  amd64:
+
+parts:
+  charm:
+    plugin: charm
+    source: .
+    build-snaps:
+      - rustup
+    override-build: |
+      rustup default stable
+      craftctl default
+    build-packages:
+      - libffi-dev
+      - libssl-dev
+      - pkg-config
+
+requires:
+  juju-info:
+    interface: juju-info
+    scope: container
+
+config:
+  options:
+    relay_access_sources:
+      type: string
+      description: |
+        YAML list of entries to restrict access based on CIDR source per:
+
+        http://www.postfix.org/cidr_table.5.html
+    relay_recipient_maps:
+      type: string
+      description: |
+        YAML map of lookups that alias specific mail addresses or
+        domains to other local or remote addresses.
+
+        Allows for all configured aliases and transports to be valid
+        recipients for relay_domains.
+
+        http://www.postfix.org/postconf.5.html#relay_recipient_maps
+    restrict_recipients:
+      type: string
+      description: YAML map for restrictions by recipient address or domain.
+    restrict_senders:
+      type: string
+      description: YAML map for restrictions by sender address or domain.
+    sender_login_maps:
+      type: string
+      description: |
+        YAML map with entries to sender addresses to authenticated users.
+
+        See https://www.postfix.org/postconf.5.html for details.
+    transport_maps:
+      type: string
+      description: |
+        YAML map from recipient address to
+        message delivery transport or next-hop destination.
+
+        http://www.postfix.org/postconf.5.html#transport_maps
+    virtual_alias_maps:
+      type: string
+      description: |
+        YAML map of lookup table entries that alias specific mail addresses or
+        domains to other local or remote addresses.
+
+        http://www.postfix.org/postconf.5.html#virtual_alias_maps

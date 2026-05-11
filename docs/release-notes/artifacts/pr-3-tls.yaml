@@ -1,0 +1,18 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Version of the artifact schema
+version_schema: 2
+
+changes:
+- title: Added TLS certificate integration using the certificates relation
+  author: alithethird
+  type: major
+  description: Added TLS support using the tls-certificates-interface library. The charm requests certificates using the certificates relation, writes the cert and key to /etc/dovecot/private/, and restarts Dovecot automatically after installation.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/4"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: true

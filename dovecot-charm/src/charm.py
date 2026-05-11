@@ -2,60 +2,49 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Dovecot IMAP/POP3 mail server charm."""
+"""Dovecot charm."""
 
 import logging
+import os
 import shutil
 import subprocess  # nosec
 import typing
+from functools import cached_property
 from pathlib import Path
 from pwd import getpwnam
 
 import jinja2
 import ops
-from charmhelpers.core import host
-from charmlibs import apt, systemd
+from charmlibs import apt
+from charmlibs.interfaces.tls_certificates import (
+    CertificateRequestAttributes,
+    TLSCertificatesRequiresV4,
+)
+from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.model import BlockedStatus, MaintenanceStatus
 
-from dovecot_config import DovecotConfig, DovecotConfigInvalidError
+from constants import (
+    DOVEADM_BIN,
+    GDPR_ARCHIVE_DIR,
+    GDPR_TAKEOUT_DIR,
+    HOSTNAME_FILE,
+    MAIL_ROOT,
+    MAILNAME_FILE,
+    PEER_RELATION_NAME,
+    REQUIRED_PACKAGES,
+    SYNC_TO_SECONDARY_TARGET,
+    TEMPLATES_DIR,
+)
+from dovecot_config import DovecotConfig, DovecotConfigInvalidError, DovecotConfigSecretError
+from dovecot_setup import DovecotSetup
+from exceptions import CharmBlockedError, ConfigurationError, HASetupError
+from ha import HAManager
+from storage import StorageManager
+from utils import create_tarball, prepare_user_dir
 
 logger = logging.getLogger(__name__)
-
-# Paths
-MAIL_ROOT = "/srv/mail"
-ENCRYPTED_MOUNTPOINT = "/srv"
-TEMPLATES_DIR = Path(__file__).parent.parent.joinpath("templates")
-
-# Dovecot config
-DOVECOT_CONF_TEMPLATE = "dovecot.conf.tmpl"
-DOVECOT_CONF_TARGET = "/etc/dovecot/conf.d/99-local-dovecot-charm.conf"
-
-# Procmail config
-PROCMAILRC_TEMPLATE = "procmailrc.tmpl"
-PROCMAILRC_TARGET = "/etc/procmailrc"
-REQUIRED_PACKAGES = [
-    "cron",
-    "cryptsetup",
-    "dovecot-imapd",
-    "dovecot-lmtpd",
-    "dovecot-managesieved",
-    "dovecot-pop3d",
-    "dovecot-sieve",
-    "etckeeper",
-    "getmail6",
-    "mailutils",
-    "mutt",
-    "procmail",
-    "ubuntu-advantage-desktop-daemon",
-    "vacation",
-]
-
-HOSTNAME_FILE = "/etc/hostname"
-MAILNAME_FILE = "/etc/mailname"
-
-PEER_RELATION_NAME = "replicas"
 
 
 class DovecotCharm(CharmBase):
@@ -64,24 +53,65 @@ class DovecotCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
-        # Events
-        self.framework.observe(self.on.config_changed, self._reconcile)
+        self._storage = StorageManager(self)
+        self._dovecot_setup = DovecotSetup(self)
+        self._ha = HAManager(self)
+
         self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.upgrade_charm, self._reconcile)
+        self.framework.observe(self.on.start, self._reconcile)
+        self.framework.observe(self.on.config_changed, self._reconcile)
+        self.framework.observe(self.on.upgrade_charm, self._on_install)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
         self.framework.observe(self.on.create_mail_user_action, self._on_create_mail_user_action)
+        self.framework.observe(self.on.gdpr_archive_action, self._on_gdpr_archive)
+        self.framework.observe(self.on.gdpr_delete_action, self._on_gdpr_delete)
+        self.framework.observe(self.on.gdpr_takeout_action, self._on_gdpr_takeout)
+        self.framework.observe(self.on.mail_data_storage_attached, self._reconcile)
+        self.framework.observe(self.on.mail_data_storage_detaching, self._reconcile)
+        self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._reconcile)
+        self.framework.observe(self.on.force_sync_action, self._on_force_sync)
 
         self.framework.observe(
             self.on[PEER_RELATION_NAME].relation_created,
             self._on_peer_relation_created,
         )
-        # Template system
+
         self.jinja = jinja2.Environment(
             loader=jinja2.FileSystemLoader(TEMPLATES_DIR), autoescape=True
         )
 
-    def get_units(self):
-        """Return a list of all units in the application."""
+        self._tls = None
+        mailname = self.config.get("mailname", "")
+        if mailname:
+            self._tls = TLSCertificatesRequiresV4(
+                charm=self,
+                relationship_name="certificates",
+                certificate_requests=[
+                    CertificateRequestAttributes(
+                        common_name=mailname,
+                        sans_dns=frozenset([mailname]),
+                    )
+                ],
+                refresh_events=[self.on.config_changed],
+            )
+            self.framework.observe(self._tls.on.certificate_available, self._reconcile)
+
+        self._grafana_agent = COSAgentProvider(
+            self,
+            relation_name="cos-agent",
+            metrics_endpoints=[{"path": "/metrics", "port": 9166}],
+            metrics_rules_dir="./src/prometheus_alert_rules",
+            logs_rules_dir="./src/loki_alert_rules",
+            dashboard_dirs=["./src/grafana_dashboards"],
+            refresh_events=[self.on.config_changed],
+        )
+
+    def get_units(self) -> typing.List[str]:
+        """Return a list of all units in the application.
+
+        Returns:
+            List[str]: List of unit names.
+        """
         peer_relation = typing.cast(ops.Relation, self.model.get_relation(PEER_RELATION_NAME))
         if not peer_relation:
             logger.warning(
@@ -99,120 +129,101 @@ class DovecotCharm(CharmBase):
         relation_data = event.relation.data[self.unit]
         relation_data["unit-name"] = self.unit.name
 
-    def _get_dovecot_config(self):
-        """Return the DovecotConfig if all required config options are set, false otherwise."""
+    @cached_property
+    def _is_primary(self) -> bool:
+        """Return True if this unit is the configured primary unit."""
+        return self.unit.name == self.config.get("primary-unit", "")
+
+    @cached_property
+    def _secondary_hostname(self) -> typing.Optional[str]:
+        """Return the hostname of the first remote peer unit, or None."""
+        relation = self.model.get_relation(PEER_RELATION_NAME)
+        if not relation:
+            return None
+        for unit in relation.units:
+            hostname = relation.data[unit].get("hostname")
+            if hostname:
+                return hostname
+        return None
+
+    def _get_dovecot_config(self) -> DovecotConfig:
+        """Craft the DovecotConfig from charm configuration and validate it.
+
+        Returns:
+            DovecotConfig: The validated configuration.
+
+        Raises:
+            ConfigurationError: If configuration is invalid.
+        """
         try:
             return DovecotConfig.from_charm(self)
         except DovecotConfigInvalidError as exc:
             logger.exception(f"Configuration validation error: {exc}")
             msg = ", ".join([str(*err["loc"]) for err in exc.errors()])
-            self.unit.status = BlockedStatus(
+            raise ConfigurationError(
                 f"Invalid charm configuration, check logs for details: {msg}"
-            )
-            return False
+            ) from exc
+        except DovecotConfigSecretError as exc:
+            logger.exception(f"Secret retrieval error: {exc}")
+            raise ConfigurationError(str(exc)) from exc
 
     def _on_install(self, event):
         """Handle install event."""
         self.unit.status = MaintenanceStatus("Installing packages")
-        if not self._get_dovecot_config():
-            return
         self._install()
         self._reconcile(event)
 
     def _reconcile(self, event):
-        """Reconcile charm state for install, upgrade, and config-changed events."""
+        """Reconcile charm state."""
         self.unit.status = MaintenanceStatus("Configuring charm")
-        if not (dovecot_config := self._get_dovecot_config()):
+        if len(self.get_units()) > 2:
+            self.unit.status = BlockedStatus(
+                "Only one primary and one secondary unit are supported; remove extra units"
+            )
             return
-        self._configure(dovecot_config)
-        self.unit.status = ActiveStatus()
+        try:
+            dovecot_config = self._get_dovecot_config()
+            self._storage.ensure_storage_ready(dovecot_config)
+            self._storage.teardown_detaching_storage()
+        except CharmBlockedError as e:
+            self.unit.status = BlockedStatus(str(e))
+            return
+        if not self._dovecot_setup.is_installed():
+            logger.warning("Dovecot not installed yet, deferring configuration")
+            return
+        try:
+            self._dovecot_setup.setup_tls(dovecot_config)
+            self._dovecot_setup.setup_dovecot(dovecot_config)
+            self._dovecot_setup.setup_procmail()
+        except ConfigurationError as e:
+            self.unit.status = BlockedStatus(str(e))
+            return
+        try:
+            self._ha.setup_ssh_keys()
+            self._ha.sync_authorized_keys()
+            self._ha.sync_known_hosts()
+            if self._is_primary:
+                self._ha.install_mail_sync_script()
+                self._ha.setup_mail_sync_timer(dovecot_config)
+        except HASetupError as e:
+            self.unit.status = BlockedStatus(str(e))
+            return
+        self._open_ports()
+        self.unit.status = ops.ActiveStatus()
 
     def _install(self):
-        """Perform basic installation."""
+        """Install required packages and set up mailname."""
         self.unit.status = MaintenanceStatus("Installing required dependencies")
         apt.update()
         apt.add_package(REQUIRED_PACKAGES)
         shutil.copy(HOSTNAME_FILE, MAILNAME_FILE)
         self.unit.status = MaintenanceStatus("Charm installation done")
 
-    def _configure(self, dovecot_config: DovecotConfig):
-        """Perform basic configuration."""
-        self._setup_dovecot(dovecot_config)
-        self._setup_procmail()
-        self._open_ports()
-
     def _open_ports(self):
-        """Open mail ports."""
-        self.unit.open_port("tcp", 143)
+        """Open mail ports (TLS-only: plaintext 143/110 are not exposed)."""
         self.unit.open_port("tcp", 993)
-        self.unit.open_port("tcp", 110)
         self.unit.open_port("tcp", 995)
         self.unit.open_port("tcp", 4190)
-        self.unit.open_port("tcp", 9900)
-
-    def _setup_dovecot(self, dovecot_config: DovecotConfig):
-        """Set up and configure dovecot."""
-        self.unit.status = MaintenanceStatus("Setting up and configuring dovecot")
-        template_context = {
-            "dovecot_chroot": ENCRYPTED_MOUNTPOINT,
-            "mail_root": MAIL_ROOT,
-            "mailname": dovecot_config.mailname,
-            "postmaster_address": dovecot_config.postmaster_address,
-        }
-        template = self.jinja.get_template(DOVECOT_CONF_TEMPLATE)
-        contents = template.render(template_context)
-        host.write_file(DOVECOT_CONF_TARGET, contents, perms=0o644)
-        if not self._validate_dovecot_config(dovecot_config):
-            self.unit.status = BlockedStatus(
-                "Invalid Dovecot configuration, check logs for details"
-            )
-            return
-        systemd.service_reload("dovecot", restart_on_failure=True)
-        self.unit.status = MaintenanceStatus("Dovecot configuration updated")
-
-    def _validate_dovecot_config(self, config: DovecotConfig) -> bool:
-        """Validate the Dovecot configuration."""
-        try:
-            # The command and arguments are fixed literals with no user-controlled input.
-            subprocess.run(
-                ["/usr/bin/doveconf", "-c", DOVECOT_CONF_TARGET],
-                check=True,
-                capture_output=True,
-            )  # nosec B603
-            return True
-        except subprocess.CalledProcessError as e:
-            logger.exception(f"Failed to validate dovecot configuration: {e}")
-            return False
-
-    def _setup_procmail(self):
-        """Set up and configure procmail default file."""
-        self.unit.status = MaintenanceStatus("Setting up and configuring procmail")
-
-        # Ensure mail_root exists with permissions for delivery
-        mail_root = Path(MAIL_ROOT)
-        mail_root.mkdir(parents=True, exist_ok=True)
-        mail_root.chmod(0o1777)
-
-        template_context = {
-            "mail_root": MAIL_ROOT,
-        }
-        template = self.jinja.get_template(PROCMAILRC_TEMPLATE)
-        contents = template.render(template_context)
-        host.write_file(PROCMAILRC_TARGET, contents, perms=0o644)
-
-        # Configure Postfix to use procmail
-        try:
-            # The command and arguments are fixed literals with no user-controlled input.
-            subprocess.run(
-                ["/usr/sbin/postconf", "-e", 'mailbox_command=/usr/bin/procmail -a "$EXTENSION"'],
-                check=True,
-                capture_output=True,
-            )  # nosec B603
-            systemd.service_reload("postfix", restart_on_failure=True)
-        except subprocess.CalledProcessError as e:
-            logger.exception(f"Failed to configure postfix: {e}")
-            self.unit.status = BlockedStatus(f"Failed to configure postfix: {e.stderr}")
-            return
 
     def _on_create_mail_user_action(self, event):
         """Create or update local mail users for integration and operations workflows."""
@@ -309,12 +320,198 @@ class DovecotCharm(CharmBase):
             logger.info("Running clear-queue action: Deleting deferred mail from Postfix queue.")
 
         try:
-            # The command and arguments are fixed literals with no user-controlled input.
-            result = subprocess.run(command, check=True, capture_output=True, text=True)  # nosec B603
+            result = subprocess.run(command, check=True, capture_output=True, text=True)
             event.set_results({"status": "success", "output": result.stdout})
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to clear Postfix queue: {e.stderr}")
             event.fail(f"Failed to run postsuper: {e.stderr}")
+
+    def _on_gdpr_archive(self, event):
+        """Archive a user's mailbox for long-term retention."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
+        username = event.params["username"]
+        compress = event.params.get("compress", True)
+        archive_dir = f"{GDPR_ARCHIVE_DIR}/{username}"
+
+        try:
+            prepare_user_dir(archive_dir, username)
+        except KeyError:
+            event.fail(f"System user '{username}' does not exist.")
+            return
+
+        logger.info(f"GDPR archive: archiving mailbox for user '{username}'")
+
+        try:
+            subprocess.run(
+                [DOVEADM_BIN, "backup", "-u", username, f"mdbox:{archive_dir}/"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError:
+            shutil.rmtree(archive_dir, ignore_errors=True)
+            msg = "Please wait for the charm to finish installing before running this action."
+            logger.exception(f"doveadm binary not found: {DOVEADM_BIN}")
+            event.fail(msg)
+            return
+        except subprocess.CalledProcessError as e:
+            shutil.rmtree(archive_dir, ignore_errors=True)
+            msg = f"Failed to archive mailbox for '{username}': {e.stderr}"
+            logger.exception(msg)
+            event.fail(msg)
+            return
+
+        logger.info(f"Mailbox for '{username}' backed up to {archive_dir}")
+
+        result_path = archive_dir
+        if compress:
+            tar_path = f"{GDPR_ARCHIVE_DIR}/{username}.tar.gz"
+            create_tarball(tar_path, GDPR_ARCHIVE_DIR, username)
+            shutil.rmtree(archive_dir)
+            result_path = tar_path
+            logger.info(f"Archive compressed to {tar_path}")
+
+        event.set_results({"status": "success", "path": result_path})
+
+    def _on_gdpr_delete(self, event):
+        """Permanently delete a user's mailbox (GDPR right to erasure)."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
+        username = event.params["username"]
+        confirm = event.params.get("confirm", False)
+
+        if not confirm:
+            event.fail("Deletion not confirmed. Set confirm=true to proceed.")
+            return
+
+        logger.warning(f"GDPR delete: permanently deleting mailbox for user '{username}'")
+
+        try:
+            subprocess.run(
+                [DOVEADM_BIN, "expunge", "-u", username, "mailbox", "*", "all"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError:
+            msg = "Please wait for the charm to finish installing before running this action."
+            logger.exception(f"doveadm binary not found: {DOVEADM_BIN}")
+            event.fail(msg)
+            return
+        except subprocess.CalledProcessError as e:
+            msg = f"Failed to delete mailbox for '{username}': {e.stderr}"
+            logger.exception(msg)
+            event.fail(msg)
+            return
+
+        logger.info(f"All mail expunged for user '{username}'")
+
+        user_mail_dir = os.path.join(MAIL_ROOT, username)
+        if os.path.exists(user_mail_dir):
+            shutil.rmtree(user_mail_dir)
+            logger.info(f"Mail directory removed: {user_mail_dir}")
+
+        event.set_results({"status": "success", "message": f"Mailbox for '{username}' deleted"})
+
+    def _on_gdpr_takeout(self, event):
+        """Export a user's mail data in a portable format (GDPR data portability)."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
+        username = event.params["username"]
+        export_format = event.params.get("format", "maildir")
+        export_dir = f"{GDPR_TAKEOUT_DIR}/{username}"
+
+        if export_format not in ("maildir", "mbox"):
+            event.fail(f"Invalid format parameter '{export_format}', must be 'maildir' or 'mbox'")
+            return
+
+        try:
+            prepare_user_dir(export_dir, username)
+        except KeyError:
+            event.fail(f"System user '{username}' does not exist.")
+            return
+
+        logger.info(f"GDPR takeout: exporting mailbox for user '{username}' as {export_format}")
+
+        try:
+            if export_format == "maildir":
+                dest = f"maildir:{export_dir}/:LAYOUT=fs"
+            else:  # mbox
+                dest = f"mbox:{export_dir}/:INBOX={export_dir}/INBOX"
+
+            subprocess.run(
+                [DOVEADM_BIN, "sync", "-u", username, dest],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError:
+            shutil.rmtree(export_dir, ignore_errors=True)
+            msg = "Please wait for the charm to finish installing before running this action."
+            logger.exception(f"doveadm binary not found: {DOVEADM_BIN}")
+            event.fail(msg)
+            return
+        except subprocess.CalledProcessError as e:
+            shutil.rmtree(export_dir, ignore_errors=True)
+            stderr = e.stderr.decode(errors="replace") if isinstance(e.stderr, bytes) else e.stderr
+            msg = f"Failed to export mailbox for '{username}': {stderr}"
+            logger.exception(msg)
+            event.fail(msg)
+            return
+
+        try:
+            tar_path = f"{GDPR_TAKEOUT_DIR}/{username}-takeout.tar.gz"
+            create_tarball(tar_path, GDPR_TAKEOUT_DIR, username)
+        finally:
+            shutil.rmtree(export_dir, ignore_errors=True)
+
+        logger.info(f"Takeout export created at {tar_path}")
+        event.set_results({"status": "success", "path": tar_path})
+
+    def _on_force_sync(self, event):
+        """Force synchronization with secondary unit."""
+        if not self._is_primary:
+            event.fail("This action can only be run on the primary unit.")
+            return
+
+        if not self._secondary_hostname:
+            event.fail(
+                "Secondary unit hostname is not yet known. "
+                "Ensure a second unit is deployed and has joined the peer relation."
+            )
+            return
+
+        if not Path(SYNC_TO_SECONDARY_TARGET).exists():
+            event.fail(
+                "Sync script not yet installed. "
+                "Please wait for the charm to reach active state before running force-sync."
+            )
+            return
+
+        try:
+            logger.info(f"Running manual sync: {SYNC_TO_SECONDARY_TARGET}")
+            subprocess.run([SYNC_TO_SECONDARY_TARGET], check=True, capture_output=True, text=True)
+            event.set_results({"result": "Sync completed successfully"})
+        except subprocess.CalledProcessError as e:
+            parts = [
+                f"Sync failed with exit code {e.returncode} while running "
+                f"{' '.join(e.cmd) if isinstance(e.cmd, (list, tuple)) else e.cmd}"
+            ]
+            if e.stderr and e.stderr.strip():
+                parts.append(f"stderr: {e.stderr.strip()}")
+            if e.stdout and e.stdout.strip():
+                parts.append(f"stdout: {e.stdout.strip()}")
+            msg = ". ".join(parts)
+            logger.exception(msg)
+            event.fail(msg)
+        except FileNotFoundError as e:
+            msg = f"Sync failed: {e}"
+            logger.exception(msg)
+            event.fail(msg)
 
 
 if __name__ == "__main__":  # pragma: nocover

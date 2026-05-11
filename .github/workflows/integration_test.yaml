@@ -11,30 +11,27 @@ jobs:
       canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
+      extra-arguments: '-x --log-format="%(asctime)s %(levelname)s %(message)s"'
       provider: lxd
       trivy-fs-enabled: false
       trivy-image-config: "trivy.yaml"
       self-hosted-runner: true
-      self-hosted-runner-label: "edge"
+      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
       juju-channel: '3/stable'
       with-uv: true
       working-directory: dovecot-charm
-  integration-tests:
-    uses: 
-      canonical/operator-workflows/.github/workflows/integration_test.yaml@main
-    secrets: inherit
-    with:
-      provider: lxd
-      trivy-fs-enabled: true
-      trivy-image-config: "trivy.yaml"
-      self-hosted-runner: true
-      self-hosted-runner-label: "edge"
-      juju-channel: '4/stable'
-      with-uv: true
-      working-directory: dovecot-charm
+      modules: |
+        [
+          "test_action.py",
+          "test_config.py",
+          "test_ha.py",
+          "test_mail.py",
+          "test_observability.py",
+          "test_storage.py",
+          "test_tls.py"
+        ]
   allure-report:
     if: ${{ !cancelled() && github.event_name == 'schedule' }}
     needs:
     - integration-tests-juju-3
-    - integration-tests
     uses: canonical/operator-workflows/.github/workflows/allure_report.yaml@main

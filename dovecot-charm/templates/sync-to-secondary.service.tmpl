@@ -1,0 +1,10 @@
+[Unit]
+Description=Sync mail pool to secondary Dovecot unit
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/sync-to-secondary.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sync-to-secondary

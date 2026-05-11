@@ -1,0 +1,17 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+summary: Verify opendkim accepts valid config and rejects invalid config
+
+execute: |
+  # Copy config files to the snap's writable data directory so the
+  # jailmode-confined process can read them.
+  data_dir="/var/snap/opendkim/current"
+  cp ./valid.conf "$data_dir/valid.conf"
+  cp ./invalid.conf "$data_dir/invalid.conf"
+
+  echo "Testing valid configuration..."
+  snap run opendkim.opendkim -n -x "$data_dir/valid.conf"
+
+  echo "Testing invalid configuration..."
+  ! snap run opendkim.opendkim -n -x "$data_dir/invalid.conf"

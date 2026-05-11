@@ -1,0 +1,18 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Version of the artifact schema
+version_schema: 2
+
+changes:
+- title: Added end-to-end mail delivery integration test suite
+  author: alithethird
+  type: minor
+  description: Added integration tests verifying the full mail delivery pipeline from local Postfix send through Procmail to Dovecot, with IMAP retrieval assertions.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/8"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: false
