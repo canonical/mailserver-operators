@@ -68,3 +68,87 @@ def test_clear_queue_failure(ctx, base_state):
             base_state,
         )
     assert "postsuper" in exc_info.value.message
+
+
+# --- create-mail-user action tests ---
+
+
+def test_create_mail_user_action_creates_primary_and_mailbox_user(ctx, base_state):
+    """create-mail-user creates missing users, groups and passwords."""
+    with (
+        patch(
+            "charm.getpwnam",
+            side_effect=[KeyError("e2euser"), KeyError("e2euser@example.com")],
+        ),
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+    ):
+        ctx.run(
+            ctx.on.action(
+                "create-mail-user",
+                params={
+                    "username": "e2euser",
+                    "password": "secret",
+                    "mailbox-user": "e2euser@example.com",
+                },
+            ),
+            base_state,
+        )
+
+    assert ctx.action_results["status"] == "success"
+    assert ctx.action_results["created"] == "e2euser,e2euser@example.com"
+    assert ctx.action_results["updated"] == ""
+
+
+def test_create_mail_user_action_updates_existing_user(ctx, base_state):
+    """create-mail-user updates password/group for existing users."""
+    existing_user = object()
+    with (
+        patch("charm.getpwnam", return_value=existing_user),
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+    ):
+        ctx.run(
+            ctx.on.action(
+                "create-mail-user",
+                params={
+                    "username": "e2euser",
+                    "password": "secret",
+                },
+            ),
+            base_state,
+        )
+
+    assert ctx.action_results["status"] == "success"
+    assert ctx.action_results["created"] == ""
+    assert ctx.action_results["updated"] == "e2euser"
+
+
+def test_create_mail_user_action_requires_username(ctx, base_state):
+    """create-mail-user fails fast when username is missing."""
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(
+            ctx.on.action(
+                "create-mail-user",
+                params={
+                    "username": "",
+                    "password": "secret",
+                },
+            ),
+            base_state,
+        )
+    assert "username" in exc_info.value.message
+
+
+def test_create_mail_user_action_requires_password(ctx, base_state):
+    """create-mail-user fails fast when password is missing."""
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(
+            ctx.on.action(
+                "create-mail-user",
+                params={
+                    "username": "e2euser",
+                    "password": "",
+                },
+            ),
+            base_state,
+        )
+    assert "password" in exc_info.value.message

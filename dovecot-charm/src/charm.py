@@ -9,6 +9,7 @@ import shutil
 import subprocess  # nosec
 import typing
 from pathlib import Path
+from pwd import getpwnam
 
 import jinja2
 import ops
@@ -68,6 +69,7 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.upgrade_charm, self._reconcile)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
+        self.framework.observe(self.on.create_mail_user_action, self._on_create_mail_user_action)
 
         self.framework.observe(
             self.on[PEER_RELATION_NAME].relation_created,
@@ -211,6 +213,85 @@ class DovecotCharm(CharmBase):
             logger.exception(f"Failed to configure postfix: {e}")
             self.unit.status = BlockedStatus(f"Failed to configure postfix: {e.stderr}")
             return
+
+    def _on_create_mail_user_action(self, event):
+        """Create or update local mail users for integration and operations workflows."""
+        username = str(event.params.get("username", "")).strip()
+        password = str(event.params.get("password", ""))
+        mailbox_user = str(event.params.get("mailbox-user", "")).strip()
+
+        if not username:
+            event.fail("Parameter 'username' is required.")
+            return
+        if not password:
+            event.fail("Parameter 'password' is required.")
+            return
+
+        users_to_manage = [username]
+        if mailbox_user and mailbox_user != username:
+            users_to_manage.append(mailbox_user)
+
+        created_users: list[str] = []
+        updated_users: list[str] = []
+
+        try:
+            for user in users_to_manage:
+                if self._system_user_exists(user):
+                    updated_users.append(user)
+                else:
+                    self._create_system_user(user)
+                    created_users.append(user)
+                self._ensure_user_in_mail_group(user)
+                self._set_system_user_password(user, password)
+        except (subprocess.CalledProcessError, KeyError, FileNotFoundError) as exc:
+            event.fail(f"Failed to manage users: {exc}")
+            return
+
+        event.set_results(
+            {
+                "status": "success",
+                "created": ",".join(created_users),
+                "updated": ",".join(updated_users),
+            }
+        )
+
+    @staticmethod
+    def _system_user_exists(username: str) -> bool:
+        """Return whether a local system user exists."""
+        try:
+            getpwnam(username)
+            return True
+        except KeyError:
+            return False
+
+    @staticmethod
+    def _create_system_user(username: str) -> None:
+        """Create a local system user, allowing mailbox-style names if needed."""
+        command = ["/usr/sbin/useradd", "-m", username]
+        if "@" in username:
+            command.insert(1, "--badname")
+        subprocess.run(command, check=True, capture_output=True, text=True)  # nosec B603
+
+    @staticmethod
+    def _ensure_user_in_mail_group(username: str) -> None:
+        """Ensure the user is a member of the mail group."""
+        subprocess.run(
+            ["/usr/sbin/usermod", "-aG", "mail", username],
+            check=True,
+            capture_output=True,
+            text=True,
+        )  # nosec B603
+
+    @staticmethod
+    def _set_system_user_password(username: str, password: str) -> None:
+        """Set the password for the local system user."""
+        subprocess.run(
+            ["/usr/sbin/chpasswd"],
+            check=True,
+            capture_output=True,
+            text=True,
+            input=f"{username}:{password}",
+        )  # nosec B603
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""
