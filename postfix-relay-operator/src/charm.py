@@ -263,7 +263,7 @@ class PostfixRelayCharm(ops.CharmBase):
             if not source.exists():
                 continue
             database = source.parent / f"{source.name}.db"
-            if not database.exists() or source.stat().st_mtime_ns > database.stat().st_mtime_ns:
+            if not database.exists() or source.stat().st_mtime_ns >= database.stat().st_mtime_ns:
                 maps_to_compile.append(map_file)
 
         if not maps_to_compile:
