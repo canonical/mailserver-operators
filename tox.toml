@@ -3,7 +3,7 @@
 
 skipsdist = true
 skip_missing_interpreters = true
-envlist = [ "lint", "unit", "static", "coverage-report" ]
+envlist = [ "lint", "unit", "static", "coverage-report", "stack-integration" ]
 requires = [ "tox>=4.21" ]
 no_package = true
 
@@ -145,3 +145,19 @@ dependency_groups = [ "lint" ]
 src_path = "{toxinidir}/src/"
 tst_path = "{toxinidir}/tests/"
 all_path = [ "{toxinidir}/src/", "{toxinidir}/tests/" ]
+
+[env.stack-integration]
+description = "Run cross-charm integration tests (postfix-relay-configurator)"
+commands = [
+  [
+    "pytest",
+    "-v",
+    "--tb",
+    "native",
+    "tests/integration/test_configurator_maps.py",
+    "--log-cli-level=INFO",
+    "-s",
+    { replace = "posargs", extend = "true" },
+  ],
+]
+dependency_groups = [ "integration" ]
