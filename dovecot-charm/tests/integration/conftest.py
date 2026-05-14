@@ -2,11 +2,7 @@
 # See LICENSE file for licensing details.
 
 import logging
-import mailbox
-import os
 import secrets
-import tarfile
-import tempfile
 import typing
 
 import jubilant
