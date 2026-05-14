@@ -251,6 +251,7 @@ class DovecotCharm(CharmBase):
                     updated_users.append(user)
                 else:
                     self._create_system_user(user)
+                    prepare_user_dir(os.path.join(MAIL_ROOT, user), user)
                     created_users.append(user)
                 self._ensure_user_in_mail_group(user)
                 self._set_system_user_password(user, password)
@@ -286,7 +287,15 @@ class DovecotCharm(CharmBase):
     @staticmethod
     def _create_system_user(username: str) -> None:
         """Create a local system user, allowing mailbox-style names if needed."""
-        command = ["/usr/sbin/useradd", "-m", username]
+        command = [
+            "/usr/sbin/useradd",
+            "--no-create-home",
+            "-d",
+            f"{MAIL_ROOT}/{username}",
+            "-s",
+            "/usr/sbin/nologin",
+            username,
+        ]
         if "@" in username:
             command.insert(1, "--badname")
         subprocess.run(command, check=True, capture_output=True, text=True)  # nosec B603

@@ -241,9 +241,9 @@ def _setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, passwo
     action_result = juju.run(
         unit_name, "create-mail-user", params={"username": user, "password": password}
     )
-    assert (
-        action_result.status == "success"
-    ), f"create-mail-user action failed for {user}: status={action_result.status}"
+    assert action_result.status == "completed", (
+        f"create-mail-user action failed for {user}: status={action_result.status}"
+    )
     juju.exec(f"install -d -m 0700 -o {user} -g mail {MAIL_ROOT}/{user}", unit=unit_name)
     juju.exec(f"doveadm mailbox create -u {user} INBOX 2>/dev/null || true", unit=unit_name)
     juju.exec(

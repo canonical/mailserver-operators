@@ -327,6 +327,7 @@ def test_create_mail_user_action_creates_primary_and_mailbox_user(ctx, base_stat
             side_effect=[KeyError("e2euser"), KeyError("e2euser@example.com")],
         ),
         patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+        patch("charm.prepare_user_dir") as mock_prepare,
     ):
         ctx.run(
             ctx.on.action(
@@ -343,14 +344,40 @@ def test_create_mail_user_action_creates_primary_and_mailbox_user(ctx, base_stat
     assert ctx.action_results["status"] == "success"
     assert ctx.action_results["created"] == "e2euser,e2euser@example.com"
     assert ctx.action_results["updated"] == ""
+    assert mock_prepare.call_count == 2
+    mock_prepare.assert_any_call("/srv/mail/e2euser", "e2euser")
+    mock_prepare.assert_any_call("/srv/mail/e2euser@example.com", "e2euser@example.com")
 
 
-def test_create_mail_user_action_updates_existing_user(ctx, base_state):
+def test_create_system_user_useradd_flags(ctx, base_state):
+    """create-mail-user calls useradd with nologin shell and no home directory."""
+    with (
+        patch("charm.getpwnam", side_effect=KeyError("e2euser")),
+        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
+        patch("charm.prepare_user_dir"),
+    ):
+        ctx.run(
+            ctx.on.action(
+                "create-mail-user",
+                params={"username": "e2euser", "password": secrets.token_hex(8)},
+            ),
+            base_state,
+        )
+
+    useradd_call = next(c for c in mock_run.call_args_list if "useradd" in c.args[0][0])
+    cmd = useradd_call.args[0]
+    assert "-m" not in cmd
+    assert "--no-create-home" in cmd
+    assert "-s" in cmd
+    assert "/usr/sbin/nologin" in cmd
+    assert "-d" in cmd
+    assert "/srv/mail/e2euser" in cmd
     """create-mail-user updates password/group for existing users."""
     existing_user = object()
     with (
         patch("charm.getpwnam", return_value=existing_user),
         patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
+        patch("charm.prepare_user_dir") as mock_prepare,
     ):
         ctx.run(
             ctx.on.action(
@@ -366,6 +393,7 @@ def test_create_mail_user_action_updates_existing_user(ctx, base_state):
     assert ctx.action_results["status"] == "success"
     assert ctx.action_results["created"] == ""
     assert ctx.action_results["updated"] == "e2euser"
+    mock_prepare.assert_not_called()
 
 
 def test_create_mail_user_action_requires_username(ctx, base_state):
