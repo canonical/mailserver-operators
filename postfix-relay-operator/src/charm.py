@@ -250,8 +250,17 @@ class PostfixRelayCharm(ops.CharmBase):
     @staticmethod
     def _apply_postfix_maps(postfix_maps: list[postfix.PostfixMap]) -> None:
         logger.info("Applying postfix maps")
+        changed = False
         for postfix_map in postfix_maps:
+            path = Path(postfix_map.path)
+            existing = path.read_text("utf-8") if path.exists() else None
+            if existing == postfix_map.content:
+                continue
             utils.write_file(postfix_map.content, postfix_map.path)
+            changed = True
+        if not changed:
+            logger.debug("Postfix map files unchanged, skipping postmap")
+            return
         for map_file in postfix.POSTFIX_MAP_FILES:
             if Path(map_file).exists():
                 subprocess.check_call(["postmap", f"hash:{map_file}"])  # nosec
