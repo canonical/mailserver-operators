@@ -19,7 +19,7 @@ POSTFIX_MAP_FILES = [
     "/etc/postfix/access",
     "/etc/postfix/sender_login",
     "/etc/postfix/tls_policy",
-    "/etc/postfix/transport_maps",
+    "/etc/postfix/transport",
     "/etc/postfix/virtual_alias",
 ]
 
@@ -228,7 +228,12 @@ def _parse_access_map(path: Path) -> dict[str, AccessMapValue]:
 def _parse_map(path: Path) -> dict[str, str]:
     if path.exists():
         raw_content = path.read_text("utf-8")
-        return {line.split(" ")[0]: line.split(" ")[1] for line in raw_content.split("\n")}
+        result = {}
+        for line in raw_content.split("\n"):
+            parts = line.split(" ", 1)
+            if len(parts) == 2 and parts[0]:
+                result[parts[0]] = parts[1]
+        return result
     return {}
 
 
@@ -301,7 +306,7 @@ def fetch_transport_maps() -> dict[str, str]:
     Returns:
         the transport maps.
     """
-    return _parse_map(POSTFIX_CONF_DIRPATH / "transport_maps")
+    return _parse_map(POSTFIX_CONF_DIRPATH / "transport")
 
 
 def fetch_virtual_alias_maps() -> dict[str, str]:
@@ -310,4 +315,4 @@ def fetch_virtual_alias_maps() -> dict[str, str]:
     Returns:
         the virtual alias maps.
     """
-    return _parse_map(POSTFIX_CONF_DIRPATH / "virtual_alias_maps")
+    return _parse_map(POSTFIX_CONF_DIRPATH / "virtual_alias")
