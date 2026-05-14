@@ -3,6 +3,7 @@
 
 import dataclasses
 import json
+import secrets
 from pathlib import Path
 from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
@@ -315,7 +316,8 @@ def test_gdpr_archive_failure(ctx, base_state, tmp_path):
             ctx.on.action("gdpr-archive", params={"username": "alice", "compress": False}),
             base_state,
         )
-    assert "postsuper" in exc_info.value.message
+    assert "Failed to archive" in exc_info.value.message
+
 
 def test_create_mail_user_action_creates_primary_and_mailbox_user(ctx, base_state):
     """create-mail-user creates missing users, groups and passwords."""
@@ -331,7 +333,7 @@ def test_create_mail_user_action_creates_primary_and_mailbox_user(ctx, base_stat
                 "create-mail-user",
                 params={
                     "username": "e2euser",
-                    "password": "secret",
+                    "password": secrets.token_hex(8),
                     "mailbox-user": "e2euser@example.com",
                 },
             ),
@@ -355,7 +357,7 @@ def test_create_mail_user_action_updates_existing_user(ctx, base_state):
                 "create-mail-user",
                 params={
                     "username": "e2euser",
-                    "password": "secret",
+                    "password": secrets.token_hex(8),
                 },
             ),
             base_state,
@@ -374,7 +376,7 @@ def test_create_mail_user_action_requires_username(ctx, base_state):
                 "create-mail-user",
                 params={
                     "username": "",
-                    "password": "secret",
+                    "password": secrets.token_hex(8),
                 },
             ),
             base_state,
@@ -390,13 +392,13 @@ def test_create_mail_user_action_requires_password(ctx, base_state):
                 "create-mail-user",
                 params={
                     "username": "e2euser",
-                    "password": "",
+                    "password": "",  # nosec B105
                 },
             ),
             base_state,
         )
     assert "password" in exc_info.value.message
-    assert "error" in exc_info.value.message
+    assert "required" in exc_info.value.message
 
 
 def test_gdpr_delete_no_confirm(ctx, base_state):
