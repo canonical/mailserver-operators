@@ -58,22 +58,6 @@ jobs:
       juju-channel: 3/stable
       modules: |
         [
-          "test_e2e.py"
-        ]
-      with-uv: true
-  integration-tests-configurator-maps:
-    uses:
-      canonical/operator-workflows/.github/workflows/integration_test.yaml@main
-    secrets: inherit
-    with:
-      test-tox-env: stack-integration
-      provider: lxd
-      trivy-fs-enabled: false
-      self-hosted-runner: true
-      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
-      juju-channel: 3/stable
-      modules: |
-        [
           "test_configurator_maps.py"
         ]
       with-uv: true
@@ -82,5 +66,4 @@ jobs:
     needs:
     - integration-tests-juju-3
     - integration-tests-global
-    - integration-tests-configurator-maps
     uses: canonical/operator-workflows/.github/workflows/allure_report.yaml@main

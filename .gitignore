@@ -12,6 +12,7 @@ __pycache__/
 */*.rock
 terraform/tests/.terraform
 .opencode/
+plans/
 
 # BEGIN VALE WORKFLOW IGNORE
 .vale/styles/*
