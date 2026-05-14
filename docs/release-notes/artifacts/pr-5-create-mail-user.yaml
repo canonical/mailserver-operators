@@ -1,0 +1,18 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Version of the artifact schema
+version_schema: 2
+
+changes:
+- title: Added create-mail-user action
+  author: alithethird
+  type: minor
+  description: Added create-mail-user Juju action to create or update local system users for mail access. The action creates the system user, adds it to the mail group, and sets its password. An optional mailbox-user parameter supports mailbox-style usernames (e.g. user@example.com) alongside the primary username.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/28"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: false

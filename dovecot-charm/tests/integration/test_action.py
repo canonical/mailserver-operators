@@ -238,15 +238,7 @@ def _assert_queue_non_empty(juju: jubilant.Juju, unit_name: str) -> None:
 
 def _setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
     """Create a system user with a Dovecot mailbox containing one test message."""
-    juju.exec(
-        (
-            f"id -u {user} >/dev/null 2>&1 || "
-            f"useradd -M -d {MAIL_ROOT}/{user} -s /usr/sbin/nologin {user}"
-        ),
-        unit=unit_name,
-    )
-    juju.exec(f"echo '{user}:{password}' | chpasswd", unit=unit_name)
-    juju.exec(f"usermod -aG mail {user}", unit=unit_name)
+    juju.run(unit_name, "create-mail-user", params={"username": user, "password": password})
     juju.exec(f"install -d -m 0700 -o {user} -g mail {MAIL_ROOT}/{user}", unit=unit_name)
     juju.exec(f"doveadm mailbox create -u {user} INBOX 2>/dev/null || true", unit=unit_name)
     juju.exec(
@@ -262,3 +254,90 @@ def _teardown_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str) -> 
     """Remove the test user and mail directory created by _setup_gdpr_test_user."""
     juju.exec(f"userdel -r {user} 2>/dev/null || true", unit=unit_name)
     juju.exec(f"rm -rf {MAIL_ROOT}/{user}", unit=unit_name)
+
+
+CREATE_MAIL_USER_TEST_USER = "cmu-testuser"
+CREATE_MAIL_USER_TEST_MAILBOX = "cmu-testuser@example.com"
+CREATE_MAIL_USER_TEST_PASSWORD = secrets.token_hex(16)
+
+
+@pytest.fixture()
+def create_mail_user_cleanup(juju: jubilant.Juju, dovecot_charm: str):
+    """Tear down users created by create-mail-user tests."""
+    unit_name = f"{dovecot_charm}/0"
+    yield unit_name
+    for user in (CREATE_MAIL_USER_TEST_USER, CREATE_MAIL_USER_TEST_MAILBOX):
+        juju.exec(f"userdel -r {user} 2>/dev/null || true", unit=unit_name)
+
+
+def test_create_mail_user_creates_new_user(juju: jubilant.Juju, create_mail_user_cleanup: str):
+    """create-mail-user action creates a new system user in the mail group."""
+    unit_name = create_mail_user_cleanup
+    result = juju.run(
+        unit_name,
+        "create-mail-user",
+        params={
+            "username": CREATE_MAIL_USER_TEST_USER,
+            "password": CREATE_MAIL_USER_TEST_PASSWORD,
+        },
+    )
+    assert result.status == "completed"
+    assert result.results.get("status") == "success"
+    assert CREATE_MAIL_USER_TEST_USER in result.results.get("created", "")
+    assert result.results.get("updated") == ""
+
+    juju.exec(f"id {CREATE_MAIL_USER_TEST_USER}", unit=unit_name)
+    groups_output = juju.exec(f"groups {CREATE_MAIL_USER_TEST_USER}", unit=unit_name)
+    assert "mail" in groups_output.stdout
+
+
+def test_create_mail_user_updates_existing_user(
+    juju: jubilant.Juju, create_mail_user_cleanup: str
+):
+    """create-mail-user action reports updated when the user already exists."""
+    unit_name = create_mail_user_cleanup
+    # Create first
+    juju.run(
+        unit_name,
+        "create-mail-user",
+        params={
+            "username": CREATE_MAIL_USER_TEST_USER,
+            "password": CREATE_MAIL_USER_TEST_PASSWORD,
+        },
+    )
+    # Run again — should report updated, not created
+    result = juju.run(
+        unit_name,
+        "create-mail-user",
+        params={
+            "username": CREATE_MAIL_USER_TEST_USER,
+            "password": CREATE_MAIL_USER_TEST_PASSWORD,
+        },
+    )
+    assert result.status == "completed"
+    assert result.results.get("status") == "success"
+    assert result.results.get("created") == ""
+    assert CREATE_MAIL_USER_TEST_USER in result.results.get("updated", "")
+
+
+def test_create_mail_user_with_mailbox_user(juju: jubilant.Juju, create_mail_user_cleanup: str):
+    """create-mail-user action creates both primary and mailbox-style users."""
+    unit_name = create_mail_user_cleanup
+    result = juju.run(
+        unit_name,
+        "create-mail-user",
+        params={
+            "username": CREATE_MAIL_USER_TEST_USER,
+            "password": CREATE_MAIL_USER_TEST_PASSWORD,
+            "mailbox-user": CREATE_MAIL_USER_TEST_MAILBOX,
+        },
+    )
+    assert result.status == "completed"
+    assert result.results.get("status") == "success"
+    created = result.results.get("created", "")
+    assert CREATE_MAIL_USER_TEST_USER in created
+    assert CREATE_MAIL_USER_TEST_MAILBOX in created
+
+    for user in (CREATE_MAIL_USER_TEST_USER, CREATE_MAIL_USER_TEST_MAILBOX):
+        groups_output = juju.exec(f"groups {user}", unit=unit_name)
+        assert "mail" in groups_output.stdout

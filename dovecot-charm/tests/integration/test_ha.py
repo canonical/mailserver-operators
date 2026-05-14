@@ -57,15 +57,7 @@ def _setup_mail_user(
     so that dsync can replicate it to the secondary without GUID conflicts.
     """
     for unit in (primary, secondary):
-        juju.exec(
-            (
-                f"id -u {user} >/dev/null 2>&1 || "
-                f"useradd -M -d /srv/mail/{user} -s /usr/sbin/nologin {user}"
-            ),
-            unit=unit,
-        )
-        juju.exec(f"echo '{user}:{password}' | chpasswd", unit=unit)
-        juju.exec(f"usermod -aG mail {user}", unit=unit)
+        juju.run(unit, "create-mail-user", params={"username": user, "password": password})
 
     # Maildir only on primary — dsync creates it on the secondary during the
     # first sync.  Pre-initialising it on the secondary would give INBOX a

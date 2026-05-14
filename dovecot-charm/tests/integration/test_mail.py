@@ -22,8 +22,7 @@ def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):
     password = token_hex(8)
     logging.info("Configuring user 'ubuntu'...")
 
-    juju.exec("usermod -aG mail ubuntu", unit=unit_name)
-    juju.exec(f"echo 'ubuntu:{password}' | chpasswd", unit=unit_name)
+    juju.run(unit_name, "create-mail-user", params={"username": "ubuntu", "password": password})
 
     logging.info("Sending test email...")
     subject = "Mail Verification"
