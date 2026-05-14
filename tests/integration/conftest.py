@@ -150,7 +150,7 @@ def maps_stack_fixture(
     # --- postfix-relay ---
     auth_password = "test-password"
     if not juju.status().apps.get(POSTFIX_RELAY_APP):
-        charm_path = _select_charm_file(pytestconfig, "postfix-relay")
+        charm_path = _select_charm_file(pytestconfig, "postfix-relay_")
         if not charm_path.startswith(("./", "/")):
             charm_path = f"./{charm_path}"
         juju.deploy(
@@ -174,7 +174,7 @@ def maps_stack_fixture(
     # --- postfix-relay-configurator ---
     authorized_sender = f"authorized@{TEST_DOMAIN}"
     if not juju.status().apps.get(CONFIGURATOR_APP):
-        charm_path = _select_charm_file(pytestconfig, "postfix-relay-configurator")
+        charm_path = _select_charm_file(pytestconfig, "postfix-relay-configurator_")
         if not charm_path.startswith(("./", "/")):
             charm_path = f"./{charm_path}"
         juju.deploy(
