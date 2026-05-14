@@ -57,7 +57,12 @@ def _setup_mail_user(
     so that dsync can replicate it to the secondary without GUID conflicts.
     """
     for unit in (primary, secondary):
-        juju.run(unit, "create-mail-user", params={"username": user, "password": password})
+        result = juju.run(
+            unit, "create-mail-user", params={"username": user, "password": password}
+        )
+        assert (
+            result.status == "completed"
+        ), f"create-mail-user failed for {user!r} on {unit}: {result!r}"
 
     # Maildir only on primary — dsync creates it on the secondary during the
     # first sync.  Pre-initialising it on the secondary would give INBOX a

@@ -255,7 +255,15 @@ class DovecotCharm(CharmBase):
                 self._ensure_user_in_mail_group(user)
                 self._set_system_user_password(user, password)
         except (subprocess.CalledProcessError, KeyError, FileNotFoundError) as exc:
-            event.fail(f"Failed to manage users: {exc}")
+            message = f"Failed to manage users: {exc}"
+            if isinstance(exc, subprocess.CalledProcessError):
+                stderr = exc.stderr.strip() if isinstance(exc.stderr, str) else exc.stderr
+                stdout = exc.stdout.strip() if isinstance(exc.stdout, str) else exc.stdout
+                if stderr:
+                    message += f"; stderr: {stderr}"
+                if stdout:
+                    message += f"; stdout: {stdout}"
+            event.fail(message)
             return
 
         event.set_results(

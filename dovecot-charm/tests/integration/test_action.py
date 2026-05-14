@@ -238,7 +238,12 @@ def _assert_queue_non_empty(juju: jubilant.Juju, unit_name: str) -> None:
 
 def _setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
     """Create a system user with a Dovecot mailbox containing one test message."""
-    juju.run(unit_name, "create-mail-user", params={"username": user, "password": password})
+    action_result = juju.run(
+        unit_name, "create-mail-user", params={"username": user, "password": password}
+    )
+    assert (
+        action_result.status == "success"
+    ), f"create-mail-user action failed for {user}: status={action_result.status}"
     juju.exec(f"install -d -m 0700 -o {user} -g mail {MAIL_ROOT}/{user}", unit=unit_name)
     juju.exec(f"doveadm mailbox create -u {user} INBOX 2>/dev/null || true", unit=unit_name)
     juju.exec(
