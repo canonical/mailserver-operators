@@ -2,8 +2,12 @@
 # See LICENSE file for licensing details.
 
 import logging
+import mailbox
+import os
+import secrets
+import tarfile
+import tempfile
 import typing
-from secrets import token_hex
 
 import jubilant
 import pytest
@@ -11,6 +15,18 @@ import pytest
 logger = logging.getLogger(__name__)
 
 APP_NAME = "dovecot"
+
+# GDPR action test constants
+MAIL_ROOT = "/srv/mail"
+GDPR_ARCHIVE_DIR = f"{MAIL_ROOT}/archives"
+GDPR_TAKEOUT_DIR = f"{MAIL_ROOT}/takeout"
+GDPR_TEST_USER = "gdpr-testuser"
+GDPR_TEST_PASSWORD = secrets.token_hex(16)
+
+# create-mail-user action test constants
+CREATE_MAIL_USER_TEST_USER = "cmu-testuser"
+CREATE_MAIL_USER_TEST_MAILBOX = "cmu-testuser@example.com"
+CREATE_MAIL_USER_TEST_PASSWORD = secrets.token_hex(16)
 
 
 @pytest.fixture(scope="session", name="juju")
@@ -51,7 +67,7 @@ def dovecot_charm(
 ) -> str:
     """Build and deploy the charm."""
     logging.info(f"Checking for existing application {APP_NAME}...")
-    luks_key = token_hex(16)
+    luks_key = secrets.token_hex(16)
 
     if not juju.status().apps.get(APP_NAME):
         logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
@@ -151,7 +167,7 @@ def dovecot_charm_dual_unit(
 ) -> str:
     """Build and deploy the charm."""
     logging.info(f"Checking for existing application {APP_NAME}...")
-    luks_key = token_hex(16)
+    luks_key = secrets.token_hex(16)
 
     if not juju.status().apps.get(APP_NAME):
         logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
@@ -203,3 +219,55 @@ def dovecot_charm_dual_unit(
     logging.info("Waiting for 2 units to be active...")
     juju.wait(two_units_active, timeout=10 * 60)
     return APP_NAME
+
+
+# ---------------------------------------------------------------------------
+# Helper functions for GDPR tests
+# ---------------------------------------------------------------------------
+def _setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
+    """Create a system user with a Dovecot mailbox containing one test message."""
+    action_result = juju.run(
+        unit_name, "create-mail-user", params={"username": user, "password": password}
+    )
+    assert action_result.status == "completed", (
+        f"create-mail-user action failed for {user}: status={action_result.status}"
+    )
+    juju.exec(f"install -d -m 0700 -o {user} -g mail {MAIL_ROOT}/{user}", unit=unit_name)
+    juju.exec(f"doveadm mailbox create -u {user} INBOX 2>/dev/null || true", unit=unit_name)
+    juju.exec(
+        (
+            f"printf 'From: {user}@example.com\\nSubject: GDPR test\\n\\ntest body\\n' | "
+            f"doveadm save -u {user} -m INBOX"
+        ),
+        unit=unit_name,
+    )
+
+
+def _teardown_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str) -> None:
+    """Remove the test user and mail directory created by _setup_gdpr_test_user."""
+    juju.exec(f"userdel -r {user} 2>/dev/null || true", unit=unit_name)
+    juju.exec(f"rm -rf {MAIL_ROOT}/{user}", unit=unit_name)
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def gdpr_test_user(juju: jubilant.Juju, dovecot_charm: str):
+    """Create a GDPR test user with one message; tear down after the test."""
+    unit_name = f"{dovecot_charm}/0"
+    _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
+    yield unit_name, GDPR_TEST_USER
+    _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
+    juju.exec(f"rm -f {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}.tar.gz", unit=unit_name)
+    juju.exec(f"rm -rf {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}", unit=unit_name)
+    juju.exec(f"rm -f {GDPR_TAKEOUT_DIR}/{GDPR_TEST_USER}-takeout.tar.gz", unit=unit_name)
+
+
+@pytest.fixture()
+def create_mail_user_cleanup(juju: jubilant.Juju, dovecot_charm: str):
+    """Tear down users created by create-mail-user tests."""
+    unit_name = f"{dovecot_charm}/0"
+    yield unit_name
+    for user in (CREATE_MAIL_USER_TEST_USER, CREATE_MAIL_USER_TEST_MAILBOX):
+        juju.exec(f"userdel -r {user} 2>/dev/null || true", unit=unit_name)
