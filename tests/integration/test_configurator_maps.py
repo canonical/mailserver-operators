@@ -71,9 +71,7 @@ def _select_charm_file(pytestconfig: pytest.Config, marker: str) -> str:
     if use_existing:
         return ""
     provided = ", ".join(charm_files) if charm_files else "<none>"
-    raise AssertionError(
-        f"Missing --charm-file matching '{marker}'. Provided: {provided}."
-    )
+    raise AssertionError(f"Missing --charm-file matching '{marker}'. Provided: {provided}.")
 
 
 # ---------------------------------------------------------------------------
@@ -164,9 +162,7 @@ def maps_stack_fixture(
             charm_path,
             app=CONFIGURATOR_APP,
             config={
-                "sender_login_maps": yaml.dump(
-                    {AUTHORIZED_SENDER: AUTH_USER}
-                ),
+                "sender_login_maps": yaml.dump({AUTHORIZED_SENDER: AUTH_USER}),
             },
         )
     _integrate_once(

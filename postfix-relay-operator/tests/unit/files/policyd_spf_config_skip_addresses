@@ -1,6 +1,3 @@
-# Copyright 2026 Canonical Ltd.
-# See LICENSE file for licensing details.
-
 debugLevel = 1
 TestOnly = 1
 
