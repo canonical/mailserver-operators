@@ -69,7 +69,7 @@ class TestSenderLoginMapEnforcement:
             smtp.starttls(context=ctx)
             smtp.ehlo()
             smtp.login(AUTH_USER, AUTH_PASSWORD)
-            with pytest.raises(smtplib.SMTPSenderRefused) as exc_info:
+            with pytest.raises(smtplib.SMTPRecipientsRefused) as exc_info:
                 smtp.sendmail(
                     from_addr=SPOOFED_SENDER,
                     to_addrs=[RECIPIENT],
@@ -81,12 +81,18 @@ class TestSenderLoginMapEnforcement:
                         "This message should be rejected.\r\n"
                     ),
                 )
+            # Postfix defers sender restriction checks to RCPT TO (smtpd_delay_reject=yes),
+            # so the 553 "Sender address rejected" comes back as SMTPRecipientsRefused.
+            recipients_errors = exc_info.value.recipients
+            assert RECIPIENT in recipients_errors, (
+                f"Expected rejection for {RECIPIENT}, got: {recipients_errors}"
+            )
+            smtp_code, smtp_error = recipients_errors[RECIPIENT]
             logger.info(
                 "Failure case: message from %s rejected with code %s",
                 SPOOFED_SENDER,
-                exc_info.value.smtp_code,
+                smtp_code,
             )
-            assert exc_info.value.smtp_code == 553, (
-                f"Expected 553 Sender address rejected, got {exc_info.value.smtp_code}: "
-                f"{exc_info.value.smtp_error}"
+            assert smtp_code == 553, (
+                f"Expected 553 Sender address rejected, got {smtp_code}: {smtp_error}"
             )

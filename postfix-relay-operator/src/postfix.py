@@ -30,10 +30,6 @@ def _smtpd_relay_restrictions(charm_state: State) -> list[str]:
         smtpd_relay_restrictions.append("check_client_access cidr:/etc/postfix/relay_access")
 
     if charm_state.enable_smtp_auth:
-        if charm_state.sender_login_maps:
-            smtpd_relay_restrictions.append("reject_known_sender_login_mismatch")
-        if charm_state.restrict_senders:
-            smtpd_relay_restrictions.append("reject_sender_login_mismatch")
         smtpd_relay_restrictions.append("permit_sasl_authenticated")
 
     smtpd_relay_restrictions.append("defer_unauth_destination")
@@ -53,6 +49,10 @@ def smtpd_sender_restrictions(charm_state: State) -> list[str]:
     if charm_state.enable_reject_unknown_sender_domain:
         restrictions.append("reject_unknown_sender_domain")
     restrictions.append("check_sender_access hash:/etc/postfix/access")
+    if charm_state.enable_smtp_auth and (
+        charm_state.sender_login_maps or charm_state.restrict_senders
+    ):
+        restrictions.append("reject_sender_login_mismatch")
     if charm_state.restrict_sender_access:
         restrictions.append("reject")
 
@@ -109,6 +109,7 @@ def construct_postfix_config_params(  # pylint: disable=too-many-arguments
         "hostname": hostname,
         "connection_limit": charm_state.connection_limit,
         "enable_rate_limits": charm_state.enable_rate_limits,
+        "enable_sender_login_map": bool(charm_state.sender_login_maps),
         "enable_smtp_auth": charm_state.enable_smtp_auth,
         "enable_spf": charm_state.enable_spf,
         "header_checks": bool(charm_state.header_checks),
