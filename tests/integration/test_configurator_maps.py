@@ -36,9 +36,9 @@ RECIPIENT = f"recipient@{TEST_DOMAIN}"
 class TestSenderLoginMapEnforcement:
     """Verify that sender_login_maps written by the configurator are enforced by postfix."""
 
-    def test_sender_login_map_enforcement(self, maps_stack: typing.Dict[str, str]) -> None:
+    def test_sender_login_map_enforcement(self, postfix_stack: typing.Dict[str, str]) -> None:
         """Authenticated user can send from authorized address but not from a spoofed one."""
-        relay_ip = maps_stack["postfix_relay_ip"]
+        relay_ip = postfix_stack["postfix_relay_ip"]
 
         # --- Success case: send from authorized address ---
         ctx = ssl.create_default_context()

@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # App / domain constants
 # ---------------------------------------------------------------------------
-POSTFIX_RELAY_APP = "postfix-relay-maps"
-CONFIGURATOR_APP = "postfix-relay-configurator-maps"
+POSTFIX_RELAY_APP = "postfix-relay"
+CONFIGURATOR_APP = "postfix-relay-configurator"
 SELF_SIGNED_APP = "self-signed-certificates"
 
 TEST_DOMAIN = "mailstack.internal"
@@ -94,8 +94,8 @@ def _select_charm_file(pytestconfig: pytest.Config, marker: str) -> str:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-@pytest.fixture(scope="module", name="maps_juju")
-def maps_juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, None, None]:
+@pytest.fixture(scope="module", name="juju")
+def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, None, None]:
     """Module-scoped Juju client in a temporary model for configurator map tests."""
 
     def _show_debug_log(juju: jubilant.Juju) -> None:
@@ -127,18 +127,15 @@ def maps_juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju
         _show_debug_log(juju)
 
 
-@pytest.fixture(scope="module", name="maps_stack")
-def maps_stack_fixture(
-    maps_juju: jubilant.Juju,
+@pytest.fixture(scope="module", name="postfix_stack")
+def postfix_stack_fixture(
+    juju: jubilant.Juju,
     pytestconfig: pytest.Config,
 ) -> typing.Dict[str, str]:
     """Deploy postfix-relay + postfix-relay-configurator configured for sender_login enforcement.
 
     Returns a dict with ``postfix_relay_ip``.
     """
-    juju = maps_juju
-
-    # --- self-signed-certificates (TLS for postfix-relay) ---
     if not juju.status().apps.get(SELF_SIGNED_APP):
         juju.deploy(SELF_SIGNED_APP, channel="latest/stable")
     juju.wait(
