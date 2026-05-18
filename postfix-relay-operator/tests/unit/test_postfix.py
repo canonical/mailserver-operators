@@ -135,7 +135,13 @@ def test_smtpd_relay_restrictions(
 
 
 @pytest.mark.parametrize(
-    ("enable_reject_unknown_sender", "restrict_sender_access", "sender_login_maps", "restrict_senders", "expected"),
+    (
+        "enable_reject_unknown_sender",
+        "restrict_sender_access",
+        "sender_login_maps",
+        "restrict_senders",
+        "expected",
+    ),
     [
         pytest.param(
             False,

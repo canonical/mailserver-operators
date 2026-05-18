@@ -48,11 +48,9 @@ def smtpd_sender_restrictions(charm_state: State) -> list[str]:
     restrictions = []
     if charm_state.enable_reject_unknown_sender_domain:
         restrictions.append("reject_unknown_sender_domain")
-    restrictions.append("check_sender_access hash:/etc/postfix/access")
-    if charm_state.enable_smtp_auth and (
-        charm_state.sender_login_maps or charm_state.restrict_senders
-    ):
+    if charm_state.enable_smtp_auth and charm_state.sender_login_maps:
         restrictions.append("reject_sender_login_mismatch")
+    restrictions.append("check_sender_access hash:/etc/postfix/access")
     if charm_state.restrict_sender_access:
         restrictions.append("reject")
 
