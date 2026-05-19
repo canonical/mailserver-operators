@@ -219,6 +219,8 @@ class DovecotCharm(CharmBase):
 
     def _open_ports(self):
         """Open mail ports (TLS-only: plaintext 143/110 are not exposed)."""
+        # Port 25 accepts SMTP from postfix-relay, which forwards to Dovecot via
+        # the LMTP Unix socket for final delivery into the user mailbox.
         self.unit.open_port("tcp", 25)
         self.unit.open_port("tcp", 993)
         self.unit.open_port("tcp", 995)

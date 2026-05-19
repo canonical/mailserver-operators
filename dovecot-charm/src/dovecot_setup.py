@@ -148,7 +148,12 @@ class DovecotSetup:
         host.write_file(PROCMAILRC_TARGET, contents, perms=0o644)
 
         postconf_settings = [
+            # mailbox_command applies only to the Postfix *local* delivery agent and is
+            # used here for local system users not covered by virtual_mailbox_domains.
             'mailbox_command=/usr/bin/procmail -a "$EXTENSION"',
+            # virtual_mailbox_domains + virtual_transport route mail for the charm's
+            # primary domain directly to Dovecot via the LMTP Unix socket, bypassing
+            # the local delivery agent (and therefore mailbox_command) for that domain.
             f"virtual_mailbox_domains = {mailname}",
             "virtual_transport = lmtp:unix:private/dovecot-lmtp",
             "smtpd_reject_unlisted_recipient = no",
