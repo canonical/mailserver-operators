@@ -127,8 +127,11 @@ class DovecotSetup:
             logger.exception(f"Failed to validate dovecot configuration: {e}")
             return False
 
-    def setup_procmail(self) -> None:
+    def setup_procmail(self, mailname: str) -> None:
         """Render procmail config and configure Postfix to use it.
+
+        Args:
+            mailname: The mail domain this unit accepts mail for.
 
         Raises:
             ConfigurationError: If postfix configuration fails.
@@ -144,13 +147,21 @@ class DovecotSetup:
         contents = template.render(template_context)
         host.write_file(PROCMAILRC_TARGET, contents, perms=0o644)
 
+        postconf_settings = [
+            'mailbox_command=/usr/bin/procmail -a "$EXTENSION"',
+            f"virtual_mailbox_domains = {mailname}",
+            "virtual_transport = lmtp:unix:private/dovecot-lmtp",
+            "smtpd_reject_unlisted_recipient = no",
+            "inet_interfaces = all",
+        ]
         try:
-            subprocess.run(
-                ["/usr/sbin/postconf", "-e", 'mailbox_command=/usr/bin/procmail -a "$EXTENSION"'],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
+            for setting in postconf_settings:
+                subprocess.run(
+                    ["/usr/sbin/postconf", "-e", setting],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
             systemd.service_reload("postfix", restart_on_failure=True)
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to configure postfix: {e}")

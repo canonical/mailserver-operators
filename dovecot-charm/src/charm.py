@@ -192,7 +192,7 @@ class DovecotCharm(CharmBase):
         try:
             self._dovecot_setup.setup_tls(dovecot_config)
             self._dovecot_setup.setup_dovecot(dovecot_config)
-            self._dovecot_setup.setup_procmail()
+            self._dovecot_setup.setup_procmail(dovecot_config.mailname)
         except ConfigurationError as e:
             self.unit.status = BlockedStatus(str(e))
             return
@@ -219,6 +219,7 @@ class DovecotCharm(CharmBase):
 
     def _open_ports(self):
         """Open mail ports (TLS-only: plaintext 143/110 are not exposed)."""
+        self.unit.open_port("tcp", 25)
         self.unit.open_port("tcp", 993)
         self.unit.open_port("tcp", 995)
         self.unit.open_port("tcp", 4190)
