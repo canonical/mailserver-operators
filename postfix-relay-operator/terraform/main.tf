@@ -6,7 +6,7 @@ resource "juju_application" "postfix_relay" {
   model_uuid = var.model_uuid
 
   charm {
-    name     = "postfix-relay"
+    name     = var.charm_name
     channel  = var.channel
     revision = var.revision
     base     = var.base

@@ -6,7 +6,7 @@ resource "juju_application" "dovecot" {
   model_uuid = var.model_uuid
 
   charm {
-    name     = "dovecot"
+    name     = var.charm_name
     channel  = var.channel
     revision = var.revision
     base     = var.base
@@ -14,6 +14,7 @@ resource "juju_application" "dovecot" {
 
   config             = var.config
   constraints        = var.constraints
-  units              = 0
+  trust              = var.trust
+  units              = var.units
   storage_directives = var.storage
 }

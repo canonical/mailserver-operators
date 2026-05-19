@@ -7,7 +7,16 @@ output "app_name" {
 }
 
 output "requires" {
+  description = "Endpoints that postfix-relay requires (for wiring integrations)."
   value = {
-    milter = "milter"
+    certificates = "certificates"
+    milter       = "milter"
+  }
+}
+
+output "provides" {
+  description = "Endpoints that postfix-relay provides (for wiring integrations)."
+  value = {
+    juju_info = "juju-info"
   }
 }

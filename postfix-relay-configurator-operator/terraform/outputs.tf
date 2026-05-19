@@ -5,3 +5,10 @@ output "app_name" {
   description = "Name of the deployed application."
   value       = juju_application.postfix_relay_configurator.name
 }
+
+output "requires" {
+  description = "Endpoints that postfix-relay-configurator requires (for wiring integrations)."
+  value = {
+    juju_info = "juju-info"
+  }
+}

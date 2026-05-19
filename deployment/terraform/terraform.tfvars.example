@@ -1,0 +1,50 @@
+# Example terraform.tfvars for deploying the mail stack locally
+# Copy this file to terraform.tfvars and adjust the values.
+#
+# Usage:
+#   cd deployment/terraform
+#   cp terraform.tfvars.example terraform.tfvars
+#   # Edit terraform.tfvars
+#   terraform init
+#   terraform apply
+#
+# After dovecot is active, retrieve its IP and re-apply with transport_maps:
+#   DOVECOT_IP=$(juju status --model mailserver --format json | \
+#     jq -r '.applications.dovecot.units | to_entries[0].value["public-address"]')
+#   # Then add to terraform.tfvars:
+#   #   transport_maps = { "mail.example.com" = "lmtp:inet:${DOVECOT_IP}:24" }
+#   terraform apply
+
+# ---------------------------------------------------------------------------
+# Model
+# ---------------------------------------------------------------------------
+model_name = "mailserver"
+
+# ---------------------------------------------------------------------------
+# Domain
+# ---------------------------------------------------------------------------
+domain = "mail.example.com"
+
+# ---------------------------------------------------------------------------
+# Transport maps (fill in after first apply once dovecot IP is known)
+# ---------------------------------------------------------------------------
+# transport_maps = {
+#   "mail.example.com" = "lmtp:inet:10.10.0.5:24"
+# }
+
+# ---------------------------------------------------------------------------
+# LOCAL CHARM FILES  (comment out to pull from Charmhub instead)
+# Paths are relative to the deployment/terraform directory.
+# ---------------------------------------------------------------------------
+dovecot_charm                    = "../../dovecot-charm/dovecot_amd64.charm"
+postfix_relay_charm              = "../../postfix-relay-operator/postfix-relay_amd64.charm"
+opendkim_charm                   = "../../opendkim-operator/opendkim_amd64.charm"
+postfix_relay_configurator_charm = "../../postfix-relay-configurator-operator/postfix-relay-configurator_amd64.charm"
+
+# ---------------------------------------------------------------------------
+# CHARMHUB (uncomment and remove local paths above to use published charms)
+# ---------------------------------------------------------------------------
+# dovecot_channel                    = "2.3/edge"
+# postfix_relay_channel              = "latest/edge"
+# opendkim_channel                   = "2/edge"
+# postfix_relay_configurator_channel = "latest/edge"

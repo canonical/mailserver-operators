@@ -19,6 +19,12 @@ variable "channel" {
   default     = "2.3/edge"
 }
 
+variable "charm_name" {
+  description = "Charm name or path to a local .charm file to deploy."
+  type        = string
+  default     = "dovecot"
+}
+
 variable "config" {
   description = "Application config. Details about available options can be found at https://charmhub.io/dovecot/configurations."
   type        = map(string)
@@ -46,4 +52,16 @@ variable "storage" {
   description = "Map of storage used by the application."
   type        = map(string)
   default     = {}
+}
+
+variable "trust" {
+  description = "Whether to grant the charm administrative access to the Juju model (required for dovecot to manage system users)."
+  type        = bool
+  default     = true
+}
+
+variable "units" {
+  description = "Number of units to deploy"
+  type        = number
+  default     = 1
 }

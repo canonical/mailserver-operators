@@ -19,6 +19,12 @@ variable "channel" {
   default     = "latest/stable"
 }
 
+variable "charm_name" {
+  description = "Charm name or path to a local .charm file to deploy."
+  type        = string
+  default     = "postfix-relay-configurator"
+}
+
 variable "config" {
   description = "Application config. Details about available options can be found at https://charmhub.io/postfix-relay-configurator/configurations."
   type        = map(string)
