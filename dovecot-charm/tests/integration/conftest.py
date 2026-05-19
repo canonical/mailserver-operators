@@ -11,6 +11,9 @@ import pytest
 logger = logging.getLogger(__name__)
 
 APP_NAME = "dovecot"
+# Charm mailname — must match the value passed in deploy config so tests can
+# construct the correct SMTP recipient addresses (@example.com).
+MAILNAME = "example.com"
 
 
 @pytest.fixture(scope="session", name="juju")

@@ -4,13 +4,39 @@
 import contextlib
 import imaplib
 import logging
+import smtplib
 import ssl
 import time
+from email.message import EmailMessage
 from secrets import token_hex
 from typing import cast
 
 import jubilant
 import pytest
+
+from conftest import MAILNAME
+
+
+def _send_mail_via_smtp(
+    host: str,
+    sender: str,
+    recipient: str,
+    subject: str,
+    body: str,
+) -> None:
+    """Send a plain-text e-mail through the unit's Postfix SMTP listener on port 25.
+
+    Postfix routes delivery for MAILNAME addresses via the LMTP Unix socket
+    (virtual_transport = lmtp:unix:private/dovecot-lmtp), so mail lands directly
+    in the Dovecot mail store — the same store that dsync replicates to the secondary.
+    """
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = sender
+    msg["To"] = recipient
+    msg.set_content(body)
+    with smtplib.SMTP(host, 25, timeout=30) as smtp:
+        smtp.send_message(msg)
 
 
 def _check_mail_via_imap(unit_ip: str, user: str, password: str, subject: str) -> bool:
@@ -177,10 +203,18 @@ def test_force_sync_action(juju: jubilant.Juju, dovecot_charm_dual_unit: str):
         juju.exec(f"rm -rf /srv/mail/{user}", unit=unit)
     _setup_mail_user(juju, primary, secondary, user, password)
 
-    # Send email on primary
+    # Send email on primary via SMTP so Postfix routes it through the LMTP socket
+    # into Dovecot's mail store (the same store dsync replicates).
     subject = f"Force Sync Test {token_hex(4)}"
     logging.info(f"Sending test email on primary with subject: {subject}")
-    juju.exec(f"echo 'test body' | mail -s '{subject}' {user}@localhost", unit=primary)
+    primary_ip = juju.status().apps[dovecot_charm_dual_unit].units[primary].public_address
+    _send_mail_via_smtp(
+        host=primary_ip,
+        sender=f"{user}@{MAILNAME}",
+        recipient=f"{user}@{MAILNAME}",
+        subject=subject,
+        body="test body",
+    )
 
     # Run force-sync on primary
     logging.info("Running force-sync action on primary...")
@@ -225,10 +259,18 @@ def test_auto_sync(juju: jubilant.Juju, dovecot_charm_dual_unit: str):
         juju.exec(f"rm -rf /srv/mail/{user}", unit=unit)
     _setup_mail_user(juju, primary, secondary, user, password)
 
-    # Send email on primary
+    # Send email on primary via SMTP so Postfix routes it through the LMTP socket
+    # into Dovecot's mail store (the same store dsync replicates).
     subject = f"Auto Sync Test {token_hex(4)}"
     logging.info(f"Sending test email on primary with subject: {subject}")
-    juju.exec(f"echo 'test body' | mail -s '{subject}' {user}@localhost", unit=primary)
+    primary_ip = juju.status().apps[dovecot_charm_dual_unit].units[primary].public_address
+    _send_mail_via_smtp(
+        host=primary_ip,
+        sender=f"{user}@{MAILNAME}",
+        recipient=f"{user}@{MAILNAME}",
+        subject=subject,
+        body="test body",
+    )
 
     previous_sync_mtime = _get_last_sync_mtime(juju, primary)
     previous_timer_count = _get_sync_timer_run_count(juju, primary)
