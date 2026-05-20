@@ -34,32 +34,31 @@ jobs:
     uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
-      extra-arguments: '-x --log-format="%(asctime)s %(levelname)s %(message)s"'
-      provider: lxd
-      trivy-fs-enabled: false
-      juju-channel: 3/stable
-      self-hosted-runner: true
-      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
       charmcraft-channel: latest/edge
-      working-directory: ${{ matrix.charm.working-directory }}
+      extra-arguments: '-x --log-format="%(asctime)s %(levelname)s %(message)s"'
+      juju-channel: 3/stable
       modules: ${{ matrix.charm.modules }}
       pre-run-script: ${{ matrix.charm.pre-run-script }}
+      provider: lxd
+      self-hosted-runner: true
+      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
+      trivy-fs-enabled: false
       with-uv: true
+      working-directory: ${{ matrix.charm.working-directory }}
   integration-tests-global:
     uses:
       canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
-      test-tox-env: stack-integration
-      provider: lxd
-      trivy-fs-enabled: false
-      self-hosted-runner: true
-      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
       juju-channel: 3/stable
       modules: |
         [
           "test_configurator_maps.py"
         ]
+      provider: lxd
+      self-hosted-runner: true
+      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
+      trivy-fs-enabled: false
       with-uv: true
   allure-report:
     if: ${{ !cancelled() && github.event_name == 'schedule' }}

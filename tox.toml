@@ -110,14 +110,14 @@ commands = [ [ "bandit", "-c", "{toxinidir}/pyproject.toml", "-r", "{[vars]src_p
 dependency_groups = [ "static" ]
 
 [env.integration]
-description = "Run integration tests"
+description = "Run cross-charm integration tests"
 commands = [
   [
     "pytest",
     "-v",
     "--tb",
     "native",
-    "--ignore={[vars]tst_path}unit",
+    "tests/integration/",
     "--log-cli-level=INFO",
     "-s",
     { replace = "posargs", extend = "true" },
@@ -145,19 +145,3 @@ dependency_groups = [ "lint" ]
 src_path = "{toxinidir}/src/"
 tst_path = "{toxinidir}/tests/"
 all_path = [ "{toxinidir}/src/", "{toxinidir}/tests/" ]
-
-[env.stack-integration]
-description = "Run cross-charm integration tests (postfix-relay-configurator)"
-commands = [
-  [
-    "pytest",
-    "-v",
-    "--tb",
-    "native",
-    "tests/integration/test_configurator_maps.py",
-    "--log-cli-level=INFO",
-    "-s",
-    { replace = "posargs", extend = "true" },
-  ],
-]
-dependency_groups = [ "integration" ]
