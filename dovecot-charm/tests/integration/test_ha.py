@@ -13,7 +13,6 @@ from typing import cast
 
 import jubilant
 import pytest
-
 from conftest import MAILNAME
 
 

@@ -14,7 +14,6 @@ from secrets import token_hex
 
 import jubilant
 import pytest
-
 from conftest import MAILNAME
 
 
