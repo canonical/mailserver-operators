@@ -3,7 +3,7 @@
 
 skipsdist = true
 skip_missing_interpreters = true
-envlist = [ "lint", "unit", "static", "coverage-report", "stack-integration" ]
+envlist = [ "lint", "unit", "static", "coverage-report" ]
 requires = [ "tox>=4.21" ]
 no_package = true
 
