@@ -25,6 +25,7 @@ import base64
 import hashlib
 import logging
 import pathlib
+from secrets import token_hex
 import socket
 import typing
 from collections.abc import Generator
@@ -328,12 +329,15 @@ def deploy_dovecot_fixture(
     juju: jubilant.Juju,
 ) -> str:
     """Deploy dovecot and wire up TLS."""
+    luks_key = token_hex(16)
+
     if not juju.status().apps.get(DOVECOT_APP):
         charm_path = (
             dovecot_charm_file
             if dovecot_charm_file.startswith(("./", "/"))
             else f"./{dovecot_charm_file}"
         )
+        secret_id = juju.cli("add-secret", "dovecot-luks-key", f"key={luks_key}").strip()
         juju.deploy(
             charm_path,
             app=DOVECOT_APP,
@@ -341,11 +345,13 @@ def deploy_dovecot_fixture(
                 "mailname": TEST_DOMAIN,
                 "postmaster-address": f"postmaster@{TEST_DOMAIN}",
                 "primary-unit": f"{DOVECOT_APP}/0",
-                "manage-luks": "false",
+                "luks-auto-provisioning": True,
+                "luks-key": secret_id,
             },
             constraints={"virt-type": "virtual-machine"},
             trust=True,
         )
+    juju.cli("grant-secret", "dovecot-luks-key", DOVECOT_APP)
 
     # Relate to TLS provider if not already related.
     _integrate_once(juju, f"{DOVECOT_APP}:certificates", f"{self_signed_app}:certificates")
