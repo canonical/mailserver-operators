@@ -12,8 +12,8 @@ from secrets import token_hex
 
 import jubilant
 import pytest
-from conftest import MAILNAME
-from helpers import send_mail_via_smtp
+from .conftest import MAILNAME
+from .helpers import send_mail_via_smtp
 
 
 def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):

@@ -8,8 +8,8 @@ from typing import cast
 
 import jubilant
 import pytest
-from conftest import MAILNAME
-from helpers import (
+from .conftest import MAILNAME
+from .helpers import (
     check_mail_via_imap,
     get_last_sync_mtime,
     get_sync_log_content,
