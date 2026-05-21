@@ -50,6 +50,7 @@ jobs:
       canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
+      extra-arguments: '-x --log-format="%(asctime)s %(levelname)s %(message)s"'
       juju-channel: 3/stable
       modules: |
         [
@@ -65,12 +66,14 @@ jobs:
       canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
+      extra-arguments: '-x --log-format="%(asctime)s %(levelname)s %(message)s"'
       test-tox-env: stack-integration
       provider: lxd
       trivy-fs-enabled: false
       self-hosted-runner: true
       self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
       juju-channel: 3/stable
+      charmcraft-channel: latest/edge
       modules: |
         [
           "test_e2e.py"
