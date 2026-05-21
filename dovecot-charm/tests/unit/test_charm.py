@@ -50,7 +50,7 @@ def test_reconcile_sets_active_on_success(ctx, base_state):
 
 
 def test_reconcile_opens_mail_ports(ctx, base_state):
-    """All required IMAP/POP3/Sieve/metrics ports must be opened."""
+    """All required SMTP/IMAP/POP3/Sieve/metrics ports must be opened."""
     state_out = ctx.run(ctx.on.config_changed(), base_state)
     expected = {ops.testing.TCPPort(p) for p in [25, 993, 995, 4190]}
     assert state_out.opened_ports == expected
