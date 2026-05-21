@@ -97,19 +97,6 @@ commands = [
 ]
 dependency_groups = [ "integration" ]
 
-[env.stack-integration.setenv]
-PYTHONPATH = "{toxinidir}/tests/integration"
-PY_COLORS = "1"
-
-[env.lint-fix]
-description = "Apply lint fixes for all charms"
-allowlist_externals = [ "tox" ]
-commands = [
-  [ "tox", "-c", "{toxinidir}/dovecot-charm/tox.toml", "-e", "lint-fix", { replace = "posargs", extend = true } ],
-  [ "tox", "-c", "{toxinidir}/opendkim-operator/tox.toml", "-e", "lint-fix", { replace = "posargs", extend = true } ],
-]
-dependency_groups = [ "lint" ]
-
 [vars]
 src_path = "{toxinidir}/src/"
 tst_path = "{toxinidir}/tests/"
