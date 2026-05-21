@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Charm / app names
 # ---------------------------------------------------------------------------
-DOVECOT_APP = "dovecot-charm"
+DOVECOT_APP = "dovecot"
 POSTFIX_RELAY_APP = "postfix-relay"
 OPENDKIM_APP = "opendkim"
 CONFIGURATOR_APP = "postfix-relay-configurator"
@@ -155,7 +155,7 @@ def _select_charm_file_for_app(pytestconfig: pytest.Config, app_name: str) -> st
     match_order = (
         (CONFIGURATOR_APP, "postfix-relay-configurator"),
         (POSTFIX_RELAY_APP, "postfix-relay"),
-        (DOVECOT_APP, "dovecot-charm"),
+        (DOVECOT_APP, "dovecot"),
         (OPENDKIM_APP, "opendkim"),
     )
 
@@ -184,7 +184,7 @@ def _select_charm_file_for_app(pytestconfig: pytest.Config, app_name: str) -> st
 
 @pytest.fixture(scope="session", name="dovecot_charm_file")
 def dovecot_charm_file_fixture(pytestconfig: pytest.Config) -> str:
-    """Absolute path to the pre-built dovecot-charm .charm file."""
+    """Absolute path to the pre-built dovecot .charm file."""
     return _select_charm_file_for_app(pytestconfig, DOVECOT_APP)
 
 
