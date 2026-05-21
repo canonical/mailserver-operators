@@ -60,9 +60,26 @@ jobs:
       self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
       trivy-fs-enabled: false
       with-uv: true
+  integration-tests-stack:
+    uses:
+      canonical/operator-workflows/.github/workflows/integration_test.yaml@main
+    secrets: inherit
+    with:
+      use-canonical-k8s: true
+      provider: lxd
+      self-hosted-runner: true
+      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
+      juju-channel: 3/stable
+      modules: |
+        [
+          "test_whole_email_system.py"
+        ]
+      with-uv: true
+      pre-run-script: ./tests/integration/setup-integration-tests.sh
   allure-report:
     if: ${{ !cancelled() && github.event_name == 'schedule' }}
     needs:
     - integration-tests-juju-3
     - integration-tests-global
+    - integration-tests-stack
     uses: canonical/operator-workflows/.github/workflows/allure_report.yaml@main

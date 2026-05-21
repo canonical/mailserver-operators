@@ -17,6 +17,21 @@ jobs:
               channel: "2.3/edge",
               tag-prefix: "dovecot",
             },
+            {
+              working-directory: "./opendkim-operator",
+              channel: "2/edge",
+              tag-prefix: "opendkim-operator",
+            },
+            {
+              working-directory: "./postfix-relay-operator",
+              channel: "3/edge",
+              tag-prefix: "postfix-relay",
+            },
+            {
+              working-directory: "./postfix-relay-configurator-operator",
+              channel: "3/edge",
+              tag-prefix: "postfix-relay-configurator",
+            },
           ]
     uses: canonical/operator-workflows/.github/workflows/publish_charm.yaml@main
     secrets: inherit
