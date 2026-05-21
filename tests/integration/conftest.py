@@ -29,6 +29,7 @@ from secrets import token_hex
 import socket
 import typing
 from collections.abc import Generator
+import json
 
 import jubilant
 import pytest
@@ -36,7 +37,7 @@ import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from helpers import select_charm_file, sha512_dovecot_password
+from helpers import select_charm_file
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +263,84 @@ def deploy_self_signed_certs_fixture(juju: jubilant.Juju) -> str:
     return SELF_SIGNED_APP
 
 
+@pytest.fixture(scope="module", name="postfix_stack")
+def postfix_stack_fixture(
+    juju: jubilant.Juju,
+    pytestconfig: pytest.Config,
+    self_signed_app: str,
+) -> typing.Dict[str, str]:
+    """Deploy postfix-relay + postfix-relay-configurator configured for sender_login enforcement.
+
+    Returns a dict with ``postfix_relay_ip``.
+    """
+    # --- postfix-relay ---
+    auth_password = "test-password"
+    if not juju.status().apps.get(POSTFIX_RELAY_APP):
+        charm_path = select_charm_file(pytestconfig, "postfix-relay_")
+        if not charm_path.startswith(("./", "/")):
+            charm_path = f"./{charm_path}"
+        juju.deploy(
+            charm_path,
+            app=POSTFIX_RELAY_APP,
+            config={
+                "relay_domains": f"- {TEST_DOMAIN}",
+                "enable_smtp_auth": "true",
+                "smtp_auth_users": yaml.dump(
+                    [f"testuser:{_sha512_dovecot_password(auth_password)}"]
+                ),
+                "enable_reject_unknown_sender_domain": "false",
+            },
+        )
+    _integrate_once(
+        juju,
+        f"{POSTFIX_RELAY_APP}:certificates",
+        f"{self_signed_app}:certificates",
+    )
+
+    # --- postfix-relay-configurator ---
+    authorized_sender = f"authorized@{TEST_DOMAIN}"
+    if not juju.status().apps.get(CONFIGURATOR_APP):
+        charm_path = select_charm_file(pytestconfig, "postfix-relay-configurator_")
+        if not charm_path.startswith(("./", "/")):
+            charm_path = f"./{charm_path}"
+        juju.deploy(
+            charm_path,
+            app=CONFIGURATOR_APP,
+            config={
+                "sender_login_maps": yaml.dump({authorized_sender: "testuser"}),
+            },
+        )
+    _integrate_once(
+        juju,
+        f"{POSTFIX_RELAY_APP}:juju-info",
+        f"{CONFIGURATOR_APP}:juju-info",
+    )
+
+    # Wait for both to be active.
+    def _both_active(status: jubilant.Status) -> bool:
+        if not status.apps.get(POSTFIX_RELAY_APP):
+            return False
+        if not status.apps[POSTFIX_RELAY_APP].is_active:
+            return False
+        for unit in status.apps[POSTFIX_RELAY_APP].units.values():
+            subs = unit.subordinates or {}
+            conf_subs = {k: v for k, v in subs.items() if CONFIGURATOR_APP in k}
+            if not conf_subs:
+                return False
+            for sub in conf_subs.values():
+                if sub.workload_status.current != "active":
+                    return False
+        return True
+
+    juju.wait(_both_active, error=jubilant.any_error, timeout=15 * 60)
+    logger.info("postfix-relay + configurator active for maps tests")
+
+    status = juju.status()
+    relay_ip = next(iter(status.apps[POSTFIX_RELAY_APP].units.values())).public_address
+    logger.info("postfix-relay IP: %s", relay_ip)
+    return {"postfix_relay_ip": relay_ip}
+
+
 # ---------------------------------------------------------------------------
 # Deploy: opendkim
 # ---------------------------------------------------------------------------
@@ -374,6 +453,7 @@ def deploy_postfix_relay_fixture(
     self_signed_app: str,
     opendkim_app: str,
     juju: jubilant.Juju,
+    pytestconfig: pytest.Config,
 ) -> str:
     """Deploy postfix-relay and integrate with TLS provider and opendkim milter."""
     if not juju.status().apps.get(POSTFIX_RELAY_APP):
@@ -460,14 +540,15 @@ def deploy_configurator_fixture(
     else:
         juju.config(CONFIGURATOR_APP, configurator_config)
 
-    _integrate_once(juju, f"{POSTFIX_RELAY_APP}:juju-info", f"{CONFIGURATOR_APP}:juju-info")
+    _integrate_once(juju, f"{postfix_relay_app}:juju-info", f"{CONFIGURATOR_APP}:juju-info")
 
-    def _configurator_active(status: jubilant.Status) -> bool:
-        """Return True once the configurator subordinate is active on all relay units."""
-        if not status.apps.get(CONFIGURATOR_APP):
+    # Wait for both to be active.
+    def _both_active(status: jubilant.Status) -> bool:
+        if not status.apps.get(postfix_relay_app):
             return False
-        relay_units = status.apps[POSTFIX_RELAY_APP].units
-        for unit in relay_units.values():
+        if not status.apps[POSTFIX_RELAY_APP].is_active:
+            return False
+        for unit in status.apps[POSTFIX_RELAY_APP].units.values():
             subs = unit.subordinates or {}
             conf_subs = {k: v for k, v in subs.items() if CONFIGURATOR_APP in k}
             if not conf_subs:
@@ -475,13 +556,9 @@ def deploy_configurator_fixture(
             for sub in conf_subs.values():
                 if sub.workload_status.current != "active":
                     return False
-        return status.apps[POSTFIX_RELAY_APP].is_active
+        return True
 
-    juju.wait(
-        _configurator_active,
-        error=jubilant.any_error,
-        timeout=10 * 60,
-    )
+    juju.wait(_both_active, error=jubilant.any_error, timeout=15 * 60)
     logger.info("postfix-relay-configurator subordinate is active")
     return CONFIGURATOR_APP
 
@@ -500,7 +577,6 @@ def configure_opendkim_fixture(
 
     Returns the opendkim app name once the app is active.
     """
-    import json  # noqa: PLC0415 — local import to avoid top-level cost when not needed
 
     selector = "default"
     keyname = f"{TEST_DOMAIN.replace('.', '-')}-{selector}"
@@ -594,97 +670,6 @@ def mail_stack_fixture(
     }
 
 
-# ---------------------------------------------------------------------------
-# postfix_stack fixture — for configurator-maps integration tests
-# ---------------------------------------------------------------------------
-@pytest.fixture(scope="module", name="postfix_stack")
-def postfix_stack_fixture(
-    juju: jubilant.Juju,
-    pytestconfig: pytest.Config,
-) -> typing.Dict[str, str]:
-    """Deploy postfix-relay + postfix-relay-configurator for sender_login enforcement tests.
-
-    Returns a dict with ``postfix_relay_ip``.
-    """
-    if not juju.status().apps.get(SELF_SIGNED_APP):
-        juju.deploy(SELF_SIGNED_APP, channel="latest/stable")
-    juju.wait(
-        lambda status: status.apps[SELF_SIGNED_APP].is_active,
-        error=jubilant.any_error,
-        timeout=10 * 60,
-    )
-
-    # --- postfix-relay ---
-    auth_password = "test-password"
-    if not juju.status().apps.get(POSTFIX_RELAY_APP):
-        charm_path = select_charm_file(pytestconfig, "postfix-relay_")
-        if not charm_path.startswith(("./", "/")):
-            charm_path = f"./{charm_path}"
-        juju.deploy(
-            charm_path,
-            app=POSTFIX_RELAY_APP,
-            config={
-                "relay_domains": f"- {TEST_DOMAIN}",
-                "enable_smtp_auth": "true",
-                "smtp_auth_users": yaml.dump(
-                    [f"testuser:{sha512_dovecot_password(auth_password)}"]
-                ),
-                "enable_reject_unknown_sender_domain": "false",
-            },
-        )
-    _integrate_once(
-        juju,
-        f"{POSTFIX_RELAY_APP}:certificates",
-        f"{SELF_SIGNED_APP}:certificates",
-    )
-
-    # --- postfix-relay-configurator ---
-    authorized_sender = f"authorized@{TEST_DOMAIN}"
-    if not juju.status().apps.get(CONFIGURATOR_APP):
-        charm_path = select_charm_file(pytestconfig, "postfix-relay-configurator_")
-        if not charm_path.startswith(("./", "/")):
-            charm_path = f"./{charm_path}"
-        juju.deploy(
-            charm_path,
-            app=CONFIGURATOR_APP,
-            config={
-                "sender_login_maps": yaml.dump({authorized_sender: "testuser"}),
-            },
-        )
-    _integrate_once(
-        juju,
-        f"{POSTFIX_RELAY_APP}:juju-info",
-        f"{CONFIGURATOR_APP}:juju-info",
-    )
-
-    # Wait for both to be active.
-    def _both_active(status: jubilant.Status) -> bool:
-        if not status.apps.get(POSTFIX_RELAY_APP):
-            return False
-        if not status.apps[POSTFIX_RELAY_APP].is_active:
-            return False
-        for unit in status.apps[POSTFIX_RELAY_APP].units.values():
-            subs = unit.subordinates or {}
-            conf_subs = {k: v for k, v in subs.items() if CONFIGURATOR_APP in k}
-            if not conf_subs:
-                return False
-            for sub in conf_subs.values():
-                if sub.workload_status.current != "active":
-                    return False
-        return True
-
-    juju.wait(_both_active, error=jubilant.any_error, timeout=15 * 60)
-    logger.info("postfix-relay + configurator active for maps tests")
-
-    status = juju.status()
-    relay_ip = next(iter(status.apps[POSTFIX_RELAY_APP].units.values())).public_address
-    logger.info("postfix-relay IP: %s", relay_ip)
-    return {"postfix_relay_ip": relay_ip}
-
-
-# ---------------------------------------------------------------------------
-# Helper: idempotent juju integrate
-# ---------------------------------------------------------------------------
 def _integrate_once(juju: jubilant.Juju, endpoint_a: str, endpoint_b: str) -> None:
     """Call ``juju integrate`` tolerating 'already related' errors."""
     try:

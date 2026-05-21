@@ -3,6 +3,7 @@
 
 import dataclasses
 import json
+import secrets
 from pathlib import Path
 from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
@@ -194,7 +195,7 @@ def test_create_mail_user_action_creates_primary_and_mailbox_user(ctx, base_stat
                 "create-mail-user",
                 params={
                     "username": "e2euser",
-                    "password": "secret",
+                    "password": secrets.token_hex(8),
                     "mailbox-user": "e2euser@example.com",
                 },
             ),
@@ -218,7 +219,7 @@ def test_create_mail_user_action_updates_existing_user(ctx, base_state):
                 "create-mail-user",
                 params={
                     "username": "e2euser",
-                    "password": "secret",
+                    "password": secrets.token_hex(8),
                 },
             ),
             base_state,
@@ -237,7 +238,7 @@ def test_create_mail_user_action_requires_username(ctx, base_state):
                 "create-mail-user",
                 params={
                     "username": "",
-                    "password": "secret",
+                    "password": secrets.token_hex(8),
                 },
             ),
             base_state,
@@ -253,7 +254,7 @@ def test_create_mail_user_action_requires_password(ctx, base_state):
                 "create-mail-user",
                 params={
                     "username": "e2euser",
-                    "password": "",
+                    "password": "",  # nosec B105
                 },
             ),
             base_state,
