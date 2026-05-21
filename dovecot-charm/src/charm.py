@@ -227,10 +227,8 @@ class DovecotCharm(CharmBase):
         intentionally for mail relay traffic; port 25 is standard SMTP (not
         implicit TLS), and STARTTLS is expected when supported by the peer.
         """
-        # Port 25 intentionally accepts standard SMTP from postfix-relay. This
-        # is not an implicit-TLS port; peers should negotiate STARTTLS when
-        # available before Postfix forwards mail to Dovecot via the LMTP Unix
-        # socket for final delivery into the user mailbox.
+        # Port 25 accepts SMTP from postfix-relay, which forwards to Dovecot via
+        # the LMTP Unix socket for final delivery into the user mailbox.
         self.unit.open_port("tcp", 25)
         self.unit.open_port("tcp", 993)
         self.unit.open_port("tcp", 995)
