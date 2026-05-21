@@ -3,10 +3,7 @@
 
 """Shared fixtures and configuration for integration tests."""
 
-import base64
-import hashlib
 import logging
-import pathlib
 import typing
 from collections.abc import Generator
 
@@ -14,11 +11,11 @@ import jubilant
 import pytest
 import yaml
 
+from helpers import integrate_once, select_charm_file, sha512_dovecot_password
+
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# App / domain constants
-# ---------------------------------------------------------------------------
+
 POSTFIX_RELAY_APP = "postfix-relay"
 CONFIGURATOR_APP = "postfix-relay-configurator"
 SELF_SIGNED_APP = "self-signed-certificates"
@@ -27,9 +24,6 @@ TEST_DOMAIN = "mailstack.internal"
 SMTP_PORT = 587
 
 
-# ---------------------------------------------------------------------------
-# Pytest configuration
-# ---------------------------------------------------------------------------
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add integration test command-line options."""
     parser.addoption(
@@ -56,44 +50,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Keep temporary models after tests complete",
     )
 
-
-# ---------------------------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------------------------
-def _sha512_dovecot_password(password: str) -> str:
-    """Generate a SSHA512 password hash compatible with dovecot."""
-    salt = b"mailtest"
-    digest = hashlib.sha512(password.encode() + salt).digest()
-    return "{SSHA512}" + base64.b64encode(digest + salt).decode()
-
-
-def _integrate_once(juju: jubilant.Juju, endpoint_a: str, endpoint_b: str) -> None:
-    """Call ``juju integrate`` tolerating 'already related' errors."""
-    try:
-        juju.integrate(endpoint_a, endpoint_b)
-    except Exception as exc:  # noqa: BLE001
-        msg = str(exc)
-        if "already exists" not in msg and "already related" not in msg:
-            raise
-        logger.debug("Relation %s ↔ %s already exists, skipping", endpoint_a, endpoint_b)
-
-
-def _select_charm_file(pytestconfig: pytest.Config, marker: str) -> str:
-    """Select charm file matching marker from --charm-file options."""
-    charm_files: list[str] = pytestconfig.getoption("--charm-file", default=[])
-    for path in charm_files:
-        if marker in pathlib.Path(path).name.lower():
-            return path
-    use_existing = pytestconfig.getoption("--use-existing", default=False)
-    if use_existing:
-        return ""
-    provided = ", ".join(charm_files) if charm_files else "<none>"
-    raise AssertionError(f"Missing --charm-file matching '{marker}'. Provided: {provided}.")
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
 @pytest.fixture(scope="module", name="juju")
 def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, None, None]:
     """Module-scoped Juju client in a temporary model for configurator map tests."""
@@ -147,7 +103,7 @@ def postfix_stack_fixture(
     # --- postfix-relay ---
     auth_password = "test-password"
     if not juju.status().apps.get(POSTFIX_RELAY_APP):
-        charm_path = _select_charm_file(pytestconfig, "postfix-relay_")
+        charm_path = select_charm_file(pytestconfig, "postfix-relay_")
         if not charm_path.startswith(("./", "/")):
             charm_path = f"./{charm_path}"
         juju.deploy(
@@ -157,12 +113,12 @@ def postfix_stack_fixture(
                 "relay_domains": f"- {TEST_DOMAIN}",
                 "enable_smtp_auth": "true",
                 "smtp_auth_users": yaml.dump(
-                    [f"testuser:{_sha512_dovecot_password(auth_password)}"]
+                    [f"testuser:{sha512_dovecot_password(auth_password)}"]
                 ),
                 "enable_reject_unknown_sender_domain": "false",
             },
         )
-    _integrate_once(
+    integrate_once(
         juju,
         f"{POSTFIX_RELAY_APP}:certificates",
         f"{SELF_SIGNED_APP}:certificates",
@@ -171,7 +127,7 @@ def postfix_stack_fixture(
     # --- postfix-relay-configurator ---
     authorized_sender = f"authorized@{TEST_DOMAIN}"
     if not juju.status().apps.get(CONFIGURATOR_APP):
-        charm_path = _select_charm_file(pytestconfig, "postfix-relay-configurator_")
+        charm_path = select_charm_file(pytestconfig, "postfix-relay-configurator_")
         if not charm_path.startswith(("./", "/")):
             charm_path = f"./{charm_path}"
         juju.deploy(
@@ -181,7 +137,7 @@ def postfix_stack_fixture(
                 "sender_login_maps": yaml.dump({authorized_sender: "testuser"}),
             },
         )
-    _integrate_once(
+    integrate_once(
         juju,
         f"{POSTFIX_RELAY_APP}:juju-info",
         f"{CONFIGURATOR_APP}:juju-info",

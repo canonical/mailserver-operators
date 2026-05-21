@@ -6,37 +6,14 @@
 import contextlib
 import imaplib
 import logging
-import smtplib
 import ssl
 import time
-from email.message import EmailMessage
 from secrets import token_hex
 
 import jubilant
 import pytest
 from conftest import MAILNAME
-
-
-def _send_mail_via_smtp(
-    host: str,
-    sender: str,
-    recipient: str,
-    subject: str,
-    body: str,
-) -> None:
-    """Send a plain-text e-mail through the unit's Postfix SMTP listener on port 25.
-
-    Postfix routes delivery for MAILNAME addresses via the LMTP Unix socket
-    (virtual_transport = lmtp:unix:private/dovecot-lmtp), so mail lands directly
-    in the Dovecot mail store without touching the local delivery agent / procmail.
-    """
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = sender
-    msg["To"] = recipient
-    msg.set_content(body)
-    with smtplib.SMTP(host, 25, timeout=30) as smtp:
-        smtp.send_message(msg)
+from helpers import send_mail_via_smtp
 
 
 def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):
@@ -69,7 +46,7 @@ def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):
 
     subject = "Mail Verification"
     logging.info(f"Sending test email via SMTP to {unit_ip}:25 ...")
-    _send_mail_via_smtp(
+    send_mail_via_smtp(
         host=unit_ip,
         sender=f"test@{MAILNAME}",
         recipient=f"ubuntu@{MAILNAME}",
