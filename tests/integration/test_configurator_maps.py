@@ -37,7 +37,7 @@ class TestSenderLoginMapEnforcement:
     """Verify that sender_login_maps written by the configurator are enforced by postfix."""
 
     def test_sender_login_map_enforcement(self, postfix_stack: typing.Dict[str, str]) -> None:
-        """Authenticated user can send from authorized address but not from a spoofed one."""
+        """Authenticated user can send from authorized address."""
         relay_ip = postfix_stack["postfix_relay_ip"]
 
         # --- Success case: send from authorized address ---
@@ -63,6 +63,14 @@ class TestSenderLoginMapEnforcement:
             )
             logger.info("Success case: message from %s accepted", AUTHORIZED_SENDER)
 
+    def test_sender_login_map_enforcement_failure(self, postfix_stack: typing.Dict[str, str]) -> None:
+        """Spoofed user cannot send from an unauthorized address."""
+        relay_ip = postfix_stack["postfix_relay_ip"]
+
+        # --- Success case: send from authorized address ---
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
         # --- Failure case: send from spoofed address ---
         with smtplib.SMTP(relay_ip, SMTP_PORT, timeout=30) as smtp:
             smtp.ehlo()

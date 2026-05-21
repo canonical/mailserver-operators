@@ -13,6 +13,7 @@ import pytest
 
 logger = logging.getLogger(__name__)
 
+
 def sha512_dovecot_password(password: str) -> str:
     """Generate a SSHA512 password hash compatible with dovecot."""
     salt = b"mailtest"
@@ -42,4 +43,3 @@ def select_charm_file(pytestconfig: pytest.Config, marker: str) -> str:
         return ""
     provided = ", ".join(charm_files) if charm_files else "<none>"
     raise AssertionError(f"Missing --charm-file matching '{marker}'. Provided: {provided}.")
-
