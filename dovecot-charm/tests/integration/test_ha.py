@@ -8,6 +8,7 @@ from typing import cast
 
 import jubilant
 import pytest
+
 from .conftest import MAILNAME
 from .helpers import (
     check_mail_via_imap,
