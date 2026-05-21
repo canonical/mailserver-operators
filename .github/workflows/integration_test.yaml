@@ -73,7 +73,7 @@ jobs:
       juju-channel: 3/stable
       modules: |
         [
-          "test_whole_email_system.py"
+          "test_e2e.py"
         ]
       with-uv: true
       pre-run-script: ./tests/integration/setup-integration-tests.sh
