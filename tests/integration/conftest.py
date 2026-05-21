@@ -22,6 +22,7 @@ TLS for postfix-relay is provided by self-signed-certificates (CharmHub).
 """
 
 import base64
+import hashlib
 import logging
 import pathlib
 import socket
@@ -51,6 +52,8 @@ SELF_SIGNED_APP = "self-signed-certificates"
 # Domain used throughout the test suite
 TEST_DOMAIN = "mailstack.internal"
 SMTP_PORT = 587
+E2E_SMTP_USER = "e2euser"
+E2E_SMTP_PASSWORD = "e2e-password"
 
 # parents[0]=tests/integration, parents[1]=tests, parents[2]=mailserver-operators/
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -379,6 +382,9 @@ def deploy_postfix_relay_fixture(
             config={
                 "relay_domains": f"- {TEST_DOMAIN}",
                 "enable_smtp_auth": "true",
+                "smtp_auth_users": yaml.dump(
+                    [f"{E2E_SMTP_USER}:{_sha512_dovecot_password(E2E_SMTP_PASSWORD)}"]
+                ),
                 "enable_reject_unknown_sender_domain": "false",
             },
         )
@@ -418,7 +424,16 @@ def deploy_configurator_fixture(
     dovecot_ip = dovecot_unit.public_address
     logger.info("Routing %s → lmtp:inet:%s:24", TEST_DOMAIN, dovecot_ip)
 
-    transport_maps = yaml.dump({TEST_DOMAIN: f"lmtp:inet:{dovecot_ip}:24"})
+    configurator_config = {
+        "relay_access_sources": yaml.dump({"192.0.2.0/24": "OK"}),
+        "relay_recipient_maps": yaml.dump(
+            {f"noreply@{TEST_DOMAIN}": f"postmaster@{TEST_DOMAIN}"}
+        ),
+        "restrict_recipients": yaml.dump({"blocked-recipient@example.invalid": "REJECT"}),
+        "restrict_senders": yaml.dump({"blocked-sender@example.invalid": "REJECT"}),
+        "sender_login_maps": yaml.dump({"auth-only@example.invalid": "nobody"}),
+        "transport_maps": yaml.dump({TEST_DOMAIN: f"lmtp:inet:{dovecot_ip}:24"}),
+    }
 
     if not juju.status().apps.get(CONFIGURATOR_APP):
         charm_path = (
@@ -429,8 +444,10 @@ def deploy_configurator_fixture(
         juju.deploy(
             charm_path,
             app=CONFIGURATOR_APP,
-            config={"transport_maps": transport_maps},
+            config=configurator_config,
         )
+    else:
+        juju.config(CONFIGURATOR_APP, configurator_config)
 
     _integrate_once(juju, f"{POSTFIX_RELAY_APP}:juju-info", f"{CONFIGURATOR_APP}:juju-info")
 
@@ -666,3 +683,9 @@ def _integrate_once(juju: jubilant.Juju, endpoint_a: str, endpoint_b: str) -> No
         if "already exists" not in msg and "already related" not in msg:
             raise
         logger.debug("Relation %s ↔ %s already exists, skipping", endpoint_a, endpoint_b)
+
+
+def _sha512_dovecot_password(password: str) -> str:
+    salt = b"mailtest"
+    digest = hashlib.sha512(password.encode() + salt).digest()
+    return "{SSHA512}" + base64.b64encode(digest + salt).decode()
