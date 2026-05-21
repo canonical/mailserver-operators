@@ -49,7 +49,7 @@ def test_e2e(juju: jubilant.Juju, mail_stack: Dict[str, str]) -> None:
     )
 
     subject = f"Whole system e2e {int(time.time())}"
-    from_addr = f"sender@{TEST_DOMAIN}"
+    from_addr = MAILBOX_USER
     to_addr = MAILBOX_USER
     message = (
         f"Subject: {subject}\r\n"
