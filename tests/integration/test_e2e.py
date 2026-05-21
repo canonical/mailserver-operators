@@ -87,7 +87,7 @@ def _sha512_dovecot(password: str, salt: bytes | None = None) -> str:
 
 def _setup_dovecot_user(juju: jubilant.Juju, username: str, password: str) -> None:
     status = juju.status()
-    unit_name = next(iter(status.apps["dovecot-charm"].units))
+    unit_name = next(iter(status.apps["dovecot"].units))
     juju.exec(f"id -u {username} &>/dev/null || sudo useradd -m {username}", unit=unit_name)
     juju.exec(
         f"id -u {MAILBOX_USER} &>/dev/null || sudo useradd --badname -m {MAILBOX_USER}",
