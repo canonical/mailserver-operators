@@ -15,13 +15,10 @@ import typing
 
 import pytest
 
-logger = logging.getLogger(__name__)
-
 from conftest import AUTHORIZED_SENDER, SMTP_PORT, TEST_DOMAIN, TEST_SMTP_PASSWORD, TEST_SMTP_USER
 
-# ---------------------------------------------------------------------------
-# Test-specific constants
-# ---------------------------------------------------------------------------
+logger = logging.getLogger(__name__)
+
 SPOOFED_SENDER = f"spoofed@{TEST_DOMAIN}"
 RECIPIENT = f"recipient@{TEST_DOMAIN}"
 

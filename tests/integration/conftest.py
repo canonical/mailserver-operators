@@ -22,14 +22,14 @@ TLS for postfix-relay is provided by self-signed-certificates (CharmHub).
 """
 
 import base64
+from collections.abc import Generator
 import hashlib
+import json
 import logging
 import pathlib
 from secrets import token_hex
 import socket
 import typing
-from collections.abc import Generator
-import json
 
 import jubilant
 import pytest
@@ -559,7 +559,7 @@ def deploy_configurator_fixture(
         return True
 
     juju.wait(_both_active, error=jubilant.any_error, timeout=15 * 60)
-    logger.info("postfix-relay-configurator subordinate is active")
+    logger.info("postfix-relay + configurator active for maps tests")
     return CONFIGURATOR_APP
 
 
@@ -667,4 +667,3 @@ def mail_stack_fixture(
         "dovecot_ip": dovecot_ip,
         **postfix_stack
     }
-
