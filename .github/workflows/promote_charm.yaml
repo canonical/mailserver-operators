@@ -3,24 +3,48 @@ name: Promote charm
 on:
   workflow_dispatch:
     inputs:
-      origin-channel:
+      charm:
         type: choice
-        description: 'Origin Channel'
+        description: 'Charm to promote'
         options:
-        - latest/edge
-      destination-channel:
-        type: choice
-        description: 'Destination Channel'
-        options:
-        - latest/stable
+        - dovecot-charm
+        - opendkim-operator
+        - postfix-relay-operator
+        - postfix-relay-configurator-operator
     secrets:
       CHARMHUB_TOKEN:
         required: true
 
 jobs:
+  resolve-channels:
+    runs-on: ubuntu-latest
+    outputs:
+      origin-channel: ${{ steps.set-channels.outputs.origin-channel }}
+      destination-channel: ${{ steps.set-channels.outputs.destination-channel }}
+    steps:
+      - name: Set channels
+        id: set-channels
+        run: |
+          case "${{ github.event.inputs.charm }}" in
+            dovecot-charm)
+              echo "origin-channel=2.3/edge" >> "$GITHUB_OUTPUT"
+              echo "destination-channel=2.3/stable" >> "$GITHUB_OUTPUT"
+              ;;
+            opendkim-operator)
+              echo "origin-channel=2/edge" >> "$GITHUB_OUTPUT"
+              echo "destination-channel=2/stable" >> "$GITHUB_OUTPUT"
+              ;;
+            postfix-relay-operator|postfix-relay-configurator-operator)
+              echo "origin-channel=3/edge" >> "$GITHUB_OUTPUT"
+              echo "destination-channel=3/stable" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
   promote-charm:
+    needs: resolve-channels
     uses: canonical/operator-workflows/.github/workflows/promote_charm.yaml@main
     with:
-      origin-channel: ${{ github.event.inputs.origin-channel }}
-      destination-channel: ${{ github.event.inputs.destination-channel }}
+      origin-channel: ${{ needs.resolve-channels.outputs.origin-channel }}
+      destination-channel: ${{ needs.resolve-channels.outputs.destination-channel }}
+      working-directory: ${{ github.event.inputs.charm }}
     secrets: inherit
