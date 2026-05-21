@@ -25,6 +25,7 @@ header:
   - 'postfix-relay-operator/templates/*'
   - 'postfix-relay-operator/files/**'
   - 'postfix-relay-operator/lib/**'
+  - 'postfix-relay-operator/tests/unit/files/**'
   - 'pyproject.toml'
   - 'zap_rules.tsv'
   - '**/*.md.j2'
