@@ -437,7 +437,12 @@ def deploy_configurator_fixture(
         ),
         "restrict_recipients": yaml.dump({"blocked-recipient@example.invalid": "REJECT"}),
         "restrict_senders": yaml.dump({"blocked-sender@example.invalid": "REJECT"}),
-        "sender_login_maps": yaml.dump({"auth-only@example.invalid": "nobody"}),
+        "sender_login_maps": yaml.dump(
+            {
+                "auth-only@example.invalid": "nobody",
+                f"{E2E_SMTP_USER}@{TEST_DOMAIN}": f"{E2E_SMTP_USER}@{TEST_DOMAIN}",
+            }
+        ),
         "transport_maps": yaml.dump({TEST_DOMAIN: f"lmtp:inet:{dovecot_ip}:24"}),
     }
 
