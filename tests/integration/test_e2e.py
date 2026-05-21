@@ -19,10 +19,9 @@ import jubilant
 import pytest
 import yaml
 
-TEST_DOMAIN = "mailstack.internal"
-TEST_USER = "e2euser"
-MAILBOX_USER = f"{TEST_USER}@{TEST_DOMAIN}"
-TEST_PASSWORD = token_hex(16)
+from conftest import TEST_DOMAIN, TEST_SMTP_PASSWORD, TEST_SMTP_USER
+
+MAILBOX_USER = f"{TEST_SMTP_USER}@{TEST_DOMAIN}"
 SMTP_SUBMISSION_PORT = 587
 IMAP_PORT = 993
 
@@ -37,14 +36,14 @@ def test_e2e(juju: jubilant.Juju, mail_stack: Dict[str, str]) -> None:
         dovecot_unit,
         "create-mail-user",
         params={
-            "username": TEST_USER,
-            "password": TEST_PASSWORD,
+            "username": TEST_SMTP_USER,
+            "password": TEST_SMTP_PASSWORD,
             "mailbox-user": MAILBOX_USER,
         },
     )
     assert action_result.status == "completed"
 
-    smtp_auth_users = yaml.dump([f"{MAILBOX_USER}:{_sha512_dovecot(TEST_PASSWORD)}"])
+    smtp_auth_users = yaml.dump([f"{MAILBOX_USER}:{_sha512_dovecot(TEST_SMTP_PASSWORD)}"])
     juju.config(
         "postfix-relay",
         {
@@ -77,10 +76,10 @@ def test_e2e(juju: jubilant.Juju, mail_stack: Dict[str, str]) -> None:
         server.ehlo()
         server.starttls(context=tls_ctx)
         server.ehlo()
-        server.login(MAILBOX_USER, TEST_PASSWORD)
+        server.login(MAILBOX_USER, TEST_SMTP_PASSWORD)
         server.sendmail(from_addr, [to_addr], message)
 
-    raw_message = _wait_for_subject(dovecot_ip, MAILBOX_USER, TEST_PASSWORD, subject)
+    raw_message = _wait_for_subject(dovecot_ip, MAILBOX_USER, TEST_SMTP_PASSWORD, subject)
     parsed = email.message_from_bytes(raw_message)
 
     assert parsed["Subject"] == subject
@@ -93,6 +92,8 @@ def _sha512_dovecot(password: str, salt: bytes | None = None) -> str:
         salt = os.urandom(8)
     digest = hashlib.sha512(password.encode() + salt).digest()
     return "{SSHA512}" + base64.b64encode(digest + salt).decode()
+
+
 def _wait_for_subject(host: str, username: str, password: str, subject: str) -> bytes:
     ctx = ssl.create_default_context()
     ctx.check_hostname = False

@@ -52,15 +52,15 @@ SELF_SIGNED_APP = "self-signed-certificates"
 
 # Domain used throughout the test suite
 TEST_DOMAIN = "mailstack.internal"
-SMTP_PORT = 587
-E2E_SMTP_USER = "e2euser"
-E2E_SMTP_PASSWORD = "e2e-password"
+TEST_SMTP_USER = "e2euser"
+TEST_SMTP_PASSWORD = token_hex(16)
 
 # parents[0]=tests/integration, parents[1]=tests, parents[2]=mailserver-operators/
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 OPENDKIM_SNAP_DIR = _REPO_ROOT / "opendkim-snap"
 
-
+SMTP_PORT = 587
+AUTHORIZED_SENDER = f"authorized@{TEST_DOMAIN}"
 # ---------------------------------------------------------------------------
 # pytest CLI options
 # ---------------------------------------------------------------------------
@@ -131,22 +131,14 @@ def _select_charm_file(pytestconfig: pytest.Config, marker: str) -> str:
 # Fixtures
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session", name="juju")
-def juju_fixture(
-    request: pytest.FixtureRequest,
-) -> Generator[jubilant.Juju, None, None]:
-    """Session-scoped Juju client pointing at a temporary (or named) model."""
-
-    def _show_debug_log(juju: jubilant.Juju) -> None:
-        if request.session.testsfailed:
-            log = juju.debug_log(limit=2000)
-            print(log, end="")
-
+def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, None, None]:
+    """Session-scoped Juju client in a temporary model for integration tests."""
+    logging.getLogger('jubilant.wait').setLevel(logging.WARNING)
     use_existing = request.config.getoption("--use-existing", default=False)
     if use_existing:
         juju = jubilant.Juju()
         juju.model_config({"automatically-retry-hooks": True})
         yield juju
-        _show_debug_log(juju)
         return
 
     model = request.config.getoption("--model")
@@ -154,7 +146,6 @@ def juju_fixture(
         juju = jubilant.Juju(model=model)
         juju.model_config({"automatically-retry-hooks": True})
         yield juju
-        _show_debug_log(juju)
         return
 
     keep_models = typing.cast(bool, request.config.getoption("--keep-models"))
@@ -162,7 +153,6 @@ def juju_fixture(
         juju.wait_timeout = 15 * 60
         juju.model_config({"automatically-retry-hooks": True})
         yield juju
-        _show_debug_log(juju)
         return
 
 
@@ -300,57 +290,20 @@ def deploy_self_signed_certs_fixture(juju: jubilant.Juju) -> str:
     return SELF_SIGNED_APP
 
 
-@pytest.fixture(scope="module", name="postfix_stack")
+@pytest.fixture(scope="session", name="postfix_stack")
 def postfix_stack_fixture(
     juju: jubilant.Juju,
-    pytestconfig: pytest.Config,
-    self_signed_app: str,
+    postfix_relay_app: str,
+    postfix_relay_configurator_app: str,
 ) -> typing.Dict[str, str]:
     """Deploy postfix-relay + postfix-relay-configurator configured for sender_login enforcement.
 
     Returns a dict with ``postfix_relay_ip``.
     """
-    # --- postfix-relay ---
-    auth_password = "test-password"
-    if not juju.status().apps.get(POSTFIX_RELAY_APP):
-        charm_path = _select_charm_file(pytestconfig, "postfix-relay_")
-        if not charm_path.startswith(("./", "/")):
-            charm_path = f"./{charm_path}"
-        juju.deploy(
-            charm_path,
-            app=POSTFIX_RELAY_APP,
-            config={
-                "relay_domains": f"- {TEST_DOMAIN}",
-                "enable_smtp_auth": "true",
-                "smtp_auth_users": yaml.dump(
-                    [f"testuser:{_sha512_dovecot_password(auth_password)}"]
-                ),
-                "enable_reject_unknown_sender_domain": "false",
-            },
-        )
     _integrate_once(
         juju,
-        f"{POSTFIX_RELAY_APP}:certificates",
-        f"{self_signed_app}:certificates",
-    )
-
-    # --- postfix-relay-configurator ---
-    authorized_sender = f"authorized@{TEST_DOMAIN}"
-    if not juju.status().apps.get(CONFIGURATOR_APP):
-        charm_path = _select_charm_file(pytestconfig, "postfix-relay-configurator_")
-        if not charm_path.startswith(("./", "/")):
-            charm_path = f"./{charm_path}"
-        juju.deploy(
-            charm_path,
-            app=CONFIGURATOR_APP,
-            config={
-                "sender_login_maps": yaml.dump({authorized_sender: "testuser"}),
-            },
-        )
-    _integrate_once(
-        juju,
-        f"{POSTFIX_RELAY_APP}:juju-info",
-        f"{CONFIGURATOR_APP}:juju-info",
+        f"{postfix_relay_app}:juju-info",
+        f"{postfix_relay_configurator_app}:juju-info",
     )
 
     # Wait for both to be active.
@@ -375,7 +328,7 @@ def postfix_stack_fixture(
     status = juju.status()
     relay_ip = next(iter(status.apps[POSTFIX_RELAY_APP].units.values())).public_address
     logger.info("postfix-relay IP: %s", relay_ip)
-    return {"postfix_relay_ip": relay_ip}
+    return {"postfix_relay_app": postfix_relay_app, "postfix_relay_ip": relay_ip}
 
 
 # ---------------------------------------------------------------------------
@@ -488,11 +441,9 @@ def deploy_dovecot_fixture(
 def deploy_postfix_relay_fixture(
     postfix_relay_charm_file: str,
     self_signed_app: str,
-    opendkim_app: str,
     juju: jubilant.Juju,
-    pytestconfig: pytest.Config,
 ) -> str:
-    """Deploy postfix-relay and integrate with TLS provider and opendkim milter."""
+    """Deploy postfix-relay and integrate with TLS provider."""
     if not juju.status().apps.get(POSTFIX_RELAY_APP):
         charm_path = (
             postfix_relay_charm_file
@@ -506,63 +457,30 @@ def deploy_postfix_relay_fixture(
                 "relay_domains": f"- {TEST_DOMAIN}",
                 "enable_smtp_auth": "true",
                 "smtp_auth_users": yaml.dump(
-                    [f"{E2E_SMTP_USER}:{_sha512_dovecot_password(E2E_SMTP_PASSWORD)}"]
+                    [f"{TEST_SMTP_USER}:{_sha512_dovecot_password(TEST_SMTP_PASSWORD)}"]
                 ),
                 "enable_reject_unknown_sender_domain": "false",
             },
         )
 
     _integrate_once(juju, f"{POSTFIX_RELAY_APP}:certificates", f"{self_signed_app}:certificates")
-    _integrate_once(juju, f"{POSTFIX_RELAY_APP}:milter", f"{opendkim_app}:milter")
 
     juju.wait(
         lambda status: (
             status.apps[POSTFIX_RELAY_APP].is_active
-            and status.apps[opendkim_app].app_status.current in {"blocked", "active"}
         ),
         timeout=15 * 60,
     )
-    logger.info("postfix-relay is active (opendkim is blocked or already active)")
+    logger.info("postfix-relay is active")
     return POSTFIX_RELAY_APP
 
 
-# ---------------------------------------------------------------------------
-# Deploy: postfix-relay-configurator (subordinate)
-# ---------------------------------------------------------------------------
-@pytest.fixture(scope="session", name="configurator_app")
-def deploy_configurator_fixture(
+@pytest.fixture(scope="session", name="postfix_relay_configurator_app")
+def deploy_postfix_relay_configurator_fixture(
     configurator_charm_file: str,
-    postfix_relay_app: str,
-    dovecot_app: str,
     juju: jubilant.Juju,
 ) -> str:
-    """Deploy the postfix-relay-configurator subordinate and configure LMTP routing.
-
-    The configurator's ``transport_maps`` is set to route mail for TEST_DOMAIN
-    to dovecot's LMTP port (24) so that postfix-relay delivers locally to dovecot.
-    """
-    # Resolve dovecot's IP after it is active.
-    status = juju.status()
-    dovecot_unit = next(iter(status.apps[dovecot_app].units.values()))
-    dovecot_ip = dovecot_unit.public_address
-    logger.info("Routing %s → lmtp:inet:%s:24", TEST_DOMAIN, dovecot_ip)
-
-    configurator_config = {
-        "relay_access_sources": yaml.dump({"192.0.2.0/24": "OK"}),
-        "relay_recipient_maps": yaml.dump(
-            {f"noreply@{TEST_DOMAIN}": f"postmaster@{TEST_DOMAIN}"}
-        ),
-        "restrict_recipients": yaml.dump({"blocked-recipient@example.invalid": "REJECT"}),
-        "restrict_senders": yaml.dump({"blocked-sender@example.invalid": "REJECT"}),
-        "sender_login_maps": yaml.dump(
-            {
-                "auth-only@example.invalid": "nobody",
-                f"{E2E_SMTP_USER}@{TEST_DOMAIN}": f"{E2E_SMTP_USER}@{TEST_DOMAIN}",
-            }
-        ),
-        "transport_maps": yaml.dump({TEST_DOMAIN: f"lmtp:inet:{dovecot_ip}:24"}),
-    }
-
+    """Deploy postfix-relay-configurator."""
     if not juju.status().apps.get(CONFIGURATOR_APP):
         charm_path = (
             configurator_charm_file
@@ -572,20 +490,65 @@ def deploy_configurator_fixture(
         juju.deploy(
             charm_path,
             app=CONFIGURATOR_APP,
-            config=configurator_config,
+            config={
+                "sender_login_maps": yaml.dump({AUTHORIZED_SENDER: TEST_SMTP_USER}),
+            },
         )
     else:
-        juju.config(CONFIGURATOR_APP, configurator_config)
+        juju.config(CONFIGURATOR_APP, {"sender_login_maps": yaml.dump({AUTHORIZED_SENDER: TEST_SMTP_USER})})
+    logger.info("postfix-relay-configurator deployed")
+    return CONFIGURATOR_APP
 
-    _integrate_once(juju, f"{postfix_relay_app}:juju-info", f"{CONFIGURATOR_APP}:juju-info")
+
+# ---------------------------------------------------------------------------
+# Deploy: postfix-relay-configurator (subordinate)
+# ---------------------------------------------------------------------------
+@pytest.fixture(scope="session", name="configurator_app")
+def deploy_configurator_fixture(
+    postfix_stack: typing.Dict[str, str],
+    opendkim_app: str,
+    dovecot_app: str,
+    juju: jubilant.Juju,
+) -> str:
+    """Deploy the postfix-relay-configurator subordinate and configure SMTP routing.
+
+    The configurator's ``transport_maps`` is set to route mail for TEST_DOMAIN
+    to dovecot's Postfix on port 25, which delivers locally to dovecot via LMTP
+    Unix socket.
+    """
+    # Resolve dovecot's IP after it is active.
+    status = juju.status()
+    dovecot_unit = next(iter(status.apps[dovecot_app].units.values()))
+    dovecot_ip = dovecot_unit.public_address
+    logger.info("Routing %s → smtp:[%s]:25", TEST_DOMAIN, dovecot_ip)
+    _integrate_once(juju, f"{postfix_stack['postfix_relay_app']}:milter", f"{opendkim_app}:milter")
+
+    configurator_config = {
+        "relay_access_sources": yaml.dump({"192.0.2.0/24": "OK"}),
+        "relay_recipient_maps": yaml.dump(
+            {f"noreply@{TEST_DOMAIN}": f"postmaster@{TEST_DOMAIN}", f"{TEST_SMTP_USER}@{TEST_DOMAIN}": "OK"}
+        ),
+        "restrict_recipients": yaml.dump({"blocked-recipient@example.invalid": "REJECT"}),
+        "restrict_senders": yaml.dump({"blocked-sender@example.invalid": "REJECT"}),
+        "sender_login_maps": yaml.dump(
+            {
+                AUTHORIZED_SENDER: TEST_SMTP_USER,
+                "auth-only@example.invalid": "nobody",
+                f"{TEST_SMTP_USER}@{TEST_DOMAIN}": f"{TEST_SMTP_USER}@{TEST_DOMAIN}",
+            }
+        ),
+        "transport_maps": yaml.dump({TEST_DOMAIN: f"smtp:[{dovecot_ip}]:25"}),
+    }
+
+    juju.config(CONFIGURATOR_APP, configurator_config)
 
     # Wait for both to be active.
     def _both_active(status: jubilant.Status) -> bool:
-        if not status.apps.get(postfix_relay_app):
+        if not status.apps.get(postfix_stack["postfix_relay_app"]):
             return False
-        if not status.apps[POSTFIX_RELAY_APP].is_active:
+        if not status.apps[postfix_stack["postfix_relay_app"]].is_active:
             return False
-        for unit in status.apps[POSTFIX_RELAY_APP].units.values():
+        for unit in status.apps[postfix_stack["postfix_relay_app"]].units.values():
             subs = unit.subordinates or {}
             conf_subs = {k: v for k, v in subs.items() if CONFIGURATOR_APP in k}
             if not conf_subs:
@@ -606,7 +569,8 @@ def deploy_configurator_fixture(
 @pytest.fixture(scope="session", name="opendkim_configured")
 def configure_opendkim_fixture(
     opendkim_app: str,
-    postfix_relay_app: str,
+    postfix_stack: typing.Dict[str, str],
+    configurator_app: str,
     machine_ip_address: str,
     juju: jubilant.Juju,
 ) -> str:
@@ -653,14 +617,14 @@ def configure_opendkim_fixture(
     # Inject TEST_DOMAIN → test-runner IP in /etc/hosts on the postfix-relay unit
     # so that Postfix can resolve the domain when it looks up the MX / transport.
     status = juju.status()
-    relay_unit = next(iter(status.apps[postfix_relay_app].units.values()))
+    relay_unit = next(iter(status.apps[postfix_stack["postfix_relay_app"]].units.values()))
     juju.exec(
         machine=relay_unit.machine,
         command=f"echo '{machine_ip_address} {TEST_DOMAIN}' | sudo tee -a /etc/hosts",
     )
 
     juju.wait(
-        lambda status: jubilant.all_active(status, opendkim_app, postfix_relay_app),
+        lambda status: jubilant.all_active(status, opendkim_app, postfix_stack["postfix_relay_app"]),
         timeout=5 * 60,
         delay=5,
     )
@@ -675,7 +639,7 @@ def configure_opendkim_fixture(
 def mail_stack_fixture(
     juju: jubilant.Juju,
     dovecot_app: str,
-    postfix_relay_app: str,
+    postfix_stack: typing.Dict[str, str],
     opendkim_configured: str,
     configurator_app: str,
 ) -> typing.Dict[str, str]:
@@ -687,22 +651,20 @@ def mail_stack_fixture(
     """
     juju.wait(
         lambda status: jubilant.all_active(
-            status, dovecot_app, postfix_relay_app, opendkim_configured, SELF_SIGNED_APP
+            status, dovecot_app, postfix_stack["postfix_relay_app"], opendkim_configured, SELF_SIGNED_APP
         ),
         timeout=5 * 60,
     )
 
     status = juju.status()
     dovecot_ip = next(iter(status.apps[dovecot_app].units.values())).public_address
-    relay_ip = next(iter(status.apps[postfix_relay_app].units.values())).public_address
 
-    logger.info("Mail stack ready — dovecot: %s, postfix-relay: %s", dovecot_ip, relay_ip)
+    logger.info("Mail stack ready — dovecot: %s, postfix-relay: %s", dovecot_ip, postfix_stack["postfix_relay_ip"])
     return {
         "dovecot_app": dovecot_app,
-        "postfix_relay_app": postfix_relay_app,
         "opendkim_app": opendkim_configured,
         "configurator_app": configurator_app,
         "dovecot_ip": dovecot_ip,
-        "postfix_relay_ip": relay_ip,
+        **postfix_stack
     }
 
