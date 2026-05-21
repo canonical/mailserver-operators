@@ -44,7 +44,7 @@ def test_e2e(juju: jubilant.Juju, mail_stack: Dict[str, str]) -> None:
     )
     assert action_result.status == "completed"
 
-    smtp_auth_users = yaml.dump([f"{TEST_USER}:{_sha512_dovecot(TEST_PASSWORD)}"])
+    smtp_auth_users = yaml.dump([f"{MAILBOX_USER}:{_sha512_dovecot(TEST_PASSWORD)}"])
     juju.config(
         "postfix-relay",
         {
@@ -77,7 +77,7 @@ def test_e2e(juju: jubilant.Juju, mail_stack: Dict[str, str]) -> None:
         server.ehlo()
         server.starttls(context=tls_ctx)
         server.ehlo()
-        server.login(TEST_USER, TEST_PASSWORD)
+        server.login(MAILBOX_USER, TEST_PASSWORD)
         server.sendmail(from_addr, [to_addr], message)
 
     raw_message = _wait_for_subject(dovecot_ip, MAILBOX_USER, TEST_PASSWORD, subject)
