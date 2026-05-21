@@ -37,7 +37,6 @@ import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from helpers import select_charm_file
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +92,44 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
+
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+def _sha512_dovecot_password(password: str) -> str:
+    """Generate a SSHA512 password hash compatible with dovecot."""
+    salt = b"mailtest"
+    digest = hashlib.sha512(password.encode() + salt).digest()
+    return "{SSHA512}" + base64.b64encode(digest + salt).decode()
+
+
+def _integrate_once(juju: jubilant.Juju, endpoint_a: str, endpoint_b: str) -> None:
+    """Call ``juju integrate`` tolerating 'already related' errors."""
+    try:
+        juju.integrate(endpoint_a, endpoint_b)
+    except Exception as exc:  # noqa: BLE001
+        msg = str(exc)
+        if "already exists" not in msg and "already related" not in msg:
+            raise
+        logger.debug("Relation %s ↔ %s already exists, skipping", endpoint_a, endpoint_b)
+
+
+def _select_charm_file(pytestconfig: pytest.Config, marker: str) -> str:
+    """Select charm file matching marker from --charm-file options."""
+    charm_files: list[str] = pytestconfig.getoption("--charm-file", default=[])
+    for path in charm_files:
+        if marker in pathlib.Path(path).name.lower():
+            return path
+    use_existing = pytestconfig.getoption("--use-existing", default=False)
+    if use_existing:
+        return ""
+    provided = ", ".join(charm_files) if charm_files else "<none>"
+    raise AssertionError(f"Missing --charm-file matching '{marker}'. Provided: {provided}.")
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 @pytest.fixture(scope="session", name="juju")
 def juju_fixture(
     request: pytest.FixtureRequest,
@@ -276,7 +313,7 @@ def postfix_stack_fixture(
     # --- postfix-relay ---
     auth_password = "test-password"
     if not juju.status().apps.get(POSTFIX_RELAY_APP):
-        charm_path = select_charm_file(pytestconfig, "postfix-relay_")
+        charm_path = _select_charm_file(pytestconfig, "postfix-relay_")
         if not charm_path.startswith(("./", "/")):
             charm_path = f"./{charm_path}"
         juju.deploy(
@@ -300,7 +337,7 @@ def postfix_stack_fixture(
     # --- postfix-relay-configurator ---
     authorized_sender = f"authorized@{TEST_DOMAIN}"
     if not juju.status().apps.get(CONFIGURATOR_APP):
-        charm_path = select_charm_file(pytestconfig, "postfix-relay-configurator_")
+        charm_path = _select_charm_file(pytestconfig, "postfix-relay-configurator_")
         if not charm_path.startswith(("./", "/")):
             charm_path = f"./{charm_path}"
         juju.deploy(
@@ -669,19 +706,3 @@ def mail_stack_fixture(
         "postfix_relay_ip": relay_ip,
     }
 
-
-def _integrate_once(juju: jubilant.Juju, endpoint_a: str, endpoint_b: str) -> None:
-    """Call ``juju integrate`` tolerating 'already related' errors."""
-    try:
-        juju.integrate(endpoint_a, endpoint_b)
-    except Exception as exc:  # noqa: BLE001
-        msg = str(exc)
-        if "already exists" not in msg and "already related" not in msg:
-            raise
-        logger.debug("Relation %s ↔ %s already exists, skipping", endpoint_a, endpoint_b)
-
-
-def _sha512_dovecot_password(password: str) -> str:
-    salt = b"mailtest"
-    digest = hashlib.sha512(password.encode() + salt).digest()
-    return "{SSHA512}" + base64.b64encode(digest + salt).decode()
