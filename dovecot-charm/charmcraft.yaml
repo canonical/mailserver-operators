@@ -99,6 +99,20 @@ config:
       type: string
 
 actions:
+  create-mail-user:
+    description: Create or update local mail users used for SMTP and mailbox login.
+    params:
+      username:
+        type: string
+        description: Primary system username to create/update.
+      password:
+        type: string
+        description: Plaintext password to set for created users.
+      mailbox-user:
+        type: string
+        description: Optional mailbox username (for example user@example.com).
+        default: ""
+    required: [username, password]
   clear-queue:
     description: Forcibly remove messages from the Postfix mail queue.
     params:

@@ -32,7 +32,17 @@ def test_e2e(juju: jubilant.Juju, mail_stack: Dict[str, str]) -> None:
     relay_ip = mail_stack["postfix_relay_ip"]
     dovecot_ip = mail_stack["dovecot_ip"]
 
-    _setup_dovecot_user(juju, TEST_USER, TEST_PASSWORD)
+    dovecot_unit = f"{mail_stack['dovecot_app']}/0"
+    action_result = juju.run(
+        dovecot_unit,
+        "create-mail-user",
+        params={
+            "username": TEST_USER,
+            "password": TEST_PASSWORD,
+            "mailbox-user": MAILBOX_USER,
+        },
+    )
+    assert action_result.status == "completed"
 
     smtp_auth_users = yaml.dump([f"{TEST_USER}:{_sha512_dovecot(TEST_PASSWORD)}"])
     juju.config(
@@ -83,22 +93,6 @@ def _sha512_dovecot(password: str, salt: bytes | None = None) -> str:
         salt = os.urandom(8)
     digest = hashlib.sha512(password.encode() + salt).digest()
     return "{SSHA512}" + base64.b64encode(digest + salt).decode()
-
-
-def _setup_dovecot_user(juju: jubilant.Juju, username: str, password: str) -> None:
-    status = juju.status()
-    unit_name = next(iter(status.apps["dovecot"].units))
-    juju.exec(f"id -u {username} &>/dev/null || sudo useradd -m {username}", unit=unit_name)
-    juju.exec(
-        f"id -u {MAILBOX_USER} &>/dev/null || sudo useradd --badname -m {MAILBOX_USER}",
-        unit=unit_name,
-    )
-    juju.exec(f"sudo usermod -aG mail {username}", unit=unit_name)
-    juju.exec(f"sudo usermod -aG mail {MAILBOX_USER}", unit=unit_name)
-    juju.exec(f"echo '{username}:{password}' | sudo chpasswd", unit=unit_name)
-    juju.exec(f"echo '{MAILBOX_USER}:{password}' | sudo chpasswd", unit=unit_name)
-
-
 def _wait_for_subject(host: str, username: str, password: str, subject: str) -> bytes:
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
