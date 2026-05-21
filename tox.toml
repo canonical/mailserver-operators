@@ -17,111 +17,68 @@ PYTHONBREAKPOINT = "ipdb.set_trace"
 PY_COLORS = "1"
 
 [env.fmt]
-description = "Apply coding style standards to code"
+description = "Apply coding style standards to all charms"
+allowlist_externals = [ "tox" ]
 commands = [
-  [
-    "ruff",
-    "check",
-    "--fix",
-    "--select",
-    "I",
-    { replace = "ref", of = [
-      "vars",
-      "all_path",
-    ], extend = true },
-  ],
-  [
-    "ruff",
-    "format",
-    { replace = "ref", of = [
-      "vars",
-      "all_path",
-    ], extend = true },
-  ],
+  [ "tox", "-c", "{toxinidir}/dovecot-charm/tox.toml", "-e", "fmt", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/opendkim-operator/tox.toml", "-e", "fmt", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/postfix-relay-operator/tox.ini", "-e", "fmt", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/postfix-relay-configurator-operator/tox.ini", "-e", "fmt", { replace = "posargs", extend = true } ],
 ]
 dependency_groups = [ "fmt" ]
 
 [env.lint]
-description = "Check code against coding style standards"
+description = "Run lint checks for all charms"
+allowlist_externals = [ "tox" ]
 commands = [
-  [
-    "codespell",
-    "{toxinidir}",
-  ],
-  [
-    "ruff",
-    "format",
-    "--check",
-    "--diff",
-    { replace = "ref", of = [
-      "vars",
-      "all_path",
-    ], extend = true },
-  ],
-  [
-    "ruff",
-    "check",
-    { replace = "ref", of = [
-      "vars",
-      "all_path",
-    ], extend = true },
-  ],
-  [
-    "mypy",
-    { replace = "ref", of = [
-      "vars",
-      "all_path",
-    ], extend = true },
-  ],
+  [ "tox", "-c", "{toxinidir}/dovecot-charm/tox.toml", "-e", "lint", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/opendkim-operator/tox.toml", "-e", "lint", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/postfix-relay-operator/tox.ini", "-e", "lint", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/postfix-relay-configurator-operator/tox.ini", "-e", "lint", { replace = "posargs", extend = true } ],
 ]
 dependency_groups = [ "lint" ]
 
 [env.unit]
-description = "Run unit tests"
+description = "Run all charm unit tests"
+allowlist_externals = [ "tox" ]
 commands = [
-  [
-    "coverage",
-    "run",
-    "--source={[vars]src_path}",
-    "-m",
-    "pytest",
-    "--ignore={[vars]tst_path}integration",
-    "-v",
-    "--tb",
-    "native",
-    "-s",
-    { replace = "posargs", extend = "true" },
-  ],
-  [
-    "coverage",
-    "report",
-  ],
+  [ "tox", "-c", "{toxinidir}/dovecot-charm/tox.toml", "-e", "unit", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/opendkim-operator/tox.toml", "-e", "unit", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/postfix-relay-operator/tox.ini", "-e", "unit", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/postfix-relay-configurator-operator/tox.ini", "-e", "unit", { replace = "posargs", extend = true } ],
 ]
 dependency_groups = [ "unit" ]
 
 [env.coverage-report]
-description = "Create test coverage report"
-commands = [ [ "coverage", "report" ] ]
+description = "Create coverage reports for all charms"
+allowlist_externals = [ "tox" ]
+commands = [
+  [ "tox", "-c", "{toxinidir}/dovecot-charm/tox.toml", "-e", "coverage-report", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/opendkim-operator/tox.toml", "-e", "coverage-report", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/postfix-relay-operator/tox.ini", "-e", "coverage-report", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/postfix-relay-configurator-operator/tox.ini", "-e", "coverage-report", { replace = "posargs", extend = true } ],
+]
 dependency_groups = [ "coverage-report" ]
 
 [env.static]
-description = "Run static analysis tests"
-commands = [ [ "bandit", "-c", "{toxinidir}/pyproject.toml", "-r", "{[vars]src_path}", "{[vars]tst_path}" ] ]
+description = "Run static analysis tests for all charms"
+allowlist_externals = [ "tox" ]
+commands = [
+  [ "tox", "-c", "{toxinidir}/dovecot-charm/tox.toml", "-e", "static", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/opendkim-operator/tox.toml", "-e", "static", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/postfix-relay-operator/tox.ini", "-e", "static", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/postfix-relay-configurator-operator/tox.ini", "-e", "static", { replace = "posargs", extend = true } ],
+]
 dependency_groups = [ "static" ]
 
 [env.integration]
-description = "Run cross-charm integration tests"
+description = "Run integration tests for all charms"
+allowlist_externals = [ "tox" ]
 commands = [
-  [
-    "pytest",
-    "-v",
-    "--tb",
-    "native",
-    "tests/integration/",
-    "--log-cli-level=INFO",
-    "-s",
-    { replace = "posargs", extend = "true" },
-  ],
+  [ "tox", "-c", "{toxinidir}/dovecot-charm/tox.toml", "-e", "integration", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/opendkim-operator/tox.toml", "-e", "integration", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/postfix-relay-operator/tox.ini", "-e", "integration", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/postfix-relay-configurator-operator/tox.ini", "-e", "integration", { replace = "posargs", extend = true } ],
 ]
 dependency_groups = [ "integration" ]
 
@@ -145,18 +102,11 @@ PYTHONPATH = "{toxinidir}/tests/integration"
 PY_COLORS = "1"
 
 [env.lint-fix]
-description = "Apply coding style standards to code"
+description = "Apply lint fixes for all charms"
+allowlist_externals = [ "tox" ]
 commands = [
-  [
-    "ruff",
-    "check",
-    "--fix",
-    "--fix-only",
-    { replace = "ref", of = [
-      "vars",
-      "all_path",
-    ], extend = true },
-  ],
+  [ "tox", "-c", "{toxinidir}/dovecot-charm/tox.toml", "-e", "lint-fix", { replace = "posargs", extend = true } ],
+  [ "tox", "-c", "{toxinidir}/opendkim-operator/tox.toml", "-e", "lint-fix", { replace = "posargs", extend = true } ],
 ]
 dependency_groups = [ "lint" ]
 
