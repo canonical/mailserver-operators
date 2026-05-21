@@ -1,0 +1,56 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: Release snap to edge and promote
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      promote-to:
+        description: Channel to promote the snap to (e.g. latest/candidate)
+        required: false
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - opendkim-snap/**
+
+jobs:
+  build:
+    name: Build snap
+    uses: canonical/data-platform-workflows/.github/workflows/build_snap.yaml@v49
+    with:
+      path-to-snap-project-directory: ./opendkim-snap
+
+  release-edge:
+    name: Release snap to edge
+    needs: build
+    uses: canonical/data-platform-workflows/.github/workflows/release_snap.yaml@v49
+    with:
+      channel: latest/edge
+      artifact-prefix: ${{ needs.build.outputs.artifact-prefix }}
+      path-to-snap-project-directory: ./opendkim-snap
+    secrets:
+      snap-store-token: ${{ secrets.SNAP_STORE_TOKEN }}
+    permissions:
+      contents: write
+
+  promote:
+    name: Promote snap
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.promote-to != '' }}
+    needs: [build, release-edge]
+    uses: canonical/data-platform-workflows/.github/workflows/release_snap.yaml@v49
+    with:
+      channel: ${{ github.event.inputs.promote-to }}
+      artifact-prefix: ${{ needs.build.outputs.artifact-prefix }}
+      path-to-snap-project-directory: ./opendkim-snap
+      create-git-tags: false
+    secrets:
+      snap-store-token: ${{ secrets.SNAP_STORE_TOKEN }}
+    permissions:
+      contents: write

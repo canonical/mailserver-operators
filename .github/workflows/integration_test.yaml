@@ -14,21 +14,51 @@ jobs:
       packages: write
     with:
       charmcraft-channel: latest/edge
-
-  required_status_checks:
-    name: Required Integration Test Status Checks
-    runs-on: ubuntu-latest
+      extra-arguments: '-x --log-format="%(asctime)s %(levelname)s %(message)s"'
+      juju-channel: 3/stable
+      modules: ${{ matrix.charm.modules }}
+      pre-run-script: ${{ matrix.charm.pre-run-script }}
+      provider: lxd
+      self-hosted-runner: true
+      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
+      trivy-fs-enabled: false
+      with-uv: true
+      working-directory: ${{ matrix.charm.working-directory }}
+  integration-tests-global:
+    uses:
+      canonical/operator-workflows/.github/workflows/integration_test.yaml@main
+    secrets: inherit
+    with:
+      juju-channel: 3/stable
+      modules: |
+        [
+          "test_configurator_maps.py"
+        ]
+      provider: lxd
+      self-hosted-runner: true
+      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
+      trivy-fs-enabled: false
+      with-uv: true
+  integration-tests-stack:
+    uses:
+      canonical/operator-workflows/.github/workflows/integration_test.yaml@main
+    secrets: inherit
+    with:
+      use-canonical-k8s: true
+      provider: lxd
+      self-hosted-runner: true
+      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
+      juju-channel: 3/stable
+      modules: |
+        [
+          "test_whole_email_system.py"
+        ]
+      with-uv: true
+      pre-run-script: ./tests/integration/setup-integration-tests.sh
+  allure-report:
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
     needs:
-      - integration-test
-    if: always() && !cancelled()
-    timeout-minutes: 5
-    steps:
-      - name: Check integration-test status
-        run: |
-          RESULT="${{ needs.integration-test.result }}"
-          if [ "$RESULT" = "success" ] || [ "$RESULT" = "skipped" ]; then
-            exit 0
-          else
-            echo "integration-test failed with status: $RESULT"
-            exit 1
-          fi
+    - integration-tests-juju-3
+    - integration-tests-global
+    - integration-tests-stack
+    uses: canonical/operator-workflows/.github/workflows/allure_report.yaml@main
