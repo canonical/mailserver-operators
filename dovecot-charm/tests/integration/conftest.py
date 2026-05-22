@@ -63,8 +63,8 @@ def dovecot_charm(
         logging.info(f"Created LUKS secret: {secret_id}")
 
         config = {
-            "mailname": "example.com",
-            "postmaster-address": "postmaster@example.com",
+            "mailname": MAILNAME,
+            "postmaster-address": f"postmaster@{MAILNAME}",
             "primary-unit": f"{APP_NAME}/0",
             "luks-auto-provisioning": True,
             "luks-key": secret_id,
@@ -104,8 +104,8 @@ def dovecot_charm_manual_storage(
         logging.info(f"Application {charm_name} not found, proceeding with deployment.")
 
         config = {
-            "mailname": "example.com",
-            "postmaster-address": "postmaster@example.com",
+            "mailname": MAILNAME,
+            "postmaster-address": f"postmaster@{MAILNAME}",
             "primary-unit": f"{charm_name}/0",
             "luks-auto-provisioning": False,
         }
@@ -163,8 +163,8 @@ def dovecot_charm_dual_unit(
         logging.info(f"Created LUKS secret: {secret_id}")
 
         config = {
-            "mailname": "example.com",
-            "postmaster-address": "postmaster@example.com",
+            "mailname": MAILNAME,
+            "postmaster-address": f"postmaster@{MAILNAME}",
             "primary-unit": f"{APP_NAME}/0",
             "luks-auto-provisioning": True,
             "luks-key": secret_id,

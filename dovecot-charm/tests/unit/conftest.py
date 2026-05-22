@@ -29,6 +29,7 @@ __all__ = [
 # the charm class is defined outside src/).
 _CHARM_ROOT = Path(__file__).parents[2]
 _META = yaml.safe_load((_CHARM_ROOT / "charmcraft.yaml").read_text())
+MAILNAME = "example.com"
 
 
 @pytest.fixture
