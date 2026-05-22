@@ -15,7 +15,6 @@ from helpers import integrate_once, select_charm_file, sha512_dovecot_password
 
 logger = logging.getLogger(__name__)
 
-
 POSTFIX_RELAY_APP = "postfix-relay"
 CONFIGURATOR_APP = "postfix-relay-configurator"
 SELF_SIGNED_APP = "self-signed-certificates"
