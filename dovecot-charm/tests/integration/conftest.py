@@ -8,6 +8,8 @@ import typing
 import jubilant
 import pytest
 
+from .helpers import setup_gdpr_test_user, teardown_gdpr_test_user
+
 logger = logging.getLogger(__name__)
 
 APP_NAME = "dovecot"
@@ -217,44 +219,13 @@ def dovecot_charm_dual_unit(
     return APP_NAME
 
 
-# ---------------------------------------------------------------------------
-# Helper functions for GDPR tests
-# ---------------------------------------------------------------------------
-def _setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
-    """Create a system user with a Dovecot mailbox containing one test message."""
-    action_result = juju.run(
-        unit_name, "create-mail-user", params={"username": user, "password": password}
-    )
-    assert action_result.status == "completed", (
-        f"create-mail-user action failed for {user}: status={action_result.status}"
-    )
-    juju.exec(f"install -d -m 0700 -o {user} -g mail {MAIL_ROOT}/{user}", unit=unit_name)
-    juju.exec(f"doveadm mailbox create -u {user} INBOX 2>/dev/null || true", unit=unit_name)
-    juju.exec(
-        (
-            f"printf 'From: {user}@example.com\\nSubject: GDPR test\\n\\ntest body\\n' | "
-            f"doveadm save -u {user} -m INBOX"
-        ),
-        unit=unit_name,
-    )
-
-
-def _teardown_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str) -> None:
-    """Remove the test user and mail directory created by _setup_gdpr_test_user."""
-    juju.exec(f"userdel -r {user} 2>/dev/null || true", unit=unit_name)
-    juju.exec(f"rm -rf {MAIL_ROOT}/{user}", unit=unit_name)
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
 @pytest.fixture()
 def gdpr_test_user(juju: jubilant.Juju, dovecot_charm: str):
     """Create a GDPR test user with one message; tear down after the test."""
     unit_name = f"{dovecot_charm}/0"
-    _setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
+    setup_gdpr_test_user(juju, unit_name, GDPR_TEST_USER, GDPR_TEST_PASSWORD)
     yield unit_name, GDPR_TEST_USER
-    _teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
+    teardown_gdpr_test_user(juju, unit_name, GDPR_TEST_USER)
     juju.exec(f"rm -f {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}.tar.gz", unit=unit_name)
     juju.exec(f"rm -rf {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}", unit=unit_name)
     juju.exec(f"rm -f {GDPR_TAKEOUT_DIR}/{GDPR_TEST_USER}-takeout.tar.gz", unit=unit_name)
