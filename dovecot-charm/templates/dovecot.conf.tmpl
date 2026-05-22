@@ -13,6 +13,10 @@ default_client_limit = 1000
 default_vsz_limit = 256M
 auth_verbose = yes
 auth_verbose_passwords = no
+# Strip the domain part from the LMTP envelope recipient (e.g. user@domain →
+# user) before all userdb/passdb lookups, so system accounts are found when
+# Postfix passes the full address over LMTP.
+auth_username_format = %n
 
 ssl = required
 ssl_cert = </etc/dovecot/private/{{ mailname }}.pem

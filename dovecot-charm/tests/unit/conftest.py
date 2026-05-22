@@ -48,8 +48,8 @@ def base_state():
     storage = ops.testing.Storage("mail-data")
     return ops.testing.State(
         config={
-            "mailname": "example.com",
-            "postmaster-address": "admin@example.com",
+            "mailname": MAILNAME,
+            "postmaster-address": f"postmaster@{MAILNAME}",
             "primary-unit": "dovecot/0",
             "luks-auto-provisioning": True,
             "luks-key": luks_secret.id,

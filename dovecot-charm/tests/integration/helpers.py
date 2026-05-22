@@ -67,17 +67,20 @@ def check_mail_via_imap(unit_ip: str, user: str, password: str, subject: str) ->
 def setup_mail_user(
     juju: jubilant.Juju,
     primary: str,
-    secondary: str,
+    secondary: str | None,
     user: str,
     password: str,
 ):
-    """Create a mail user on both units.
+    """Create a mail user on primary and optionally secondary unit.
 
     The system account and password are created on both units so PAM auth works
     on the secondary after sync.  The Maildir is only initialised on the primary
     so that dsync can replicate it to the secondary without GUID conflicts.
+
+    Args:
+        secondary: Secondary unit name, or None for single-unit deployments.
     """
-    for unit in (primary, secondary):
+    for unit in (u for u in (primary, secondary) if u is not None):
         juju.exec(
             (
                 f"id -u {user} >/dev/null 2>&1 || "
