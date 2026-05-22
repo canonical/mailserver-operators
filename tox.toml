@@ -110,14 +110,14 @@ commands = [ [ "bandit", "-c", "{toxinidir}/pyproject.toml", "-r", "{[vars]src_p
 dependency_groups = [ "static" ]
 
 [env.integration]
-description = "Run integration tests"
+description = "Run cross-charm integration tests"
 commands = [
   [
     "pytest",
     "-v",
     "--tb",
     "native",
-    "--ignore={[vars]tst_path}unit",
+    "tests/integration/",
     "--log-cli-level=INFO",
     "-s",
     { replace = "posargs", extend = "true" },

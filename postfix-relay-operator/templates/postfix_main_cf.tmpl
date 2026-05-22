@@ -107,7 +107,7 @@ relay_domains = {{relay_domains}}
 {% endif %}
 
 {%- if transport_maps %}
-transport_maps = hash:/etc/postfix/transport_maps
+transport_maps = hash:/etc/postfix/transport
 {% endif %}
 {%- if virtual_alias_maps -%}
 virtual_alias_maps = {{virtual_alias_maps_type}}:/etc/postfix/virtual_alias

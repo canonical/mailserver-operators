@@ -61,7 +61,6 @@ import state
             {},
             [
                 "permit_mynetworks",
-                "reject_known_sender_login_mismatch",
                 "permit_sasl_authenticated",
                 "defer_unauth_destination",
             ],
@@ -74,7 +73,6 @@ import state
             {"sender": state.AccessMapValue.OK},
             [
                 "permit_mynetworks",
-                "reject_sender_login_mismatch",
                 "permit_sasl_authenticated",
                 "defer_unauth_destination",
             ],
@@ -87,8 +85,6 @@ import state
             {"sender": state.AccessMapValue.OK},
             [
                 "permit_mynetworks",
-                "reject_known_sender_login_mismatch",
-                "reject_sender_login_mismatch",
                 "permit_sasl_authenticated",
                 "defer_unauth_destination",
             ],
@@ -139,17 +135,27 @@ def test_smtpd_relay_restrictions(
 
 
 @pytest.mark.parametrize(
-    ("enable_reject_unknown_sender", "restrict_sender_access", "expected"),
+    (
+        "enable_reject_unknown_sender",
+        "restrict_sender_access",
+        "sender_login_maps",
+        "restrict_senders",
+        "expected",
+    ),
     [
         pytest.param(
             False,
             None,
+            {},
+            {},
             ["check_sender_access hash:/etc/postfix/access"],
             id="neither_enabled",
         ),
         pytest.param(
             True,
             None,
+            {},
+            {},
             [
                 "reject_unknown_sender_domain",
                 "check_sender_access hash:/etc/postfix/access",
@@ -159,6 +165,8 @@ def test_smtpd_relay_restrictions(
         pytest.param(
             False,
             "- example.com",
+            {},
+            {},
             [
                 "check_sender_access hash:/etc/postfix/access",
                 "reject",
@@ -168,6 +176,8 @@ def test_smtpd_relay_restrictions(
         pytest.param(
             True,
             "- example.com",
+            {},
+            {},
             [
                 "reject_unknown_sender_domain",
                 "check_sender_access hash:/etc/postfix/access",
@@ -175,11 +185,46 @@ def test_smtpd_relay_restrictions(
             ],
             id="both_enabled",
         ),
+        pytest.param(
+            False,
+            None,
+            {"group@example.com": "group"},
+            {},
+            [
+                "check_sender_access hash:/etc/postfix/access",
+                "reject_sender_login_mismatch",
+            ],
+            id="sender_login_maps_enabled",
+        ),
+        pytest.param(
+            False,
+            None,
+            {},
+            {"sender": state.AccessMapValue.OK},
+            [
+                "check_sender_access hash:/etc/postfix/access",
+                "reject_sender_login_mismatch",
+            ],
+            id="restrict_senders_enabled",
+        ),
+        pytest.param(
+            False,
+            None,
+            {"group@example.com": "group"},
+            {"sender": state.AccessMapValue.OK},
+            [
+                "check_sender_access hash:/etc/postfix/access",
+                "reject_sender_login_mismatch",
+            ],
+            id="sender_login_maps_and_restrict_senders",
+        ),
     ],
 )
 def test_smtpd_sender_restrictions(
     enable_reject_unknown_sender: bool,
     restrict_sender_access: str,
+    sender_login_maps: dict[str, str],
+    restrict_senders: dict[str, state.AccessMapValue],
     expected: list[str],
 ) -> None:
     """
@@ -202,9 +247,9 @@ def test_smtpd_sender_restrictions(
         config=charm_config,
         relay_access_sources={},
         restrict_recipients={},
-        restrict_senders={},
+        restrict_senders=restrict_senders,
         relay_recipient_maps={},
-        sender_login_maps={},
+        sender_login_maps=sender_login_maps,
         transport_maps={},
         virtual_alias_maps={},
     )

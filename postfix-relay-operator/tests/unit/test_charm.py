@@ -3,6 +3,7 @@
 
 """Unit tests for the Postfix relay charm."""
 
+import os
 from pathlib import Path
 from unittest.mock import ANY, Mock, call, patch
 
@@ -407,3 +408,44 @@ def test_configure_policyd_spf(
         assert investigated_call not in write_file_mock.mock_calls
 
     assert out.unit_status == ops.testing.ActiveStatus()
+
+
+def test_apply_postfix_maps_postmaps_when_external_map_is_not_older(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    arrange: Internal maps are unchanged and an external map source is not older than its .db.
+    act: Apply postfix maps.
+    assert: postmap is run for the updated external map.
+    """
+    managed_map = tmp_path / "access"
+    managed_map.write_text("example.com                          OK\n", encoding="utf-8")
+    managed_map_db = tmp_path / "access.db"
+    managed_map_db.write_text("current", encoding="utf-8")
+    external_map = tmp_path / "sender_login"
+    external_map_db = tmp_path / "sender_login.db"
+    external_map_db.write_text("stale", encoding="utf-8")
+    external_map.write_text("authorized@mailstack.internal testuser\n", encoding="utf-8")
+    same_timestamp = external_map.stat().st_mtime_ns
+    external_map_db.touch()
+    os.utime(external_map_db, ns=(same_timestamp, same_timestamp))
+
+    check_call_mock = Mock()
+    write_file_mock = Mock()
+    monkeypatch.setattr(charm.subprocess, "check_call", check_call_mock)
+    monkeypatch.setattr(charm.utils, "write_file", write_file_mock)
+    monkeypatch.setattr(charm.postfix, "POSTFIX_MAP_FILES", [str(managed_map), str(external_map)])
+
+    charm.PostfixRelayCharm._apply_postfix_maps(
+        [
+            charm.postfix.PostfixMap(
+                type=state.PostfixLookupTableType.HASH,
+                path=managed_map,
+                content="example.com                          OK\n",
+            )
+        ]
+    )
+
+    write_file_mock.assert_not_called()
+    check_call_mock.assert_called_once_with(["postmap", f"hash:{external_map}"])
