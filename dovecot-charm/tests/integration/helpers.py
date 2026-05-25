@@ -1,3 +1,6 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 """Shared helper functions for Dovecot integration tests."""
 
 import logging
