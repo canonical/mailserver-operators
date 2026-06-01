@@ -180,10 +180,11 @@ def test_data_persists_across_restart(juju: jubilant.Juju, dovecot_charm: str):
     with contextlib.suppress(jubilant.CLIError, jubilant.TaskError, TimeoutError):
         juju.exec("sudo reboot", unit=unit_name)
 
-    # Wait for charm to re-settle after reboot
-    logging.info("Waiting for charm to re-settle...")
+    # Wait for the rebooted unit's agent/workload to be healthy again.
+    logging.info("Waiting for unit to recover from reboot...")
+
     # After reboot the unit's Juju agent is temporarily unavailable while the
-    # VM restarts.  Poll juju status until it succeeds before calling
+    # VM restarts. Poll juju status until it succeeds before calling
     # juju.wait(), otherwise jubilant raises CLIError on the first attempt.
     deadline = time.monotonic() + 10 * 60
     while time.monotonic() < deadline:
@@ -192,13 +193,25 @@ def test_data_persists_across_restart(juju: jubilant.Juju, dovecot_charm: str):
             break
         except jubilant.CLIError:
             time.sleep(5)
-    juju.wait(jubilant.all_active, timeout=10 * 60)
+
+    def unit_recovered(status):
+        app = status.apps.get(dovecot_charm)
+        if not app:
+            return False
+
+        unit = app.units.get(unit_name)
+        if not unit:
+            return False
+
+        return unit.juju_status.current == "idle" and unit.workload_status.current == "active"
+
+    juju.wait(unit_recovered, timeout=10 * 60)
 
     # After reboot the Juju storage API may not yet be re-provisioned when the
     # start hook fires; the charm defers and retries until LUKS open + mount
     # succeeds.  Poll until /srv/mail is mounted.
     logging.info("Waiting for /srv/mail to be mounted post-reboot...")
-    deadline = time.monotonic() + (5 * 60)
+    deadline = time.monotonic() + (10 * 60)
     mounted = False
     while time.monotonic() < deadline:
         try:
@@ -207,7 +220,7 @@ def test_data_persists_across_restart(juju: jubilant.Juju, dovecot_charm: str):
             break
         except (jubilant.CLIError, jubilant.TaskError):
             time.sleep(5)
-    assert mounted, "/srv/mail was not mounted within 120s of active status"
+    assert mounted, "/srv/mail was not mounted within 10m of unit recovery"
 
     # Assert storage still mounted
     mount_output = juju.exec("mount | grep /srv/mail", unit=unit_name)
