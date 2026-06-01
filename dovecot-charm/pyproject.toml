@@ -14,7 +14,7 @@ classifiers = [
 ]
 dependencies = [
     "cosl==1.9.1",
-    "ops==3.7.0",
+    "ops==3.7.1",
     "charmhelpers>=1.2.1",
     "charmlibs-apt==1.0.0.post0",
     "jinja2",
@@ -28,7 +28,7 @@ dependencies = [
 fmt = ["ruff"]
 lint = [
   "codespell",
-  "jubilant==1.9.0",
+  "jubilant==1.10.0",
   "mypy",
   "pep8-naming",
   "pytest",
@@ -52,7 +52,7 @@ coverage-report = [
 integration = [
   "allure-pytest>=2.8.18",
   "allure-pytest-collection-report @ git+https://github.com/canonical/data-platform-workflows@v24.0.0#subdirectory=python/pytest_plugins/allure_pytest_collection_report",
-  "jubilant==1.9.0",
+  "jubilant==1.10.0",
   "pytest",
   "requests",
   "tenacity",
