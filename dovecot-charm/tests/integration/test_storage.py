@@ -220,7 +220,7 @@ def test_data_persists_across_restart(juju: jubilant.Juju, dovecot_charm: str):
             break
         except (jubilant.CLIError, jubilant.TaskError):
             time.sleep(5)
-    assert mounted, "/srv/mail was not mounted within 10m of unit recovery"
+    assert mounted, "/srv/mail was not mounted within 600s of unit recovery"
 
     # Assert storage still mounted
     mount_output = juju.exec("mount | grep /srv/mail", unit=unit_name)
