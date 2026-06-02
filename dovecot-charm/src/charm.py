@@ -242,11 +242,9 @@ class DovecotCharm(CharmBase):
         password = str(event.params.get("password", ""))
         mailbox_user = str(event.params.get("mailbox-user", "")).strip()
 
-        if not username:
-            event.fail("Parameter 'username' is required.")
-            return
-        if not password:
-            event.fail("Parameter 'password' is required.")
+        validation_error = self._validate_mail_user_action_params(username, password, mailbox_user)
+        if validation_error:
+            event.fail(validation_error)
             return
 
         users_to_manage = [username]
@@ -294,6 +292,29 @@ class DovecotCharm(CharmBase):
             return True
         except KeyError:
             return False
+
+    @staticmethod
+    def _contains_invalid_user_characters(username: str) -> bool:
+        """Return whether username contains disallowed path/control characters."""
+        return "/" in username or any(
+            ord(character) < 32 or ord(character) == 127 for character in username
+        )
+
+    def _validate_mail_user_action_params(
+        self, username: str, password: str, mailbox_user: str
+    ) -> str | None:
+        """Validate create-mail-user action parameters."""
+        if not username:
+            return "Parameter 'username' is required."
+        if not password:
+            return "Parameter 'password' is required."
+        if any(separator in password for separator in ("\n", "\r", ":")):
+            return "Parameter 'password' contains invalid characters."
+        if self._contains_invalid_user_characters(username):
+            return "Parameter 'username' contains invalid characters."
+        if mailbox_user and self._contains_invalid_user_characters(mailbox_user):
+            return "Parameter 'mailbox-user' contains invalid characters."
+        return None
 
     @staticmethod
     def _create_system_user(username: str) -> None:

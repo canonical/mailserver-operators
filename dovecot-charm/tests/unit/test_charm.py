@@ -429,6 +429,54 @@ def test_create_mail_user_action_requires_password(ctx, base_state):
     assert "required" in exc_info.value.message
 
 
+@pytest.mark.parametrize("password", ["abc:def", "abc\ndef"])
+def test_create_mail_user_action_rejects_unsafe_password(ctx, base_state, password):
+    """create-mail-user fails when password can inject extra chpasswd entries."""
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(
+            ctx.on.action(
+                "create-mail-user",
+                params={"username": "e2euser", "password": password},
+            ),
+            base_state,
+        )
+    assert "password" in exc_info.value.message
+    assert "invalid characters" in exc_info.value.message
+
+
+@pytest.mark.parametrize("username", ["bad/user", "bad\tuser"])
+def test_create_mail_user_action_rejects_unsafe_username(ctx, base_state, username):
+    """create-mail-user fails when username could escape MAIL_ROOT."""
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(
+            ctx.on.action(
+                "create-mail-user",
+                params={"username": username, "password": secrets.token_hex(8)},
+            ),
+            base_state,
+        )
+    assert "username" in exc_info.value.message
+    assert "invalid characters" in exc_info.value.message
+
+
+def test_create_mail_user_action_rejects_unsafe_mailbox_user(ctx, base_state):
+    """create-mail-user fails when mailbox-user contains unsafe characters."""
+    with pytest.raises(ops.testing.ActionFailed) as exc_info:
+        ctx.run(
+            ctx.on.action(
+                "create-mail-user",
+                params={
+                    "username": "e2euser",
+                    "password": secrets.token_hex(8),
+                    "mailbox-user": "bad/user@example.com",
+                },
+            ),
+            base_state,
+        )
+    assert "mailbox-user" in exc_info.value.message
+    assert "invalid characters" in exc_info.value.message
+
+
 def test_gdpr_delete_no_confirm(ctx, base_state):
     """gdpr-delete must fail without explicit confirm=true."""
     with pytest.raises(ops.testing.ActionFailed) as exc_info:
