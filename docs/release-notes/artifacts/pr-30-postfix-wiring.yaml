@@ -1,0 +1,18 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Version of the artifact schema
+version_schema: 2
+
+changes:
+- title: Added internal Postfix wiring for LMTP delivery and SMTP mail flow
+  author: alithethird
+  type: major
+  description: Wired Postfix to deliver the charm's primary domain through the Dovecot LMTP socket, opened SMTP port 25 for relay traffic, and updated Dovecot to strip recipient domains before userdb lookups so mail reaches local system users correctly.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/30"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: true

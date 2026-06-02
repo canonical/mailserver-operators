@@ -51,9 +51,9 @@ def test_reconcile_sets_active_on_success(ctx, base_state):
 
 
 def test_reconcile_opens_mail_ports(ctx, base_state):
-    """All required IMAP/POP3/Sieve/metrics ports must be opened."""
+    """All required SMTP/IMAP/POP3/Sieve/metrics ports must be opened."""
     state_out = ctx.run(ctx.on.config_changed(), base_state)
-    expected = {ops.testing.TCPPort(p) for p in [993, 995, 4190]}
+    expected = {ops.testing.TCPPort(p) for p in [25, 993, 995, 4190]}
     assert state_out.opened_ports == expected
 
 
@@ -75,7 +75,7 @@ def test_reconcile_blocks_when_procmail_setup_fails(ctx, base_state):
     """Charm must be Blocked when setup_procmail raises ConfigurationError."""
 
     class _FailingSetup(NoOpDovecotSetup):
-        def setup_procmail(self):
+        def setup_procmail(self, mailname: str):
             raise ConfigurationError("Failed to configure postfix: error")
 
     with patch.object(DovecotTestCharm, "_dovecot_setup", _FailingSetup()):

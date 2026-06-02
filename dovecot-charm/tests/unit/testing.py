@@ -83,7 +83,7 @@ class NoOpDovecotSetup(DovecotSetup):
     def setup_dovecot(self, dovecot_config):
         pass
 
-    def setup_procmail(self):
+    def setup_procmail(self, mailname: str):
         pass
 
 
@@ -162,7 +162,7 @@ class TLSDovecotSetup(DovecotSetup):
     def setup_dovecot(self, dovecot_config):
         pass
 
-    def setup_procmail(self):
+    def setup_procmail(self, mailname: str):
         pass
 
 
