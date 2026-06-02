@@ -10,7 +10,7 @@ import time
 from email.message import EmailMessage
 
 import jubilant
-from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
+from tenacity import RetryError, retry, retry_if_result, stop_after_attempt, wait_fixed
 
 
 def send_mail_via_smtp(
@@ -40,8 +40,7 @@ def send_mail_via_smtp(
     wait=wait_fixed(3),
     retry=retry_if_result(lambda found: not found),
 )
-def check_mail_via_imap(unit_ip: str, user: str, password: str, subject: str) -> bool:
-    """Poll IMAP on unit_ip until the email with the given subject is found."""
+def _check_mail_via_imap(unit_ip: str, user: str, password: str, subject: str) -> bool:
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
@@ -66,6 +65,14 @@ def check_mail_via_imap(unit_ip: str, user: str, password: str, subject: str) ->
                 mail.close()
             with contextlib.suppress(imaplib.IMAP4.error, OSError):
                 mail.logout()
+
+
+def check_mail_via_imap(unit_ip: str, user: str, password: str, subject: str) -> bool:
+    """Poll IMAP on unit_ip until the email with the given subject is found."""
+    try:
+        return _check_mail_via_imap(unit_ip, user, password, subject)
+    except RetryError:
+        return False
 
 
 def setup_mail_user(
