@@ -13,6 +13,12 @@ default_client_limit = 1000
 default_vsz_limit = 256M
 auth_verbose = yes
 auth_verbose_passwords = no
+# Normalize authentication usernames by stripping any domain part
+# (e.g. user@domain → user) before userdb/passdb lookups. This applies to
+# all authentication, including IMAP/POP3 logins, not just LMTP recipients.
+# It allows system accounts to be found when Postfix passes a full address
+# over LMTP, but logins entered as user@domain will also be treated as user.
+auth_username_format = %n
 
 ssl = required
 ssl_cert = </etc/dovecot/private/{{ mailname }}.pem
@@ -39,6 +45,14 @@ protocol lda {
 
 protocol lmtp {
   mail_plugins = $mail_plugins sieve
+}
+
+service lmtp {
+  unix_listener /var/spool/postfix/private/dovecot-lmtp {
+    mode = 0600
+    user = postfix
+    group = postfix
+  }
 }
 
 protocol imap {

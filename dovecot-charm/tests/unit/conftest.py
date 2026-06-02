@@ -29,6 +29,7 @@ __all__ = [
 # the charm class is defined outside src/).
 _CHARM_ROOT = Path(__file__).parents[2]
 _META = yaml.safe_load((_CHARM_ROOT / "charmcraft.yaml").read_text())
+MAILNAME = "example.com"
 
 
 @pytest.fixture
@@ -48,8 +49,8 @@ def base_state():
     storage = ops.testing.Storage("mail-data")
     return ops.testing.State(
         config={
-            "mailname": "example.com",
-            "postmaster-address": "admin@example.com",
+            "mailname": MAILNAME,
+            "postmaster-address": f"postmaster@{MAILNAME}",
             "primary-unit": "dovecot/0",
             "luks-auto-provisioning": True,
             "luks-key": luks_secret.id,

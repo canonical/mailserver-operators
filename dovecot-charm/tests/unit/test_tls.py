@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import ops
 import ops.testing
 import pytest
-from conftest import _META
+from conftest import _META, MAILNAME
 from testing import TLSTestDovecotCharm
 
 from exceptions import ConfigurationError
@@ -97,7 +97,7 @@ def test_setup_tls_no_private_key_raises(tls_ctx, base_state):
         # cert present but private key is None — error raised before any mkdir
         mgr.charm._tls.get_assigned_certificate.return_value = (mock_cert, None)
         mock_config = MagicMock()
-        mock_config.mailname = "example.com"
+        mock_config.mailname = MAILNAME
         with pytest.raises(ConfigurationError):
             mgr.charm._dovecot_setup.setup_tls(mock_config)
 
