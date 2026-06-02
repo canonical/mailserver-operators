@@ -10,6 +10,7 @@ import time
 from email.message import EmailMessage
 
 import jubilant
+from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 
 
 def send_mail_via_smtp(
@@ -34,34 +35,37 @@ def send_mail_via_smtp(
         smtp.send_message(msg)
 
 
+@retry(
+    stop=stop_after_attempt(20),
+    wait=wait_fixed(3),
+    retry=retry_if_result(lambda found: not found),
+)
 def check_mail_via_imap(unit_ip: str, user: str, password: str, subject: str) -> bool:
     """Poll IMAP on unit_ip until the email with the given subject is found."""
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
 
-    for attempt in range(20):
-        mail = None
-        try:
-            mail = imaplib.IMAP4_SSL(unit_ip, port=993, ssl_context=context)
-            mail.login(user, password)
-            mail.select("inbox")
-            _, data = mail.search(None, f'(HEADER Subject "{subject}")')
-            if data and data[0]:
-                logging.info(f"Email found via IMAP on {unit_ip}. IDs: {data[0]}")
-                return True
-            logging.info(f"Email not found yet on {unit_ip} (attempt {attempt + 1})...")
-        except (imaplib.IMAP4.error, OSError) as e:
-            logging.warning(f"IMAP attempt {attempt + 1} on {unit_ip} failed: {e}. Retrying...")
-        finally:
-            if mail is not None:
-                with contextlib.suppress(imaplib.IMAP4.error, OSError):
-                    mail.close()
-                with contextlib.suppress(imaplib.IMAP4.error, OSError):
-                    mail.logout()
-        time.sleep(3)
-
-    return False
+    mail = None
+    try:
+        mail = imaplib.IMAP4_SSL(unit_ip, port=993, ssl_context=context)
+        mail.login(user, password)
+        mail.select("inbox")
+        _, data = mail.search(None, f'(HEADER Subject "{subject}")')
+        if data and data[0]:
+            logging.info(f"Email found via IMAP on {unit_ip}. IDs: {data[0]}")
+            return True
+        logging.info(f"Email not found yet on {unit_ip}, retrying...")
+        return False
+    except (imaplib.IMAP4.error, OSError) as e:
+        logging.warning(f"IMAP attempt on {unit_ip} failed: {e}. Retrying...")
+        return False
+    finally:
+        if mail is not None:
+            with contextlib.suppress(imaplib.IMAP4.error, OSError):
+                mail.close()
+            with contextlib.suppress(imaplib.IMAP4.error, OSError):
+                mail.logout()
 
 
 def setup_mail_user(
