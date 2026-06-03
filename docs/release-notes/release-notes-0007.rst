@@ -1,4 +1,4 @@
-.. _release_notes_release_notes_0006:
+.. _release_notes_release_notes_0007:
 
 Dovecot release notes – 2.3/edge
 =================================
