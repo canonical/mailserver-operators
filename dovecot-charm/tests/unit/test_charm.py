@@ -372,6 +372,9 @@ def test_create_system_user_useradd_flags(ctx, base_state):
     assert "/usr/sbin/nologin" in cmd
     assert "-d" in cmd
     assert "/srv/mail/e2euser" in cmd
+
+
+def test_create_mail_user_action_updates_existing_user(ctx, base_state):
     """create-mail-user updates password/group for existing users."""
     existing_user = object()
     with (
@@ -394,7 +397,6 @@ def test_create_system_user_useradd_flags(ctx, base_state):
     assert ctx.action_results["created"] == ""
     assert ctx.action_results["updated"] == "e2euser"
     mock_prepare.assert_not_called()
-
 
 def test_create_mail_user_action_requires_username(ctx, base_state):
     """create-mail-user fails fast when username is missing."""
