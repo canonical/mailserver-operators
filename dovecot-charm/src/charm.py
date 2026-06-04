@@ -296,6 +296,8 @@ class DovecotCharm(CharmBase):
     @staticmethod
     def _contains_invalid_user_characters(username: str) -> bool:
         """Return whether username contains disallowed path/control characters."""
+        if username in (".", ".."):
+            return True
         return "/" in username or any(
             ord(character) < 32 or ord(character) == 127 for character in username
         )

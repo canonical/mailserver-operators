@@ -447,7 +447,7 @@ def test_create_mail_user_action_rejects_unsafe_password(ctx, base_state, passwo
     assert "invalid characters" in exc_info.value.message
 
 
-@pytest.mark.parametrize("username", ["bad/user", "bad\tuser"])
+@pytest.mark.parametrize("username", ["bad/user", "bad\tuser", ".", ".."])
 def test_create_mail_user_action_rejects_unsafe_username(ctx, base_state, username):
     """create-mail-user fails when username could escape MAIL_ROOT."""
     with pytest.raises(ops.testing.ActionFailed) as exc_info:
