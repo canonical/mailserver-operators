@@ -3,10 +3,16 @@
 
 """Shared helper functions for Dovecot integration tests."""
 
+import contextlib
+import imaplib
 import logging
+import smtplib
+import ssl
 import time
+from email.message import EmailMessage
 
 import jubilant
+from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +44,7 @@ def teardown_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str) -> N
     juju.exec(f"rm -rf {MAIL_ROOT}/{user}", unit=unit_name)
 
 
-def poll(juju: jubilant.Juju, unit_name: str, cmd: str, timeout: int = 60) -> None:
+def _poll(juju: jubilant.Juju, unit_name: str, cmd: str, timeout: int = 60) -> None:
     """Poll a shell command on the unit until it exits 0, or raise after timeout."""
     deadline = time.monotonic() + timeout
     while True:
@@ -48,12 +54,12 @@ def poll(juju: jubilant.Juju, unit_name: str, cmd: str, timeout: int = 60) -> No
         except (jubilant.CLIError, jubilant.TaskError):
             if time.monotonic() >= deadline:
                 logger.error("Timed out waiting for: %s", cmd)
-                log_queue_state(juju, unit_name)
+                _log_queue_state(juju, unit_name)
                 raise
             time.sleep(2)
 
 
-def log_queue_state(juju: jubilant.Juju, unit_name: str) -> None:
+def _log_queue_state(juju: jubilant.Juju, unit_name: str) -> None:
     """Log the current Postfix queue and deferred spool state for diagnostics."""
     try:
         result = juju.exec("postqueue -p", unit=unit_name)
@@ -93,7 +99,7 @@ def seed_queue_with_test_mail(juju: jubilant.Juju, unit_name: str) -> None:
         "/usr/sbin/sendmail -f test@yourdomain.com someone@example.com || true",
         unit=unit_name,
     )
-    poll(juju, unit_name, "postqueue -p | grep -qv 'Mail queue is empty'", timeout=60)
+    _poll(juju, unit_name, "postqueue -p | grep -qv 'Mail queue is empty'", timeout=60)
 
 
 def cleanup_header_checks(juju: jubilant.Juju, unit_name: str) -> None:
@@ -113,7 +119,7 @@ def seed_deferred_queue_with_test_mail(juju: jubilant.Juju, unit_name: str) -> N
             "/usr/sbin/sendmail -f deferred-test@example.com deferred-test@example.net || true",
             unit=unit_name,
         )
-        poll(
+        _poll(
             juju,
             unit_name,
             "sudo find /var/spool/postfix/deferred -type f -print -quit | grep -q .",
@@ -125,12 +131,12 @@ def seed_deferred_queue_with_test_mail(juju: jubilant.Juju, unit_name: str) -> N
 
 def assert_queue_empty(juju: jubilant.Juju, unit_name: str) -> None:
     """Poll until Postfix reports an empty queue."""
-    poll(juju, unit_name, "postqueue -p | grep -q 'Mail queue is empty'", timeout=60)
+    _poll(juju, unit_name, "postqueue -p | grep -q 'Mail queue is empty'", timeout=60)
 
 
 def assert_deferred_queue_empty(juju: jubilant.Juju, unit_name: str) -> None:
     """Poll until the deferred queue contains no files."""
-    poll(
+    _poll(
         juju,
         unit_name,
         "! sudo find /var/spool/postfix/deferred -type f -print -quit | grep -q .",
@@ -141,16 +147,6 @@ def assert_deferred_queue_empty(juju: jubilant.Juju, unit_name: str) -> None:
 def assert_queue_non_empty(juju: jubilant.Juju, unit_name: str) -> None:
     """Assert that Postfix reports a non-empty queue."""
     juju.exec("postqueue -p | grep -qv 'Mail queue is empty'", unit=unit_name)
-import contextlib
-import imaplib
-import logging
-import smtplib
-import ssl
-import time
-from email.message import EmailMessage
-
-import jubilant
-from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 
 
 def send_mail_via_smtp(

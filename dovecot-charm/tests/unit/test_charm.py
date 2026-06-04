@@ -398,6 +398,7 @@ def test_create_mail_user_action_updates_existing_user(ctx, base_state):
     assert ctx.action_results["updated"] == "e2euser"
     mock_prepare.assert_not_called()
 
+
 def test_create_mail_user_action_requires_username(ctx, base_state):
     """create-mail-user fails fast when username is missing."""
     with pytest.raises(ops.testing.ActionFailed) as exc_info:
