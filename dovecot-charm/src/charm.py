@@ -11,6 +11,7 @@ import subprocess  # nosec
 import typing
 from functools import cached_property
 from pathlib import Path
+from pwd import getpwnam
 
 import jinja2
 import ops
@@ -61,6 +62,7 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._reconcile)
         self.framework.observe(self.on.upgrade_charm, self._on_install)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
+        self.framework.observe(self.on.create_mail_user_action, self._on_create_mail_user_action)
         self.framework.observe(self.on.gdpr_archive_action, self._on_gdpr_archive)
         self.framework.observe(self.on.gdpr_delete_action, self._on_gdpr_delete)
         self.framework.observe(self.on.gdpr_takeout_action, self._on_gdpr_takeout)
@@ -233,6 +235,125 @@ class DovecotCharm(CharmBase):
         self.unit.open_port("tcp", 993)
         self.unit.open_port("tcp", 995)
         self.unit.open_port("tcp", 4190)
+
+    def _on_create_mail_user_action(self, event):
+        """Create or update local mail users for integration and operations workflows."""
+        username = str(event.params.get("username", "")).strip()
+        password = str(event.params.get("password", ""))
+        mailbox_user = str(event.params.get("mailbox-user", "")).strip()
+
+        validation_error = self._validate_mail_user_action_params(username, password, mailbox_user)
+        if validation_error:
+            event.fail(validation_error)
+            return
+
+        users_to_manage = [username]
+        if mailbox_user and mailbox_user != username:
+            users_to_manage.append(mailbox_user)
+
+        created_users: list[str] = []
+        updated_users: list[str] = []
+
+        try:
+            for user in users_to_manage:
+                if self._system_user_exists(user):
+                    updated_users.append(user)
+                else:
+                    self._create_system_user(user)
+                    prepare_user_dir(os.path.join(MAIL_ROOT, user), user)
+                    created_users.append(user)
+                self._ensure_user_in_mail_group(user)
+                self._set_system_user_password(user, password)
+        except (subprocess.CalledProcessError, KeyError, FileNotFoundError) as exc:
+            message = f"Failed to manage users: {exc}"
+            if isinstance(exc, subprocess.CalledProcessError):
+                stderr = exc.stderr.strip() if isinstance(exc.stderr, str) else exc.stderr
+                stdout = exc.stdout.strip() if isinstance(exc.stdout, str) else exc.stdout
+                if stderr:
+                    message += f"; stderr: {stderr}"
+                if stdout:
+                    message += f"; stdout: {stdout}"
+            event.fail(message)
+            return
+
+        event.set_results(
+            {
+                "status": "success",
+                "created": ",".join(created_users),
+                "updated": ",".join(updated_users),
+            }
+        )
+
+    @staticmethod
+    def _system_user_exists(username: str) -> bool:
+        """Return whether a local system user exists."""
+        try:
+            getpwnam(username)
+            return True
+        except KeyError:
+            return False
+
+    @staticmethod
+    def _contains_invalid_user_characters(username: str) -> bool:
+        """Return whether username contains disallowed path/control characters."""
+        if username in (".", ".."):
+            return True
+        return "/" in username or any(
+            ord(character) < 32 or ord(character) == 127 for character in username
+        )
+
+    def _validate_mail_user_action_params(
+        self, username: str, password: str, mailbox_user: str
+    ) -> str | None:
+        """Validate create-mail-user action parameters."""
+        if not username:
+            return "Parameter 'username' is required."
+        if not password:
+            return "Parameter 'password' is required."
+        if any(separator in password for separator in ("\n", "\r", ":")):
+            return "Parameter 'password' contains invalid characters."
+        if self._contains_invalid_user_characters(username):
+            return "Parameter 'username' contains invalid characters."
+        if mailbox_user and self._contains_invalid_user_characters(mailbox_user):
+            return "Parameter 'mailbox-user' contains invalid characters."
+        return None
+
+    @staticmethod
+    def _create_system_user(username: str) -> None:
+        """Create a local system user, allowing mailbox-style names if needed."""
+        command = [
+            "/usr/sbin/useradd",
+            "--no-create-home",
+            "-d",
+            f"{MAIL_ROOT}/{username}",
+            "-s",
+            "/usr/sbin/nologin",
+            username,
+        ]
+        if "@" in username:
+            command.insert(1, "--badname")
+        subprocess.run(command, check=True, capture_output=True, text=True)  # nosec B603
+
+    @staticmethod
+    def _ensure_user_in_mail_group(username: str) -> None:
+        """Ensure the user is a member of the mail group."""
+        subprocess.run(
+            ["/usr/sbin/usermod", "-aG", "mail", username],
+            check=True,
+            capture_output=True,
+            text=True,
+        )  # nosec B603
+
+    @staticmethod
+    def _set_system_user_password(username: str, password: str) -> None:
+        """Set the password for the local system user."""
+        subprocess.run(
+            ["/usr/sbin/chpasswd"],
+            check=True,
+            capture_output=True,
+            text=True,
+            input=f"{username}:{password}",
+        )  # nosec B603
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""

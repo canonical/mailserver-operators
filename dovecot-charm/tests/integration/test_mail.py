@@ -32,6 +32,18 @@ def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):
     logging.info("Configuring user 'ubuntu'...")
     setup_mail_user(juju, primary=unit_name, secondary=None, user="ubuntu", password=password)
 
+    result = juju.run(
+        unit_name, "create-mail-user", params={"username": "ubuntu", "password": password}
+    )
+    assert result.status == "completed"
+    assert result.results["status"] == "success"
+
+    logging.info("Sending test email...")
+    subject = "Mail Verification"
+    cmd = f"echo 'This is the body' | mail -s '{subject}' ubuntu@localhost"
+    juju.exec(cmd, unit=unit_name)
+
+    logging.info("Verifying via IMAP...")
     status = juju.status()
     unit_ip = status.apps[dovecot_charm].units[unit_name].public_address
 
