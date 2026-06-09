@@ -220,9 +220,23 @@ class DovecotCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Charm installation done")
 
     def _open_ports(self):
+<<<<<<< HEAD
         """Open mail ports (TLS-only: plaintext 143/110 are not exposed)."""
         # Port 25 accepts SMTP from postfix-relay, which forwards to Dovecot via
         # the LMTP Unix socket for final delivery into the user mailbox.
+=======
+        """Open mail ports.
+
+        Exposes TLS-wrapped IMAP/POP3 listener ports (993/995) while leaving
+        plaintext IMAP/POP3 ports (143/110) closed. Also exposes SMTP on TCP/25
+        intentionally for mail relay traffic; port 25 is standard SMTP (not
+        implicit TLS), and STARTTLS is expected when supported by the peer.
+        """
+        # Port 25 intentionally accepts standard SMTP from postfix-relay. This
+        # is not an implicit-TLS port; peers should negotiate STARTTLS when
+        # available before Postfix forwards mail to Dovecot via the LMTP Unix
+        # socket for final delivery into the user mailbox.
+>>>>>>> origin/main
         self.unit.open_port("tcp", 25)
         self.unit.open_port("tcp", 993)
         self.unit.open_port("tcp", 995)
@@ -234,11 +248,17 @@ class DovecotCharm(CharmBase):
         password = str(event.params.get("password", ""))
         mailbox_user = str(event.params.get("mailbox-user", "")).strip()
 
+<<<<<<< HEAD
         if not username:
             event.fail("Parameter 'username' is required.")
             return
         if not password:
             event.fail("Parameter 'password' is required.")
+=======
+        validation_error = self._validate_mail_user_action_params(username, password, mailbox_user)
+        if validation_error:
+            event.fail(validation_error)
+>>>>>>> origin/main
             return
 
         users_to_manage = [username]
@@ -254,11 +274,27 @@ class DovecotCharm(CharmBase):
                     updated_users.append(user)
                 else:
                     self._create_system_user(user)
+<<<<<<< HEAD
+=======
+                    prepare_user_dir(os.path.join(MAIL_ROOT, user), user)
+>>>>>>> origin/main
                     created_users.append(user)
                 self._ensure_user_in_mail_group(user)
                 self._set_system_user_password(user, password)
         except (subprocess.CalledProcessError, KeyError, FileNotFoundError) as exc:
+<<<<<<< HEAD
             event.fail(f"Failed to manage users: {exc}")
+=======
+            message = f"Failed to manage users: {exc}"
+            if isinstance(exc, subprocess.CalledProcessError):
+                stderr = exc.stderr.strip() if isinstance(exc.stderr, str) else exc.stderr
+                stdout = exc.stdout.strip() if isinstance(exc.stdout, str) else exc.stdout
+                if stderr:
+                    message += f"; stderr: {stderr}"
+                if stdout:
+                    message += f"; stdout: {stdout}"
+            event.fail(message)
+>>>>>>> origin/main
             return
 
         event.set_results(
@@ -279,12 +315,54 @@ class DovecotCharm(CharmBase):
             return False
 
     @staticmethod
+<<<<<<< HEAD
     def _create_system_user(username: str) -> None:
         """Create a local system user, allowing mailbox-style names if needed."""
         command = ["/usr/sbin/useradd", "-m", username]
         if "@" in username:
             command.insert(1, "--badname")
         subprocess.run(command, check=True, capture_output=True, text=True)
+=======
+    def _contains_invalid_user_characters(username: str) -> bool:
+        """Return whether username contains disallowed path/control characters."""
+        if username in (".", ".."):
+            return True
+        return "/" in username or any(
+            ord(character) < 32 or ord(character) == 127 for character in username
+        )
+
+    def _validate_mail_user_action_params(
+        self, username: str, password: str, mailbox_user: str
+    ) -> str | None:
+        """Validate create-mail-user action parameters."""
+        if not username:
+            return "Parameter 'username' is required."
+        if not password:
+            return "Parameter 'password' is required."
+        if any(separator in password for separator in ("\n", "\r", ":")):
+            return "Parameter 'password' contains invalid characters."
+        if self._contains_invalid_user_characters(username):
+            return "Parameter 'username' contains invalid characters."
+        if mailbox_user and self._contains_invalid_user_characters(mailbox_user):
+            return "Parameter 'mailbox-user' contains invalid characters."
+        return None
+
+    @staticmethod
+    def _create_system_user(username: str) -> None:
+        """Create a local system user, allowing mailbox-style names if needed."""
+        command = [
+            "/usr/sbin/useradd",
+            "--no-create-home",
+            "-d",
+            f"{MAIL_ROOT}/{username}",
+            "-s",
+            "/usr/sbin/nologin",
+            username,
+        ]
+        if "@" in username:
+            command.insert(1, "--badname")
+        subprocess.run(command, check=True, capture_output=True, text=True)  # nosec B603
+>>>>>>> origin/main
 
     @staticmethod
     def _ensure_user_in_mail_group(username: str) -> None:
@@ -294,7 +372,11 @@ class DovecotCharm(CharmBase):
             check=True,
             capture_output=True,
             text=True,
+<<<<<<< HEAD
         )
+=======
+        )  # nosec B603
+>>>>>>> origin/main
 
     @staticmethod
     def _set_system_user_password(username: str, password: str) -> None:
@@ -305,7 +387,11 @@ class DovecotCharm(CharmBase):
             capture_output=True,
             text=True,
             input=f"{username}:{password}",
+<<<<<<< HEAD
         )
+=======
+        )  # nosec B603
+>>>>>>> origin/main
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""

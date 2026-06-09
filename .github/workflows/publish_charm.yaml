@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
+    - main
 
 jobs:
   publish-to-edge:
     strategy:
       matrix:
+<<<<<<< HEAD
         configuration:
           [
             {
@@ -33,6 +34,12 @@ jobs:
               tag-prefix: "postfix-relay-configurator",
             },
           ]
+=======
+        configuration: [{working-directory: "./dovecot-charm", channel: "2.3/edge", tag-prefix: "dovecot"}]
+    permissions:
+      actions: read
+      contents: write
+>>>>>>> origin/main
     uses: canonical/operator-workflows/.github/workflows/publish_charm.yaml@main
     secrets: inherit
     with:

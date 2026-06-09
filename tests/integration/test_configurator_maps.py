@@ -15,10 +15,24 @@ import typing
 
 import pytest
 
+<<<<<<< HEAD
 from conftest import AUTHORIZED_SENDER, SMTP_PORT, TEST_DOMAIN, TEST_SMTP_PASSWORD, TEST_SMTP_USER
 
 logger = logging.getLogger(__name__)
 
+=======
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Test-specific constants
+# ---------------------------------------------------------------------------
+TEST_DOMAIN = "mailstack.internal"
+SMTP_PORT = 587
+
+AUTH_USER = "testuser"
+AUTH_PASSWORD = "test-password"
+AUTHORIZED_SENDER = f"authorized@{TEST_DOMAIN}"
+>>>>>>> origin/main
 SPOOFED_SENDER = f"spoofed@{TEST_DOMAIN}"
 RECIPIENT = f"recipient@{TEST_DOMAIN}"
 
@@ -42,7 +56,11 @@ class TestSenderLoginMapEnforcement:
             smtp.ehlo()
             smtp.starttls(context=ctx)
             smtp.ehlo()
+<<<<<<< HEAD
             smtp.login(TEST_SMTP_USER, TEST_SMTP_PASSWORD)
+=======
+            smtp.login(AUTH_USER, AUTH_PASSWORD)
+>>>>>>> origin/main
             smtp.sendmail(
                 from_addr=AUTHORIZED_SENDER,
                 to_addrs=[RECIPIENT],
@@ -69,7 +87,11 @@ class TestSenderLoginMapEnforcement:
             smtp.ehlo()
             smtp.starttls(context=ctx)
             smtp.ehlo()
+<<<<<<< HEAD
             smtp.login(TEST_SMTP_USER, TEST_SMTP_PASSWORD)
+=======
+            smtp.login(AUTH_USER, AUTH_PASSWORD)
+>>>>>>> origin/main
             with pytest.raises(smtplib.SMTPRecipientsRefused) as exc_info:
                 smtp.sendmail(
                     from_addr=SPOOFED_SENDER,

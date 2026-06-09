@@ -6,6 +6,7 @@ from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
 
 import pytest
+from conftest import MAILNAME
 from ops.model import BlockedStatus
 from pydantic import ValidationError
 
@@ -59,8 +60,8 @@ def test_from_charm_primary_unit_does_not_exist_raises_value_error(base_state):
 
 # Valid config kwargs shared by sync_schedule tests.
 _VALID_BASE = {
-    "mailname": "example.com",
-    "postmaster_address": "admin@example.com",
+    "mailname": MAILNAME,
+    "postmaster_address": f"postmaster@{MAILNAME}",
     "primary_unit": "dovecot/0",
 }
 
