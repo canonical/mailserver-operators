@@ -220,11 +220,6 @@ class DovecotCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Charm installation done")
 
     def _open_ports(self):
-<<<<<<< HEAD
-        """Open mail ports (TLS-only: plaintext 143/110 are not exposed)."""
-        # Port 25 accepts SMTP from postfix-relay, which forwards to Dovecot via
-        # the LMTP Unix socket for final delivery into the user mailbox.
-=======
         """Open mail ports.
 
         Exposes TLS-wrapped IMAP/POP3 listener ports (993/995) while leaving
@@ -236,7 +231,6 @@ class DovecotCharm(CharmBase):
         # is not an implicit-TLS port; peers should negotiate STARTTLS when
         # available before Postfix forwards mail to Dovecot via the LMTP Unix
         # socket for final delivery into the user mailbox.
->>>>>>> origin/main
         self.unit.open_port("tcp", 25)
         self.unit.open_port("tcp", 993)
         self.unit.open_port("tcp", 995)
@@ -248,17 +242,9 @@ class DovecotCharm(CharmBase):
         password = str(event.params.get("password", ""))
         mailbox_user = str(event.params.get("mailbox-user", "")).strip()
 
-<<<<<<< HEAD
-        if not username:
-            event.fail("Parameter 'username' is required.")
-            return
-        if not password:
-            event.fail("Parameter 'password' is required.")
-=======
         validation_error = self._validate_mail_user_action_params(username, password, mailbox_user)
         if validation_error:
             event.fail(validation_error)
->>>>>>> origin/main
             return
 
         users_to_manage = [username]
@@ -274,17 +260,11 @@ class DovecotCharm(CharmBase):
                     updated_users.append(user)
                 else:
                     self._create_system_user(user)
-<<<<<<< HEAD
-=======
                     prepare_user_dir(os.path.join(MAIL_ROOT, user), user)
->>>>>>> origin/main
                     created_users.append(user)
                 self._ensure_user_in_mail_group(user)
                 self._set_system_user_password(user, password)
         except (subprocess.CalledProcessError, KeyError, FileNotFoundError) as exc:
-<<<<<<< HEAD
-            event.fail(f"Failed to manage users: {exc}")
-=======
             message = f"Failed to manage users: {exc}"
             if isinstance(exc, subprocess.CalledProcessError):
                 stderr = exc.stderr.strip() if isinstance(exc.stderr, str) else exc.stderr
@@ -294,7 +274,6 @@ class DovecotCharm(CharmBase):
                 if stdout:
                     message += f"; stdout: {stdout}"
             event.fail(message)
->>>>>>> origin/main
             return
 
         event.set_results(
@@ -315,14 +294,6 @@ class DovecotCharm(CharmBase):
             return False
 
     @staticmethod
-<<<<<<< HEAD
-    def _create_system_user(username: str) -> None:
-        """Create a local system user, allowing mailbox-style names if needed."""
-        command = ["/usr/sbin/useradd", "-m", username]
-        if "@" in username:
-            command.insert(1, "--badname")
-        subprocess.run(command, check=True, capture_output=True, text=True)
-=======
     def _contains_invalid_user_characters(username: str) -> bool:
         """Return whether username contains disallowed path/control characters."""
         if username in (".", ".."):
@@ -362,7 +333,6 @@ class DovecotCharm(CharmBase):
         if "@" in username:
             command.insert(1, "--badname")
         subprocess.run(command, check=True, capture_output=True, text=True)  # nosec B603
->>>>>>> origin/main
 
     @staticmethod
     def _ensure_user_in_mail_group(username: str) -> None:
@@ -372,11 +342,7 @@ class DovecotCharm(CharmBase):
             check=True,
             capture_output=True,
             text=True,
-<<<<<<< HEAD
-        )
-=======
         )  # nosec B603
->>>>>>> origin/main
 
     @staticmethod
     def _set_system_user_password(username: str, password: str) -> None:
@@ -387,11 +353,7 @@ class DovecotCharm(CharmBase):
             capture_output=True,
             text=True,
             input=f"{username}:{password}",
-<<<<<<< HEAD
-        )
-=======
         )  # nosec B603
->>>>>>> origin/main
 
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""

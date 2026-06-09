@@ -16,8 +16,6 @@ APP_NAME = "dovecot"
 # Charm mailname — must match the value passed in deploy config so tests can
 # construct the correct SMTP recipient addresses (@example.com).
 MAILNAME = "example.com"
-<<<<<<< HEAD
-=======
 
 # GDPR action test constants
 MAIL_ROOT = "/srv/mail"
@@ -30,7 +28,6 @@ GDPR_TEST_PASSWORD = secrets.token_hex(16)
 CREATE_MAIL_USER_TEST_USER = "cmu-testuser"
 CREATE_MAIL_USER_TEST_MAILBOX = "cmu-testuser@example.com"
 CREATE_MAIL_USER_TEST_PASSWORD = secrets.token_hex(16)
->>>>>>> origin/main
 
 
 @pytest.fixture(scope="session", name="juju")

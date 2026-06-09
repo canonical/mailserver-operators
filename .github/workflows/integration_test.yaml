@@ -50,10 +50,7 @@ jobs:
       canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
-<<<<<<< HEAD
       extra-arguments: '-x --log-format="%(asctime)s %(levelname)s %(message)s"'
-=======
->>>>>>> origin/main
       juju-channel: 3/stable
       modules: |
         [
@@ -64,7 +61,6 @@ jobs:
       self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
       trivy-fs-enabled: false
       with-uv: true
-<<<<<<< HEAD
   integration-tests-stack:
     uses:
       canonical/operator-workflows/.github/workflows/integration_test.yaml@main
@@ -83,15 +79,10 @@ jobs:
           "test_e2e.py"
         ]
       with-uv: true
-=======
->>>>>>> origin/main
   allure-report:
     if: ${{ !cancelled() && github.event_name == 'schedule' }}
     needs:
     - integration-tests-juju-3
     - integration-tests-global
-<<<<<<< HEAD
     - integration-tests-stack
-=======
->>>>>>> origin/main
     uses: canonical/operator-workflows/.github/workflows/allure_report.yaml@main

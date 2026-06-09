@@ -72,7 +72,6 @@ commands = [
 dependency_groups = [ "static" ]
 
 [env.integration]
-<<<<<<< HEAD
 description = "Run integration tests for all charms"
 allowlist_externals = [ "tox" ]
 commands = [
@@ -85,20 +84,13 @@ dependency_groups = [ "integration" ]
 
 [env.stack-integration]
 description = "Run full-stack mailserver integration tests (all charms)"
-=======
-description = "Run cross-charm integration tests"
->>>>>>> origin/main
 commands = [
   [
     "pytest",
     "-v",
-<<<<<<< HEAD
-    "--tb", "short",
-=======
     "--tb",
     "native",
     "tests/integration/",
->>>>>>> origin/main
     "--log-cli-level=INFO",
     "-s",
     "{toxinidir}/tests/integration",

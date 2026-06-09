@@ -1,7 +1,6 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-<<<<<<< HEAD
 """Fixtures for the full-stack mailserver integration tests.
 
 Topology
@@ -31,18 +30,11 @@ import pathlib
 from secrets import token_hex
 import socket
 import typing
-=======
-"""Shared fixtures and configuration for integration tests."""
-
-import logging
-import typing
-from collections.abc import Generator
->>>>>>> origin/main
 
 import jubilant
 import pytest
 import yaml
-<<<<<<< HEAD
+from helpers import integrate_once as _integrate_once, select_charm_file as _select_charm_file, sha512_dovecot_password as _sha512_dovecot_password
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -75,28 +67,10 @@ AUTHORIZED_SENDER = f"authorized@{TEST_DOMAIN}"
 # ---------------------------------------------------------------------------
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Register extra CLI options consumed by the integration suite."""
-=======
-
-from helpers import integrate_once, select_charm_file, sha512_dovecot_password
-
-logger = logging.getLogger(__name__)
-
-POSTFIX_RELAY_APP = "postfix-relay"
-CONFIGURATOR_APP = "postfix-relay-configurator"
-SELF_SIGNED_APP = "self-signed-certificates"
-
-TEST_DOMAIN = "mailstack.internal"
-SMTP_PORT = 587
-
-
-def pytest_addoption(parser: pytest.Parser) -> None:
-    """Add integration test command-line options."""
->>>>>>> origin/main
     parser.addoption(
         "--charm-file",
         action="append",
         default=[],
-<<<<<<< HEAD
         help=("Path to a pre-built .charm file. Pass this option multiple times (one per charm)."),
     )
     parser.addoption(
@@ -110,52 +84,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store",
         default=None,
         help="Use an existing Juju model by name instead of creating a temp model.",
-=======
-        help="Path to charm file (can be used multiple times)",
->>>>>>> origin/main
     )
     parser.addoption(
         "--use-existing",
         action="store_true",
         default=False,
-<<<<<<< HEAD
         help="Attach to the current Juju model without deploying anything new.",
     )
 
 
 
-# ---------------------------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------------------------
-def _sha512_dovecot_password(password: str) -> str:
-    """Generate a SSHA512 password hash compatible with dovecot."""
-    salt = b"mailtest"
-    digest = hashlib.sha512(password.encode() + salt).digest()
-    return "{SSHA512}" + base64.b64encode(digest + salt).decode()
 
-
-def _integrate_once(juju: jubilant.Juju, endpoint_a: str, endpoint_b: str) -> None:
-    """Call ``juju integrate`` tolerating 'already related' errors."""
-    try:
-        juju.integrate(endpoint_a, endpoint_b)
-    except Exception as exc:  # noqa: BLE001
-        msg = str(exc)
-        if "already exists" not in msg and "already related" not in msg:
-            raise
-        logger.debug("Relation %s ↔ %s already exists, skipping", endpoint_a, endpoint_b)
-
-
-def _select_charm_file(pytestconfig: pytest.Config, marker: str) -> str:
-    """Select charm file matching marker from --charm-file options."""
-    charm_files: list[str] = pytestconfig.getoption("--charm-file", default=[])
-    for path in charm_files:
-        if marker in pathlib.Path(path).name.lower():
-            return path
-    use_existing = pytestconfig.getoption("--use-existing", default=False)
-    if use_existing:
-        return ""
-    provided = ", ".join(charm_files) if charm_files else "<none>"
-    raise AssertionError(f"Missing --charm-file matching '{marker}'. Provided: {provided}.")
 
 
 # ---------------------------------------------------------------------------
@@ -165,65 +104,33 @@ def _select_charm_file(pytestconfig: pytest.Config, marker: str) -> str:
 def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, None, None]:
     """Session-scoped Juju client in a temporary model for integration tests."""
     logging.getLogger('jubilant.wait').setLevel(logging.WARNING)
-=======
-        help="Use existing model instead of creating a temporary one",
-    )
-    parser.addoption(
-        "--model",
-        default=None,
-        help="Specific model name to use",
-    )
-    parser.addoption(
-        "--keep-models",
-        action="store_true",
-        default=False,
-        help="Keep temporary models after tests complete",
-    )
-
-@pytest.fixture(scope="module", name="juju")
-def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, None, None]:
-    """Module-scoped Juju client in a temporary model for configurator map tests."""
-
     def _show_debug_log(juju: jubilant.Juju) -> None:
         if request.session.testsfailed:
             log = juju.debug_log(limit=2000)
             print(log, end="")
 
->>>>>>> origin/main
     use_existing = request.config.getoption("--use-existing", default=False)
     if use_existing:
         juju = jubilant.Juju()
         juju.model_config({"automatically-retry-hooks": True})
         yield juju
-<<<<<<< HEAD
-        return
-
-    model = request.config.getoption("--model")
-=======
         _show_debug_log(juju)
         return
 
-    model = request.config.getoption("--model", default=None)
->>>>>>> origin/main
+    model = request.config.getoption("--model")
     if model:
         juju = jubilant.Juju(model=model)
         juju.model_config({"automatically-retry-hooks": True})
         yield juju
-<<<<<<< HEAD
-        return
-
-    keep_models = typing.cast(bool, request.config.getoption("--keep-models"))
-=======
         _show_debug_log(juju)
         return
 
-    keep_models = typing.cast(bool, request.config.getoption("--keep-models", default=False))
->>>>>>> origin/main
+    keep_models = typing.cast(bool, request.config.getoption("--keep-models"))
     with jubilant.temp_model(keep=keep_models) as juju:
         juju.wait_timeout = 15 * 60
         juju.model_config({"automatically-retry-hooks": True})
         yield juju
-<<<<<<< HEAD
+        _show_debug_log(juju)
         return
 
 
@@ -350,20 +257,6 @@ def generate_dkim_keypair(domain: str, selector: str) -> typing.Tuple[str, str]:
 @pytest.fixture(scope="session", name="self_signed_app")
 def deploy_self_signed_certs_fixture(juju: jubilant.Juju) -> str:
     """Deploy self-signed-certificates from CharmHub."""
-=======
-        _show_debug_log(juju)
-
-
-@pytest.fixture(scope="module", name="postfix_stack")
-def postfix_stack_fixture(
-    juju: jubilant.Juju,
-    pytestconfig: pytest.Config,
-) -> typing.Dict[str, str]:
-    """Deploy postfix-relay + postfix-relay-configurator configured for sender_login enforcement.
-
-    Returns a dict with ``postfix_relay_ip``.
-    """
->>>>>>> origin/main
     if not juju.status().apps.get(SELF_SIGNED_APP):
         juju.deploy(SELF_SIGNED_APP, channel="latest/stable")
     juju.wait(
@@ -371,7 +264,6 @@ def postfix_stack_fixture(
         error=jubilant.any_error,
         timeout=10 * 60,
     )
-<<<<<<< HEAD
     logger.info("self-signed-certificates is active")
     return SELF_SIGNED_APP
 
@@ -390,50 +282,6 @@ def postfix_stack_fixture(
         juju,
         f"{postfix_relay_app}:juju-info",
         f"{postfix_relay_configurator_app}:juju-info",
-=======
-
-    # --- postfix-relay ---
-    auth_password = "test-password"
-    if not juju.status().apps.get(POSTFIX_RELAY_APP):
-        charm_path = select_charm_file(pytestconfig, "postfix-relay_")
-        if not charm_path.startswith(("./", "/")):
-            charm_path = f"./{charm_path}"
-        juju.deploy(
-            charm_path,
-            app=POSTFIX_RELAY_APP,
-            config={
-                "relay_domains": f"- {TEST_DOMAIN}",
-                "enable_smtp_auth": "true",
-                "smtp_auth_users": yaml.dump(
-                    [f"testuser:{sha512_dovecot_password(auth_password)}"]
-                ),
-                "enable_reject_unknown_sender_domain": "false",
-            },
-        )
-    integrate_once(
-        juju,
-        f"{POSTFIX_RELAY_APP}:certificates",
-        f"{SELF_SIGNED_APP}:certificates",
-    )
-
-    # --- postfix-relay-configurator ---
-    authorized_sender = f"authorized@{TEST_DOMAIN}"
-    if not juju.status().apps.get(CONFIGURATOR_APP):
-        charm_path = select_charm_file(pytestconfig, "postfix-relay-configurator_")
-        if not charm_path.startswith(("./", "/")):
-            charm_path = f"./{charm_path}"
-        juju.deploy(
-            charm_path,
-            app=CONFIGURATOR_APP,
-            config={
-                "sender_login_maps": yaml.dump({authorized_sender: "testuser"}),
-            },
-        )
-    integrate_once(
-        juju,
-        f"{POSTFIX_RELAY_APP}:juju-info",
-        f"{CONFIGURATOR_APP}:juju-info",
->>>>>>> origin/main
     )
 
     # Wait for both to be active.
@@ -458,7 +306,6 @@ def postfix_stack_fixture(
     status = juju.status()
     relay_ip = next(iter(status.apps[POSTFIX_RELAY_APP].units.values())).public_address
     logger.info("postfix-relay IP: %s", relay_ip)
-<<<<<<< HEAD
     return {"postfix_relay_app": postfix_relay_app, "postfix_relay_ip": relay_ip}
 
 
@@ -798,6 +645,3 @@ def mail_stack_fixture(
         "dovecot_ip": dovecot_ip,
         **postfix_stack
     }
-=======
-    return {"postfix_relay_ip": relay_ip}
->>>>>>> origin/main
