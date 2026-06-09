@@ -90,7 +90,6 @@ commands = [
     "-v",
     "--tb",
     "native",
-    "tests/integration/",
     "--log-cli-level=INFO",
     "-s",
     "{toxinidir}/tests/integration",
