@@ -1,6 +1,6 @@
 charmlibs-apt==1.0.0.post0
 charmlibs-snap==1.0.1
-charmlibs-interfaces-tls-certificates==1.8.1
+charmlibs-interfaces-tls-certificates==1.8.3
 cosl==1.9.1
 cryptography==49.0.0
 email-validator==2.3.0
