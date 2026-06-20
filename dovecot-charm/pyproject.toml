@@ -13,14 +13,14 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "cosl==1.9.1",
+    "cosl==1.9.2",
     "ops==3.7.1",
     "charmhelpers>=1.2.1",
-    "charmlibs-apt==1.0.0.post0",
+    "charmlibs-apt==1.0.0.post1",
     "jinja2",
     "pydantic[email]>=2.12.5",
     "cryptography>=46.0.6",
-    "charmlibs-systemd==1.0.0",
+    "charmlibs-systemd==1.0.0.post0",
     "charmlibs-interfaces-tls-certificates>=1.8.1",
 ]
 
