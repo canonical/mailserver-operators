@@ -150,14 +150,14 @@ sdist = { url = "https://files.pythonhosted.org/packages/5a/f5/2ed2c938671e1305f
 
 [[package]]
 name = "charmlibs-apt"
-version = "1.0.0.post0"
+version = "1.0.0.post1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "opentelemetry-api" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fd/58/33e87779fdbcf62a3b34e3444d7175c1168b4b2726cc29c98849c09ac086/charmlibs_apt-1.0.0.post0.tar.gz", hash = "sha256:9c2e0b3c1f553ebcaae99c9aad72e15383aec56677a8dd3f6479dc6f084189a6", size = 31942, upload-time = "2025-10-15T02:40:29.521Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/79/2dfe3a6931c06081492de8ff97043a337339896401e910f46d4613d0a7d0/charmlibs_apt-1.0.0.post1.tar.gz", hash = "sha256:d332959b633f9aa1a3b7c5ec274ff2ef7a5d4482de4ce4d96c36e1dd1b97625d", size = 32034, upload-time = "2026-06-16T05:39:50.799Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dd/92/4db19cd8bc94db51a115f7a2e3c46d96b991ca7ebe27207beac9a6570bc6/charmlibs_apt-1.0.0.post0-py3-none-any.whl", hash = "sha256:958e84719eb1feff539f058dc6c7af648c53c88b9ebe7c6157ec8d2bdf5fbfc6", size = 19287, upload-time = "2025-10-15T02:40:27.756Z" },
+    { url = "https://files.pythonhosted.org/packages/12/e9/da1c8b57de65484ae47b0808ce5c0b2fcf947ebbcdf7abccd2f898411e97/charmlibs_apt-1.0.0.post1-py3-none-any.whl", hash = "sha256:5682758b9de1273d59e7a94f8e861d57ccd4360c510d598610a69b758e5076d1", size = 19282, upload-time = "2026-06-16T05:39:49.474Z" },
 ]
 
 [[package]]
@@ -176,11 +176,11 @@ wheels = [
 
 [[package]]
 name = "charmlibs-systemd"
-version = "1.0.0"
+version = "1.0.0.post0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/35/3d/234da07da24ec5ae37184e6b05eeccb994f4e786829cd8efe15b3dff45ee/charmlibs_systemd-1.0.0.tar.gz", hash = "sha256:947e93b076e105509b190020ec16de051e9015c1eb12904192fb39489e0e1caa", size = 15746, upload-time = "2025-11-26T21:32:08.399Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e1/8b/b46c17c458b109dbb9590e994de765fedfa609cee93d6e7cfabe3d599adc/charmlibs_systemd-1.0.0.post0.tar.gz", hash = "sha256:0f978a103524fe1ef34c350930b29b45677ae5c175368e86cea7a1530ccaa0b5", size = 15819, upload-time = "2026-06-16T05:39:46.401Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b8/2e/5fe4d18e52df0fedbf4c4a9e1f6fe0f93f11611a670afb26f808cfd44208/charmlibs_systemd-1.0.0-py3-none-any.whl", hash = "sha256:37d4022e28f70f7a2a54fbff7c5694d25dc62dbb8680feffabde8c324a432199", size = 4904, upload-time = "2025-11-26T21:32:07.103Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/de/97cb49c150b8c1592483bde9370ce46462be8f6f9c3a8a52748f131fdc56/charmlibs_systemd-1.0.0.post0-py3-none-any.whl", hash = "sha256:9e7578b98344ab237fdc6e48491f98fd80239b8802feb72c5c0ff3a9f70019da", size = 4951, upload-time = "2026-06-16T05:39:45.389Z" },
 ]
 
 [[package]]
@@ -276,7 +276,7 @@ wheels = [
 
 [[package]]
 name = "cosl"
-version = "1.9.1"
+version = "1.9.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ops" },
@@ -285,9 +285,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7b/f1/6bc646976c499e9bb7a048ef17b6295f23b145f11f1cee4207ce10494342/cosl-1.9.1.tar.gz", hash = "sha256:80d899b5f278bf64252eb94bfb1bbd03dade5073c2cbc0ea43e9abc68be9ee1e", size = 150395, upload-time = "2026-03-31T12:50:20.064Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/3e/2f8fe3f460b18cea99722f3cdb885d494de1cc9accef1cd18535c14de3f1/cosl-1.9.2.tar.gz", hash = "sha256:4999be5574c679f8070806f125b2c50fc4bdaa78e8f8247b17868af20e82bcfd", size = 150799, upload-time = "2026-06-16T15:00:42.378Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/1d/558af69f639d6772be034b13417a7bbeb92a56939f891493d1546e724213/cosl-1.9.1-py3-none-any.whl", hash = "sha256:201107a68f398b8a5f5e91f6dcaeb1777e7b2816a1592c8eea4a491d1750e1a6", size = 38217, upload-time = "2026-03-31T12:50:18.87Z" },
+    { url = "https://files.pythonhosted.org/packages/66/be/93e0b9eb3de24b5fd670e1de2dac2ab9bdb6e2fcd659a806830aa07bc6ca/cosl-1.9.2-py3-none-any.whl", hash = "sha256:b78248720fc250fb8f3b872c2e0eae760129d80ac76829a556ecc963fe793b81", size = 38346, upload-time = "2026-06-16T15:00:41.215Z" },
 ]
 
 [[package]]
@@ -491,10 +491,10 @@ unit = [
 [package.metadata]
 requires-dist = [
     { name = "charmhelpers", specifier = ">=1.2.1" },
-    { name = "charmlibs-apt", specifier = "==1.0.0.post0" },
+    { name = "charmlibs-apt", specifier = "==1.0.0.post1" },
     { name = "charmlibs-interfaces-tls-certificates", specifier = ">=1.8.1" },
-    { name = "charmlibs-systemd", specifier = "==1.0.0" },
-    { name = "cosl", specifier = "==1.9.1" },
+    { name = "charmlibs-systemd", specifier = "==1.0.0.post0" },
+    { name = "cosl", specifier = "==1.9.2" },
     { name = "cryptography", specifier = ">=46.0.6" },
     { name = "jinja2" },
     { name = "ops", specifier = "==3.7.1" },
