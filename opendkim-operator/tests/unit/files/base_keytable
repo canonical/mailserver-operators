@@ -1,5 +1,2 @@
-# Copyright 2026 Canonical Ltd.
-# See LICENSE file for licensing details.
-
 selector._domainkey.example.com example.com:selector:/etc/dkimkeys/key1.private
 selector._domainkey.other.example.com other.example.com:selector:/etc/dkimkeys/key2.private

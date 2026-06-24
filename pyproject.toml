@@ -47,8 +47,11 @@ static = [
 integration = [
   "allure-pytest>=2.8.18",
   "allure-pytest-collection-report @ git+https://github.com/canonical/data-platform-workflows@v24.0.0#subdirectory=python/pytest_plugins/allure_pytest_collection_report",
+  "cryptography>=42.0",
   "jubilant==1.10.0",
   "pytest",
+  "pyyaml>=6.0",
+  "requests>=2.31",
 ]
 
 [tool.uv]
@@ -167,6 +170,9 @@ log_cli_level = "INFO"
 pythonpath = [
     "dovecot-charm/lib",
     "dovecot-charm/src",
+]
+markers = [
+    "abort_on_fail: abort remaining tests if this test fails",
 ]
 
 [tool.ruff.mccabe]

@@ -20,7 +20,6 @@ SELF_SIGNED_APP = "self-signed-certificates"
 TEST_DOMAIN = "mailstack.internal"
 SMTP_PORT = 587
 
-
 def sha512_dovecot_password(password: str) -> str:
     """Generate a SSHA512 password hash compatible with dovecot."""
     salt = b"mailtest"

@@ -316,3 +316,77 @@ def wait_for_sync_trigger(
         "Timed out waiting for sync trigger on "
         f"{unit}; previous mtime={previous_mtime}, previous timer count={previous_timer_count}"
     )
+
+
+def get_last_sync_mtime(juju: jubilant.Juju, unit: str) -> int | None:
+    """Return /srv/mail/.last-dsync mtime epoch on unit, or None if missing."""
+    output = juju.exec(
+        "stat -c %Y /srv/mail/.last-dsync 2>/dev/null || true", unit=unit
+    ).stdout.strip()
+    return int(output) if output.isdigit() else None
+
+
+def get_sync_timer_run_count(juju: jubilant.Juju, unit: str) -> int:
+    """Return count of sync-to-secondary service invocations from the journal."""
+    output = juju.exec(
+        "journalctl -u sync-to-secondary.service --no-pager -q 2>/dev/null | wc -l || true",
+        unit=unit,
+    ).stdout.strip()
+    return int(output) if output.isdigit() else 0
+
+
+def get_sync_log_content(juju: jubilant.Juju, unit: str, lines: int = 20) -> str:
+    """Return last N lines from the sync-to-secondary service journal for debugging."""
+    output = juju.exec(
+        f"journalctl -u sync-to-secondary.service --no-pager -n {lines} 2>/dev/null || echo 'No journal entries for sync-to-secondary'",
+        unit=unit,
+    ).stdout
+    return output
+
+
+def get_timer_status(juju: jubilant.Juju, unit: str) -> str | None:
+    """Return systemctl show output for the sync-to-secondary timer, or None if absent."""
+    result = juju.exec(
+        "systemctl show sync-to-secondary.timer --property=ActiveState,LastTriggerUSec 2>/dev/null || true",
+        unit=unit,
+    ).stdout.strip()
+    return result if result else None
+
+
+def wait_for_sync_trigger(
+    juju: jubilant.Juju,
+    unit: str,
+    previous_mtime: int | None,
+    previous_timer_count: int,
+    timeout: int = 4 * 60,
+    poll_interval: int = 5,
+) -> int:
+    """Wait until /srv/mail/.last-dsync mtime advances, indicating a completed sync.
+
+    The sync script touches .last-dsync only at the very end, so this is a
+    reliable end-of-sync marker. Journal timer count is checked only to log
+    that the timer appears to have fired while we continue waiting for
+    .last-dsync to be updated.
+    """
+    deadline = time.time() + timeout
+    timer_fired = False
+    while time.time() < deadline:
+        current_mtime = get_last_sync_mtime(juju, unit)
+        if current_mtime is not None and (
+            previous_mtime is None or current_mtime > previous_mtime
+        ):
+            return current_mtime
+
+        current_timer_count = get_sync_timer_run_count(juju, unit)
+        if current_timer_count > previous_timer_count and not timer_fired:
+            logging.info(
+                "Timer fired (journal count increased); waiting for .last-dsync to update..."
+            )
+            timer_fired = True
+
+        time.sleep(poll_interval)
+
+    raise AssertionError(
+        "Timed out waiting for sync trigger on "
+        f"{unit}; previous mtime={previous_mtime}, previous timer count={previous_timer_count}"
+    )

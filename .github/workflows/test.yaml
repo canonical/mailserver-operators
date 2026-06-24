@@ -5,6 +5,17 @@ on:
 
 jobs:
   unit-tests:
+    strategy:
+      matrix:
+        charm:
+          - name: dovecot
+            working-directory: ./dovecot-charm
+          - name: opendkim-operator
+            working-directory: ./opendkim-operator
+          - name: postfix-relay-operator
+            working-directory: ./postfix-relay-operator
+          - name: postfix-relay-configurator-operator
+            working-directory: ./postfix-relay-configurator-operator
     uses: canonical/operator-workflows/.github/workflows/test.yaml@main
     secrets: inherit
     permissions:
@@ -13,6 +24,20 @@ jobs:
     with:
       self-hosted-runner: false
       with-uv: true
-      working-directory: dovecot-charm
+      working-directory: ${{ matrix.charm.working-directory }}
       runs-on-base: ubuntu-24.04
       python-version: 3.12
+
+  snap-tests:
+    name: Snap spread tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Set up LXD
+        uses: canonical/setup-lxd@main
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
+      - name: Run spread tests
+        run: CI=1 snapcraft test
+        working-directory: opendkim-snap

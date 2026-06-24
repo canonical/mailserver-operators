@@ -1,7 +1,7 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Integration tests for end-to-end mail delivery via Postfix → LMTP → Dovecot."""
+"""Integration tests for end-to-end mail delivery via Postfix -> LMTP -> Dovecot."""
 
 import logging
 from secrets import token_hex
@@ -14,7 +14,7 @@ from .helpers import check_mail_via_imap, send_mail_via_smtp, setup_mail_user
 
 
 def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):
-    """Test end-to-end mail delivery via Postfix LMTP → Dovecot and IMAP retrieval.
+    """Test end-to-end mail delivery via Postfix LMTP -> Dovecot and IMAP retrieval.
 
     Mail is submitted over SMTP on port 25.  Postfix matches the recipient domain
     against virtual_mailbox_domains and forwards it to Dovecot via the LMTP Unix
@@ -31,19 +31,13 @@ def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):
     password = token_hex(8)
     logging.info("Configuring user 'ubuntu'...")
     setup_mail_user(juju, primary=unit_name, secondary=None, user="ubuntu", password=password)
-
     result = juju.run(
         unit_name, "create-mail-user", params={"username": "ubuntu", "password": password}
     )
     assert result.status == "completed"
     assert result.results["status"] == "success"
 
-    logging.info("Sending test email...")
-    subject = "Mail Verification"
-    cmd = f"echo 'This is the body' | mail -s '{subject}' ubuntu@localhost"
-    juju.exec(cmd, unit=unit_name)
-
-    logging.info("Verifying via IMAP...")
+    # Resolve the unit IP before sending so we can reuse it for the IMAP check.
     status = juju.status()
     unit_ip = status.apps[dovecot_charm].units[unit_name].public_address
 
