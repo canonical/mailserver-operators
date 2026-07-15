@@ -57,6 +57,16 @@ The charm uses a **`replicas`** peer relation to synchronise mail between units 
 * [Dovecot official webpage](https://www.dovecot.org/)
 * [Troubleshooting](https://github.com/canonical/mailserver-operators/blob/main/docs/how-to/troubleshoot.rst)
 
+## Charmhub and Snapcraft
+
+| Name | Listing |
+|------|---------|
+| `dovecot` | https://charmhub.io/dovecot |
+| `opendkim` | https://charmhub.io/opendkim |
+| `postfix-relay` | https://charmhub.io/postfix-relay |
+| `postfix-relay-configurator` | https://charmhub.io/postfix-relay-configurator |
+| `opendkim` | https://snapcraft.io/opendkim |
+
 ## Project and community
 
 * [Issues](https://github.com/canonical/mailserver-operators/issues)
