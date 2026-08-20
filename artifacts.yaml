@@ -1,0 +1,27 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version: 1
+rocks: []
+charms:
+- name: dovecot
+  charmcraft-yaml: dovecot-charm/charmcraft.yaml
+  resources: {}
+  platforms:
+  - arch: amd64
+- name: opendkim
+  charmcraft-yaml: opendkim-operator/charmcraft.yaml
+  resources: {}
+  platforms:
+  - arch: amd64
+- name: postfix-relay-configurator
+  charmcraft-yaml: postfix-relay-configurator-operator/charmcraft.yaml
+  resources: {}
+  platforms:
+  - arch: amd64
+- name: postfix-relay
+  charmcraft-yaml: postfix-relay-operator/charmcraft.yaml
+  resources: {}
+  platforms:
+  - arch: amd64
+snaps: []
