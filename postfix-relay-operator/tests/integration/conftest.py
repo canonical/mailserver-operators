@@ -13,7 +13,7 @@ from opcli.pytest_plugin import CharmPathList
 
 @pytest.fixture(scope="session", name="postfix_relay_charm")
 def postfix_relay_charm_fixture(charm_paths: dict[str, CharmPathList]) -> str:
-    """Pytest fixture that returns the path to the haproxy charm."""
+    """Pytest fixture that returns the path to the postfix-relay charm."""
     return charm_paths["postfix-relay"].path
 
 
@@ -27,7 +27,7 @@ def deploy_postfix_relay_fixture(
 
     if not juju.status().apps.get(postfix_relay_app_name):
         juju.deploy(
-            f"./{postfix_relay_charm}",
+            postfix_relay_charm,
             postfix_relay_app_name,
         )
 
