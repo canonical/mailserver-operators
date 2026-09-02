@@ -73,6 +73,6 @@ integration-suites:
       --log-format="%(asctime)s %(levelname)s %(message)s"
       {% for charm in artifacts.charms if charm.name == "postfix-relay" %}
       {% for build in charm.builds if build.arch == arch %}
-      --charm-file={{ env.get("SPREAD_PATH", ".") }}/{{ build.path }}
+      --charm-file={{ charm.name }}={{ env.get("SPREAD_PATH", ".") }}/{{ build.path }}
       {% endfor %}
       {% endfor %}

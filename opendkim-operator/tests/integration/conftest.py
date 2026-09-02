@@ -36,7 +36,7 @@ def deploy_opendkim_fixture(
 
     if not juju.status().apps.get(deploy_opendkim_name):
         juju.deploy(
-            f"./{opendkim_charm}",
+            opendkim_charm,
             deploy_opendkim_name,
         )
         # Wait for the charm to settle (blocked because not configured, or waiting).
