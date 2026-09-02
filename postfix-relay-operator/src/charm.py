@@ -100,6 +100,7 @@ class PostfixRelayCharm(ops.CharmBase):
         self.framework.observe(self.on.config_changed, self._reconcile)
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._reconcile)
         self.framework.observe(self.on[MILTER_RELATION_NAME].relation_changed, self._reconcile)
+        self.framework.observe(self.on[MILTER_RELATION_NAME].relation_broken, self._reconcile)
 
         self.certificates = TLSCertificatesRequiresV4(
             charm=self,

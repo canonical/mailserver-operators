@@ -7,14 +7,13 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'terraform/**'
-      - 'terraform-product/**'
+      - '**/terraform/**'
+      - '.github/workflows/test_terraform_modules.yaml'
 
 jobs:
   terraform-tests:
     uses: canonical/operator-workflows/.github/workflows/terraform_modules_test.yaml@main
     secrets: inherit
     with:
-      k8s-controller: true
-      #lxd-controller: true
-      terraform-directories: '["terraform"]'
+      lxd-controller: true
+      terraform-directories: '["terraform/dovecot", "terraform/postfix-relay", "dovecot-charm/terraform", "opendkim-operator/terraform", "postfix-relay-operator/terraform", "postfix-relay-configurator-operator/terraform"]'

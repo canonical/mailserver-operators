@@ -1,15 +1,15 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-resource "juju_application" "postfix_relay" {
+resource "juju_application" "dovecot" {
   name       = var.app_name
   model_uuid = var.model_uuid
 
   charm {
-    base     = var.base
+    name     = "dovecot"
     channel  = var.channel
-    name     = "postfix-relay"
     revision = var.revision
+    base     = var.base
   }
 
   dynamic "expose" {
@@ -25,8 +25,8 @@ resource "juju_application" "postfix_relay" {
   config             = var.config
   constraints        = var.constraints
   endpoint_bindings  = var.endpoint_bindings
-  machines           = length(var.machines) == 0 ? null : var.machines
+  machines           = var.machines
   resources          = var.resources
-  storage_directives = merge(var.storage, var.storage_directives)
-  units              = length(var.machines) == 0 ? var.units : null
+  storage_directives = var.storage_directives
+  units              = var.machines == null ? var.units : null
 }
