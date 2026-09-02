@@ -1,0 +1,7 @@
+.mail-secrets/
+.terraform/
+.terraform-state/
+*.tfplan
+*.tfstate
+*.tfstate.*
+staging.auto.tfvars.json

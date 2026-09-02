@@ -1,10 +1,10 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 variable "app_name" {
   description = "Name of the application in the Juju model."
   type        = string
-  default     = "postfix-relay"
+  default     = "dovecot"
 }
 
 variable "base" {
@@ -14,30 +14,30 @@ variable "base" {
 }
 
 variable "channel" {
-  description = "The channel to use when deploying a charm."
+  description = "The channel to use when deploying the charm."
   type        = string
-  default     = "3/stable"
+  default     = "2.3/edge"
 }
 
 variable "config" {
-  description = "Application config. Details about available options can be found at https://charmhub.io/postfix-relay/configurations."
-  type        = map(string)
+  description = "Application config values for the Dovecot charm."
+  type        = map(any)
   default     = {}
 }
 
 variable "constraints" {
   description = "Juju constraints to apply for this application."
   type        = string
-  default     = "arch=amd64"
+  default     = "arch=amd64 root-disk=20G"
 }
 
 variable "endpoint_bindings" {
-  description = "Endpoint bindings to apply to the application."
+  description = "Optional endpoint bindings for charm relations."
   type = set(object({
     endpoint = optional(string)
     space    = string
   }))
-  default = []
+  default = null
 }
 
 variable "expose" {
@@ -52,18 +52,18 @@ variable "expose" {
 }
 
 variable "machines" {
-  description = "Target machine IDs for the application's units."
+  description = "Optional target machine IDs for the application's units."
   type        = set(string)
-  default     = []
+  default     = null
 }
 
 variable "model_uuid" {
-  description = "UUID of the Juju model to deploy application to."
+  description = "UUID of the Juju model where the application will be deployed."
   type        = string
 }
 
 variable "resources" {
-  description = "Charm resources to deploy with the application."
+  description = "Charm resources to attach during deployment."
   type        = map(string)
   default     = {}
 }
@@ -75,19 +75,15 @@ variable "revision" {
 }
 
 variable "storage_directives" {
-  description = "Storage directives used by the application."
+  description = "Storage directives for the juju application."
   type        = map(string)
-  default     = {}
-}
-
-variable "storage" {
-  description = "Deprecated storage directives; use storage_directives instead."
-  type        = map(string)
-  default     = {}
+  default = {
+    "mail-data" = "8G"
+  }
 }
 
 variable "units" {
-  description = "Number of units to deploy."
+  description = "Number of units to deploy when machines are not specified."
   type        = number
   default     = 1
 }

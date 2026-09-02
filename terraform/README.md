@@ -1,59 +1,17 @@
-<!-- Remember to update this file for your charm -- replace __charm_name__ with the appropriate name. -->
+# Terraform products
 
-# __charm_name__ Terraform module
+This repository contains two independent CC008 product modules:
 
-This folder contains a base [Terraform][Terraform] module for the __charm_name__ charm.
+| Product | Path | Components |
+|---|---|---|
+| Postfix Relay | [`postfix-relay/`](postfix-relay/) | Postfix Relay and OpenDKIM |
+| Dovecot | [`dovecot/`](dovecot/) | Dovecot and a default TLS provider |
 
-The module uses the [Terraform Juju provider][Terraform Juju provider] to model the charm
-deployment onto any Kubernetes environment managed by [Juju][Juju].
+Each product owns its Juju model, secrets, supported integrations, and CC008-compatible outputs.
+The charm modules remain beside their charms under `<charm>/terraform/`.
 
-## Module structure
+See [Installing the Terraform products](INSTALL.md) for a complete deployment procedure.
 
-- **main.tf** - Defines the Juju application to be deployed.
-- **variables.tf** - Allows customization of the deployment. Also models the charm configuration, 
-  except for exposing the deployment options (Juju model name, channel or application name).
-- **output.tf** - Integrates the module with other Terraform modules, primarily
-  by defining potential integration endpoints (charm integrations), but also by exposing
-  the Juju application name.
-- **versions.tf** - Defines the Terraform provider version.
-
-## Using __charm_name__ base module in higher level modules
-
-If you want to use `__charm_name__` base module as part of your Terraform module, import it
-like shown below:
-
-```text
-data "juju_model" "my_model" {
-  name = var.model
-}
-
-module "__charm_name__" {
-  source = "git::https://github.com/canonical/__charm_name__-operator//terraform"
-  
-  model = juju_model.my_model.name
-  # (Customize configuration variables here if needed)
-}
-```
-
-Create integrations, for instance:
-
-```text
-resource "juju_integration" "__charm_name__-loki" {
-  model = juju_model.my_model.name
-  application {
-    name     = module.__charm_name__.app_name
-    endpoint = module.__charm_name__.endpoints.logging
-  }
-  application {
-    name     = "loki-k8s"
-    endpoint = "logging"
-  }
-}
-```
-
-The complete list of available integrations can be found [in the Integrations tab][__charm_name__-integrations].
-
-[Terraform]: https://developer.hashicorp.com/terraform
-[Terraform Juju provider]: https://registry.terraform.io/providers/juju/juju/latest
-[Juju]: https://juju.is
-[__charm_name__-integrations]: https://charmhub.io/__charm_name__/integrations
+The products intentionally do not form a single mailserver module. Postfix Relay and Dovecot do
+not currently have a first-class relation for mailbox-backend discovery. Consumers that deploy
+both products must configure routing explicitly until that charm integration exists.

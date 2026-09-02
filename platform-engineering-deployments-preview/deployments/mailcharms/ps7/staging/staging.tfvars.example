@@ -1,0 +1,13 @@
+juju_model_uuid            = "replace-with-existing-model-uuid"
+mail_domain                = "mail.staging.example.com"
+postmaster_address         = "postmaster@mail.staging.example.com"
+dovecot_relay_host         = "dovecot.staging.example.com"
+dovecot_backend_address    = "10.0.0.10"
+dovecot_machine_id          = "0"
+dovecot_primary_unit        = "dovecot/0"
+dovecot_storage            = "8G"
+haproxy_route_tcp_offer_url = "service-account/model.offer"
+imaps_frontend_port         = 993
+postfix_backend_address    = "10.0.0.11"
+postfix_machine_id          = "1"
+smtp_frontend_port          = 587

@@ -1,0 +1,245 @@
+#!/usr/bin/env just --justfile
+
+set dotenv-load
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+default:
+    @just --list --unsorted
+
+# Verify local tools and required non-secret configuration.
+check:
+    @for command in jq juju openssl terraform vault; do \
+        command -v "$command" >/dev/null || { echo "Missing command: $command" >&2; exit 1; }; \
+    done
+    @for variable in CONTROLLER_NAME IAM_GROUP JUJU_ENDPOINT_ADDRESS MODEL_NAME \
+        VAULT_ADDR MAIL_DOMAIN POSTMASTER_ADDRESS DOVECOT_STORAGE \
+        DOVECOT_PRIMARY_UNIT HAPROXY_FRONTEND_ADDRESS \
+        HAPROXY_ROUTE_TCP_OFFER_URL \
+        IMAPS_FRONTEND_PORT SMTP_FRONTEND_PORT; do \
+        value="${!variable:-}"; \
+        test -n "$value" || { echo "Missing $variable in .env" >&2; exit 1; }; \
+        case "$value" in replace-*) echo "Replace placeholder $variable in .env" >&2; exit 1;; esac; \
+    done
+
+# Authenticate interactively to PS7 Vault.
+vault-login: check
+    vault login -method=oidc
+
+# Register/login to the JAAS controller using the service account from Vault.
+juju-login: check
+    JUJU_CLIENT_ID="$(vault kv get --field=juju_client_id "secret/groups/$IAM_GROUP/service_account")"; \
+    JUJU_CLIENT_SECRET="$(vault kv get --field=juju_client_secret "secret/groups/$IAM_GROUP/service_account")"; \
+    export JUJU_CLIENT_ID JUJU_CLIENT_SECRET; \
+    juju login "$JUJU_ENDPOINT_ADDRESS" -c "$CONTROLLER_NAME"
+
+# Verify Vault AppRole credentials and the existing machine model.
+preflight: check
+    @vault token lookup >/dev/null 2>&1 || { \
+        echo "Vault is not authenticated; run: just vault-login" >&2; exit 1; \
+    }
+    @for field in vault_role_id vault_secret_id; do \
+        value="$(vault kv get --field="$field" "secret/groups/$IAM_GROUP/service_account")" || { \
+            echo "Cannot read $field from secret/groups/$IAM_GROUP/service_account" >&2; exit 1; \
+        }; \
+        test -n "$value" || { \
+            echo "Empty $field at secret/groups/$IAM_GROUP/service_account" >&2; exit 1; \
+        }; \
+    done
+    @juju models -c "$CONTROLLER_NAME" --format json | \
+        jq -e --arg name "$MODEL_NAME" \
+        '.models[] | select(."short-name" == $name and ."model-type" == "iaas")' >/dev/null || { \
+            echo "JAAS model $MODEL_NAME is absent or is not a machine model" >&2; exit 1; \
+        }
+    @juju show-offer "$CONTROLLER_NAME:$HAPROXY_ROUTE_TCP_OFFER_URL" \
+        --format json >/dev/null || { \
+            echo "HAProxy TCP offer is not consumable: $HAPROXY_ROUTE_TCP_OFFER_URL" >&2; \
+            exit 1; \
+        }
+    @echo "Preflight passed for $CONTROLLER_NAME:$MODEL_NAME"
+
+# Generate persistent local mail secrets for temporary staging validation.
+mail-secrets:
+    @command -v openssl >/dev/null || { echo "Missing command: openssl" >&2; exit 1; }; \
+    umask 077; \
+    mkdir -p .mail-secrets; \
+    test -s .mail-secrets/luks-key || \
+        openssl rand -base64 48 > .mail-secrets/luks-key; \
+    test -s .mail-secrets/dkim.private || \
+        openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+            -out .mail-secrets/dkim.private 2>/dev/null; \
+    chmod 600 .mail-secrets/luks-key .mail-secrets/dkim.private; \
+    echo "Temporary mail secrets are ready in .mail-secrets/"
+
+# Generate ignored Terraform inputs from .env and the existing JAAS model.
+configure: preflight
+    @MODEL_UUID="$(juju models -c "$CONTROLLER_NAME" --format json | \
+        jq -er --arg name "$MODEL_NAME" \
+        '.models[] | select(."short-name" == $name) | ."model-uuid"')"; \
+    DOVECOT_RELAY_HOST="$(jq -r '.dovecot_relay_host // ""' \
+        staging.auto.tfvars.json 2>/dev/null || true)"; \
+    DOVECOT_BACKEND_ADDRESS="$(jq -r '.dovecot_backend_address // ""' \
+        staging.auto.tfvars.json 2>/dev/null || true)"; \
+    DOVECOT_MACHINE_ID="$(jq -r '.dovecot_machine_id // ""' \
+        staging.auto.tfvars.json 2>/dev/null || true)"; \
+    DEFAULT_DOVECOT_PRIMARY_UNIT="$DOVECOT_PRIMARY_UNIT"; \
+    DOVECOT_PRIMARY_UNIT="$(jq -r '.dovecot_primary_unit // ""' \
+        staging.auto.tfvars.json 2>/dev/null || true)"; \
+    DOVECOT_PRIMARY_UNIT="${DOVECOT_PRIMARY_UNIT:-$DEFAULT_DOVECOT_PRIMARY_UNIT}"; \
+    POSTFIX_BACKEND_ADDRESS="$(jq -r '.postfix_backend_address // ""' \
+        staging.auto.tfvars.json 2>/dev/null || true)"; \
+    POSTFIX_MACHINE_ID="$(jq -r '.postfix_machine_id // ""' \
+        staging.auto.tfvars.json 2>/dev/null || true)"; \
+    jq -n \
+        --arg juju_model_uuid "$MODEL_UUID" \
+        --arg mail_domain "$MAIL_DOMAIN" \
+        --arg postmaster_address "$POSTMASTER_ADDRESS" \
+        --arg dovecot_relay_host "$DOVECOT_RELAY_HOST" \
+        --arg dovecot_backend_address "$DOVECOT_BACKEND_ADDRESS" \
+        --arg dovecot_machine_id "$DOVECOT_MACHINE_ID" \
+        --arg dovecot_primary_unit "$DOVECOT_PRIMARY_UNIT" \
+        --arg dovecot_storage "$DOVECOT_STORAGE" \
+        --arg haproxy_route_tcp_offer_url "$HAPROXY_ROUTE_TCP_OFFER_URL" \
+        --argjson imaps_frontend_port "$IMAPS_FRONTEND_PORT" \
+        --arg postfix_backend_address "$POSTFIX_BACKEND_ADDRESS" \
+        --arg postfix_machine_id "$POSTFIX_MACHINE_ID" \
+        --argjson smtp_frontend_port "$SMTP_FRONTEND_PORT" \
+        '{ \
+          juju_model_uuid: $juju_model_uuid, \
+          mail_domain: $mail_domain, \
+          postmaster_address: $postmaster_address, \
+          dovecot_relay_host: $dovecot_relay_host, \
+          dovecot_backend_address: $dovecot_backend_address, \
+          dovecot_machine_id: $dovecot_machine_id, \
+          dovecot_primary_unit: $dovecot_primary_unit, \
+          dovecot_storage: $dovecot_storage, \
+          haproxy_route_tcp_offer_url: $haproxy_route_tcp_offer_url, \
+          imaps_frontend_port: $imaps_frontend_port, \
+          postfix_backend_address: $postfix_backend_address, \
+          postfix_machine_id: $postfix_machine_id, \
+          smtp_frontend_port: $smtp_frontend_port \
+        }' > staging.auto.tfvars.json; \
+    chmod 600 staging.auto.tfvars.json; \
+    echo "Configured model UUID $MODEL_UUID"
+
+# Export Vault AppRole and temporary mail credentials for one Terraform command.
+terraform command: mail-secrets
+    eval "$(just terraform-env)"; \
+    terraform {{ command }}
+
+# Print shell exports consumed internally by the terraform recipe.
+[private]
+terraform-env:
+    @TF_VAR_approle_role_id="$(vault kv get --field=vault_role_id "secret/groups/$IAM_GROUP/service_account")"; \
+    TF_VAR_approle_secret_id="$(vault kv get --field=vault_secret_id "secret/groups/$IAM_GROUP/service_account")"; \
+    TF_VAR_luks_key="$(<.mail-secrets/luks-key)"; \
+    TF_VAR_dkim_private_key="$(<.mail-secrets/dkim.private)"; \
+    test -n "$TF_VAR_approle_role_id" && test -n "$TF_VAR_approle_secret_id"; \
+    printf 'export TF_VAR_approle_role_id=%q\n' "$TF_VAR_approle_role_id"; \
+    printf 'export TF_VAR_approle_secret_id=%q\n' "$TF_VAR_approle_secret_id"; \
+    printf 'export TF_VAR_luks_key=%q\n' "$TF_VAR_luks_key"; \
+    printf 'export TF_VAR_dkim_private_key=%q\n' "$TF_VAR_dkim_private_key"
+
+# Initialize the temporary local backend and providers.
+init: configure
+    just terraform "init -upgrade -reconfigure"
+
+# Review the initial deployment with Postfix routing intentionally unset.
+plan: init
+    just terraform "plan -out=staging.tfplan"
+    just terraform "show staging.tfplan"
+
+# Deploy Dovecot, OpenDKIM, and Postfix Relay into the existing model.
+apply: plan
+    just terraform "apply staging.tfplan"
+    rm -f staging.tfplan
+
+# Discover mail backends and configure Postfix plus HAProxy TCP routing.
+wire-dovecot: configure
+    @MODEL_UUID="$(jq -er '.juju_model_uuid' staging.auto.tfvars.json)"; \
+    juju wait-for application dovecot \
+        -m "$CONTROLLER_NAME:$MODEL_UUID" --timeout=30m; \
+    juju wait-for application postfix-relay \
+        -m "$CONTROLLER_NAME:$MODEL_UUID" --timeout=30m; \
+    STATUS="$(juju status -m "$CONTROLLER_NAME:$MODEL_UUID" --format json)"; \
+    DOVECOT_IP="$(jq -er \
+        '.applications.dovecot.units | to_entries | first | .value["public-address"]' \
+        <<<"$STATUS")"; \
+    DOVECOT_MACHINE_ID="$(jq -er \
+        '.applications.dovecot.units | to_entries | first | .value.machine' \
+        <<<"$STATUS")"; \
+    DOVECOT_PRIMARY_UNIT="$(jq -er \
+        '.applications.dovecot.units | keys | first' <<<"$STATUS")"; \
+    POSTFIX_IP="$(jq -er \
+        '.applications["postfix-relay"].units | to_entries | first | .value["public-address"]' \
+        <<<"$STATUS")"; \
+    POSTFIX_MACHINE_ID="$(jq -er \
+        '.applications["postfix-relay"].units | to_entries | first | .value.machine' \
+        <<<"$STATUS")"; \
+    jq --arg dovecot "$DOVECOT_IP" --arg dovecot_machine "$DOVECOT_MACHINE_ID" \
+        --arg dovecot_primary "$DOVECOT_PRIMARY_UNIT" \
+        --arg postfix "$POSTFIX_IP" --arg postfix_machine "$POSTFIX_MACHINE_ID" \
+        '.dovecot_relay_host = $dovecot | \
+         .dovecot_backend_address = $dovecot | \
+         .dovecot_machine_id = $dovecot_machine | \
+         .dovecot_primary_unit = $dovecot_primary | \
+         .postfix_backend_address = $postfix | \
+         .postfix_machine_id = $postfix_machine' \
+        staging.auto.tfvars.json > staging.auto.tfvars.json.tmp; \
+    mv staging.auto.tfvars.json.tmp staging.auto.tfvars.json; \
+    chmod 600 staging.auto.tfvars.json; \
+    echo "Dovecot backend: $DOVECOT_IP on machine $DOVECOT_MACHINE_ID ($DOVECOT_PRIMARY_UNIT)"; \
+    echo "Postfix backend: $POSTFIX_IP on machine $POSTFIX_MACHINE_ID"; \
+    just terraform "plan -out=wire-dovecot.tfplan"; \
+    just terraform "apply wire-dovecot.tfplan"; \
+    rm -f wire-dovecot.tfplan; \
+    juju wait-for application dovecot-imaps-ingress \
+        -m "$CONTROLLER_NAME:$MODEL_UUID" --timeout=30m; \
+    juju wait-for application postfix-smtp-ingress \
+        -m "$CONTROLLER_NAME:$MODEL_UUID" --timeout=30m
+
+# Complete a two-stage deployment and routing update.
+deploy: apply wire-dovecot
+    @echo "Deployment complete: $CONTROLLER_NAME:$MODEL_NAME"
+
+# Show applications and relations through JAAS.
+status:
+    @MODEL_UUID="$(jq -er '.juju_model_uuid' staging.auto.tfvars.json)"; \
+    juju status -m "$CONTROLLER_NAME:$MODEL_UUID" --relations
+
+# Verify both TCP configurators and print their infrastructure-managed endpoints.
+ingress-status:
+    @MODEL_UUID="$(jq -er '.juju_model_uuid' staging.auto.tfvars.json)"; \
+    MODEL="$CONTROLLER_NAME:$MODEL_UUID"; \
+    STATUS="$(juju status -m "$MODEL" --format json)"; \
+    for APP in dovecot-imaps-ingress postfix-smtp-ingress; do \
+        jq -e --arg app "$APP" \
+            '.applications[$app]["application-status"].current == "active"' \
+            <<<"$STATUS" >/dev/null || { echo "$APP is not active" >&2; exit 1; }; \
+    done; \
+    getent hosts "$HAPROXY_FRONTEND_ADDRESS" >/dev/null || { \
+        echo "Cannot resolve $HAPROXY_FRONTEND_ADDRESS" >&2; exit 1; \
+    }; \
+    echo "IMAPS: $HAPROXY_FRONTEND_ADDRESS:$IMAPS_FRONTEND_PORT -> Dovecot:993"; \
+    echo "SMTP:  $HAPROXY_FRONTEND_ADDRESS:$SMTP_FRONTEND_PORT -> Postfix:25"
+
+# Watch until the operator stops the command with Ctrl-C.
+watch:
+    @MODEL_UUID="$(jq -er '.juju_model_uuid' staging.auto.tfvars.json)"; \
+    juju status -m "$CONTROLLER_NAME:$MODEL_UUID" --relations --watch 5s
+
+# Create test users, send with sendmail, verify DKIM/IMAP storage, and reject open relay.
+test:
+    @MODEL_UUID="$(jq -er '.juju_model_uuid' staging.auto.tfvars.json)"; \
+    CONTROLLER_NAME="$CONTROLLER_NAME" MODEL_UUID="$MODEL_UUID" \
+        MAIL_DOMAIN="$MAIL_DOMAIN" EXPECT_DKIM="${EXPECT_DKIM:-false}" ./test.sh
+
+# Review destruction without applying it.
+plan-destroy:
+    just terraform "plan -destroy -out=destroy.tfplan"
+    just terraform "show destroy.tfplan"
+
+# Destroy only resources in this Terraform state; the pre-existing model remains.
+destroy:
+    just terraform "plan -destroy -out=destroy.tfplan"
+    just terraform "apply destroy.tfplan"
+    rm -f destroy.tfplan
