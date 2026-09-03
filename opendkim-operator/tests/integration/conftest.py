@@ -10,6 +10,7 @@ from collections.abc import Generator
 
 import jubilant
 import pytest
+from opcli.pytest_plugin import CharmPathList
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +18,9 @@ OPENDKIM_SNAP_DIR = pathlib.Path(__file__).resolve().parents[3] / "opendkim-snap
 
 
 @pytest.fixture(scope="module", name="opendkim_charm")
-def opendkim_charm_fixture(pytestconfig: pytest.Config):
-    """Get value from parameter charm-file."""
-    charm = pytestconfig.getoption("--charm-file")
-    use_existing = pytestconfig.getoption("--use-existing", default=False)
-    if not use_existing:
-        assert charm, "--charm-file must be set"
-    return charm
+def opendkim_charm_fixture(charm_paths: dict[str, CharmPathList]) -> str:
+    """Return the path to the OpenDKIM charm."""
+    return charm_paths["opendkim"].path
 
 
 @pytest.fixture(scope="module", name="opendkim_app")

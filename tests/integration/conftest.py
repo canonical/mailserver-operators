@@ -10,8 +10,8 @@ from collections.abc import Generator
 import jubilant
 import pytest
 import yaml
-
-from helpers import integrate_once, select_charm_file, sha512_dovecot_password
+from helpers import integrate_once, sha512_dovecot_password
+from opcli.pytest_plugin import CharmPathList
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +25,6 @@ SMTP_PORT = 587
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add integration test command-line options."""
-    parser.addoption(
-        "--charm-file",
-        action="append",
-        default=[],
-        help="Path to charm file (can be used multiple times)",
-    )
     parser.addoption(
         "--use-existing",
         action="store_true",
@@ -48,6 +42,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Keep temporary models after tests complete",
     )
+
 
 @pytest.fixture(scope="module", name="juju")
 def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, None, None]:
@@ -85,7 +80,7 @@ def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, Non
 @pytest.fixture(scope="module", name="postfix_stack")
 def postfix_stack_fixture(
     juju: jubilant.Juju,
-    pytestconfig: pytest.Config,
+    charm_paths: dict[str, CharmPathList],
 ) -> typing.Dict[str, str]:
     """Deploy postfix-relay + postfix-relay-configurator configured for sender_login enforcement.
 
@@ -102,11 +97,8 @@ def postfix_stack_fixture(
     # --- postfix-relay ---
     auth_password = "test-password"
     if not juju.status().apps.get(POSTFIX_RELAY_APP):
-        charm_path = select_charm_file(pytestconfig, "postfix-relay_")
-        if not charm_path.startswith(("./", "/")):
-            charm_path = f"./{charm_path}"
         juju.deploy(
-            charm_path,
+            charm_paths["postfix-relay"].path,
             app=POSTFIX_RELAY_APP,
             config={
                 "relay_domains": f"- {TEST_DOMAIN}",
@@ -126,11 +118,8 @@ def postfix_stack_fixture(
     # --- postfix-relay-configurator ---
     authorized_sender = f"authorized@{TEST_DOMAIN}"
     if not juju.status().apps.get(CONFIGURATOR_APP):
-        charm_path = select_charm_file(pytestconfig, "postfix-relay-configurator_")
-        if not charm_path.startswith(("./", "/")):
-            charm_path = f"./{charm_path}"
         juju.deploy(
-            charm_path,
+            charm_paths["postfix-relay-configurator"].path,
             app=CONFIGURATOR_APP,
             config={
                 "sender_login_maps": yaml.dump({authorized_sender: "testuser"}),

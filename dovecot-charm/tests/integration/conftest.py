@@ -7,6 +7,7 @@ import typing
 
 import jubilant
 import pytest
+from opcli.pytest_plugin import CharmPathList
 
 from .helpers import setup_gdpr_test_user, teardown_gdpr_test_user
 
@@ -53,11 +54,9 @@ def juju_fixture(request: pytest.FixtureRequest):
 
 
 @pytest.fixture(scope="module", name="charm")
-def charm_fixture(pytestconfig: pytest.Config) -> str:
-    """Get value from parameter charm-file."""
-    charm = pytestconfig.getoption("--charm-file")
-    assert charm, "--charm-file must be set"
-    return charm
+def charm_fixture(charm_paths: dict[str, CharmPathList]) -> str:
+    """Return the path to the Dovecot charm."""
+    return charm_paths["dovecot"].path
 
 
 @pytest.fixture(scope="module")

@@ -28,11 +28,6 @@ integration-suites:
     pytest-arguments-template: |
       -x
       --log-format="%(asctime)s %(levelname)s %(message)s"
-      {% for charm in artifacts.charms if charm.name in ["postfix-relay", "postfix-relay-configurator"] %}
-      {% for build in charm.builds if build.arch == arch %}
-      --charm-file={{ env.get("SPREAD_PATH", ".") }}/{{ build.path }}
-      {% endfor %}
-      {% endfor %}
   dovecot-charm/tests/integration/:
     summary: Dovecot integration tests
     working-dir: dovecot-charm/
@@ -41,11 +36,6 @@ integration-suites:
     pytest-arguments-template: |
       -x
       --log-format="%(asctime)s %(levelname)s %(message)s"
-      {% for charm in artifacts.charms if charm.name == "dovecot" %}
-      {% for build in charm.builds if build.arch == arch %}
-      --charm-file={{ env.get("SPREAD_PATH", ".") }}/{{ build.path }}
-      {% endfor %}
-      {% endfor %}
   opendkim-operator/tests/integration/:
     summary: OpenDKIM integration tests
     working-dir: opendkim-operator/
@@ -56,11 +46,6 @@ integration-suites:
     pytest-arguments-template: |
       -x
       --log-format="%(asctime)s %(levelname)s %(message)s"
-      {% for charm in artifacts.charms if charm.name == "opendkim" %}
-      {% for build in charm.builds if build.arch == arch %}
-      --charm-file={{ env.get("SPREAD_PATH", ".") }}/{{ build.path }}
-      {% endfor %}
-      {% endfor %}
   postfix-relay-operator/tests/integration/:
     summary: Postfix relay integration tests
     working-dir: postfix-relay-operator/
@@ -71,8 +56,3 @@ integration-suites:
     pytest-arguments-template: |
       -x
       --log-format="%(asctime)s %(levelname)s %(message)s"
-      {% for charm in artifacts.charms if charm.name == "postfix-relay" %}
-      {% for build in charm.builds if build.arch == arch %}
-      --charm-file={{ charm.name }}={{ env.get("SPREAD_PATH", ".") }}/{{ build.path }}
-      {% endfor %}
-      {% endfor %}
