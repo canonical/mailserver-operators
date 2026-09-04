@@ -11,23 +11,18 @@ import pytest
 from opcli.pytest_plugin import CharmPathList
 
 
-@pytest.fixture(scope="session", name="postfix_relay_charm")
-def postfix_relay_charm_fixture(charm_paths: dict[str, CharmPathList]) -> str:
-    """Pytest fixture that returns the path to the postfix-relay charm."""
-    return charm_paths["postfix-relay"].path
-
-
 @pytest.fixture(scope="module", name="postfix_relay_app")
 def deploy_postfix_relay_fixture(
-    postfix_relay_charm: str,
     juju: jubilant.Juju,
+    request: pytest.FixtureRequest,
 ) -> str:
     """Deploy postfix-relay."""
     postfix_relay_app_name = "postfix-relay"
 
     if not juju.status().apps.get(postfix_relay_app_name):
+        charm_paths = typing.cast(dict[str, CharmPathList], request.getfixturevalue("charm_paths"))
         juju.deploy(
-            postfix_relay_charm,
+            charm_paths["postfix-relay"].path,
             postfix_relay_app_name,
         )
 

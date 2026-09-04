@@ -17,23 +17,18 @@ logger = logging.getLogger(__name__)
 OPENDKIM_SNAP_DIR = pathlib.Path(__file__).resolve().parents[3] / "opendkim-snap"
 
 
-@pytest.fixture(scope="module", name="opendkim_charm")
-def opendkim_charm_fixture(charm_paths: dict[str, CharmPathList]) -> str:
-    """Return the path to the OpenDKIM charm."""
-    return charm_paths["opendkim"].path
-
-
 @pytest.fixture(scope="module", name="opendkim_app")
 def deploy_opendkim_fixture(
-    opendkim_charm: str,
     juju: jubilant.Juju,
+    request: pytest.FixtureRequest,
 ) -> str:
     """Deploy opendkim and replace the store snap with the locally-built one."""
     deploy_opendkim_name = "opendkim"
 
     if not juju.status().apps.get(deploy_opendkim_name):
+        charm_paths = typing.cast(dict[str, CharmPathList], request.getfixturevalue("charm_paths"))
         juju.deploy(
-            opendkim_charm,
+            charm_paths["opendkim"].path,
             deploy_opendkim_name,
         )
         # Wait for the charm to settle (blocked because not configured, or waiting).

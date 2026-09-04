@@ -23,6 +23,12 @@ TEST_DOMAIN = "mailstack.internal"
 SMTP_PORT = 587
 
 
+def _get_charm_path(request: pytest.FixtureRequest, charm_name: str) -> str:
+    """Resolve a charm path only when its application needs deployment."""
+    charm_paths = typing.cast(dict[str, CharmPathList], request.getfixturevalue("charm_paths"))
+    return charm_paths[charm_name].path
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add integration test command-line options."""
     parser.addoption(
@@ -80,7 +86,7 @@ def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, Non
 @pytest.fixture(scope="module", name="postfix_stack")
 def postfix_stack_fixture(
     juju: jubilant.Juju,
-    charm_paths: dict[str, CharmPathList],
+    request: pytest.FixtureRequest,
 ) -> typing.Dict[str, str]:
     """Deploy postfix-relay + postfix-relay-configurator configured for sender_login enforcement.
 
@@ -98,7 +104,7 @@ def postfix_stack_fixture(
     auth_password = "test-password"
     if not juju.status().apps.get(POSTFIX_RELAY_APP):
         juju.deploy(
-            charm_paths["postfix-relay"].path,
+            _get_charm_path(request, "postfix-relay"),
             app=POSTFIX_RELAY_APP,
             config={
                 "relay_domains": f"- {TEST_DOMAIN}",
@@ -119,7 +125,7 @@ def postfix_stack_fixture(
     authorized_sender = f"authorized@{TEST_DOMAIN}"
     if not juju.status().apps.get(CONFIGURATOR_APP):
         juju.deploy(
-            charm_paths["postfix-relay-configurator"].path,
+            _get_charm_path(request, "postfix-relay-configurator"),
             app=CONFIGURATOR_APP,
             config={
                 "sender_login_maps": yaml.dump({authorized_sender: "testuser"}),
