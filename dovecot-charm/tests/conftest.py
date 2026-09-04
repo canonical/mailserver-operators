@@ -19,7 +19,6 @@ def pytest_addoption(parser: Parser) -> None:
         help="Keep test models after tests complete",
     )
     parser.addoption("--model", action="store", help="Juju model to use")
-    parser.addoption("--charm-file", action="store", help="Charm file to be deployed")
     parser.addoption(
         "--use-existing",
         action="store_true",

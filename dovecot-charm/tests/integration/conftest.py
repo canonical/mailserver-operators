@@ -7,6 +7,7 @@ import typing
 
 import jubilant
 import pytest
+from opcli.pytest_plugin import CharmPathList
 
 from .helpers import setup_gdpr_test_user, teardown_gdpr_test_user
 
@@ -28,6 +29,12 @@ GDPR_TEST_PASSWORD = secrets.token_hex(16)
 CREATE_MAIL_USER_TEST_USER = "cmu-testuser"
 CREATE_MAIL_USER_TEST_MAILBOX = "cmu-testuser@example.com"
 CREATE_MAIL_USER_TEST_PASSWORD = secrets.token_hex(16)
+
+
+def _get_charm_path(request: pytest.FixtureRequest) -> str:
+    """Resolve the Dovecot charm path only when deployment is required."""
+    charm_paths = typing.cast(dict[str, CharmPathList], request.getfixturevalue("charm_paths"))
+    return charm_paths["dovecot"].path
 
 
 @pytest.fixture(scope="session", name="juju")
@@ -52,18 +59,10 @@ def juju_fixture(request: pytest.FixtureRequest):
         return
 
 
-@pytest.fixture(scope="module", name="charm")
-def charm_fixture(pytestconfig: pytest.Config) -> str:
-    """Get value from parameter charm-file."""
-    charm = pytestconfig.getoption("--charm-file")
-    assert charm, "--charm-file must be set"
-    return charm
-
-
 @pytest.fixture(scope="module")
 def dovecot_charm(
-    charm: str,
     juju: jubilant.Juju,
+    request: pytest.FixtureRequest,
     tls_charm: str,
 ) -> str:
     """Build and deploy the charm."""
@@ -73,6 +72,7 @@ def dovecot_charm(
     if not juju.status().apps.get(APP_NAME):
         logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
 
+        charm = _get_charm_path(request)
         secret_id = juju.cli("add-secret", "dovecot-luks-key", f"key={luks_key}").strip()
         logging.info(f"Created LUKS secret: {secret_id}")
 
@@ -106,8 +106,8 @@ def dovecot_charm(
 
 @pytest.fixture(scope="module")
 def dovecot_charm_manual_storage(
-    charm: str,
     juju: jubilant.Juju,
+    request: pytest.FixtureRequest,
     tls_charm: str,
 ) -> str:
     """Build and deploy the charm."""
@@ -117,6 +117,7 @@ def dovecot_charm_manual_storage(
     if not juju.status().apps.get(charm_name):
         logging.info(f"Application {charm_name} not found, proceeding with deployment.")
 
+        charm = _get_charm_path(request)
         config = {
             "mailname": MAILNAME,
             "postmaster-address": f"postmaster@{MAILNAME}",
@@ -162,8 +163,8 @@ def tls_charm(juju: jubilant.Juju) -> str:
 
 @pytest.fixture(scope="module")
 def dovecot_charm_dual_unit(
-    charm: str,
     juju: jubilant.Juju,
+    request: pytest.FixtureRequest,
     tls_charm: str,
 ) -> str:
     """Build and deploy the charm."""
@@ -173,6 +174,7 @@ def dovecot_charm_dual_unit(
     if not juju.status().apps.get(APP_NAME):
         logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
 
+        charm = _get_charm_path(request)
         secret_id = juju.cli("add-secret", "dovecot-luks-key", f"key={luks_key}").strip()
         logging.info(f"Created LUKS secret: {secret_id}")
 

@@ -14,18 +14,10 @@ import ssl
 import typing
 
 import pytest
+from conftest import AUTHORIZED_SENDER, SMTP_PORT, TEST_DOMAIN, TEST_SMTP_PASSWORD, TEST_SMTP_USER
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Test-specific constants
-# ---------------------------------------------------------------------------
-TEST_DOMAIN = "mailstack.internal"
-SMTP_PORT = 587
-
-AUTH_USER = "testuser"
-AUTH_PASSWORD = "test-password"
-AUTHORIZED_SENDER = f"authorized@{TEST_DOMAIN}"
 SPOOFED_SENDER = f"spoofed@{TEST_DOMAIN}"
 RECIPIENT = f"recipient@{TEST_DOMAIN}"
 
@@ -49,7 +41,7 @@ class TestSenderLoginMapEnforcement:
             smtp.ehlo()
             smtp.starttls(context=ctx)
             smtp.ehlo()
-            smtp.login(AUTH_USER, AUTH_PASSWORD)
+            smtp.login(TEST_SMTP_USER, TEST_SMTP_PASSWORD)
             smtp.sendmail(
                 from_addr=AUTHORIZED_SENDER,
                 to_addrs=[RECIPIENT],
@@ -63,7 +55,9 @@ class TestSenderLoginMapEnforcement:
             )
             logger.info("Success case: message from %s accepted", AUTHORIZED_SENDER)
 
-    def test_sender_login_map_enforcement_failure(self, postfix_stack: typing.Dict[str, str]) -> None:
+    def test_sender_login_map_enforcement_failure(
+        self, postfix_stack: typing.Dict[str, str]
+    ) -> None:
         """Spoofed user cannot send from an unauthorized address."""
         relay_ip = postfix_stack["postfix_relay_ip"]
 
@@ -76,7 +70,7 @@ class TestSenderLoginMapEnforcement:
             smtp.ehlo()
             smtp.starttls(context=ctx)
             smtp.ehlo()
-            smtp.login(AUTH_USER, AUTH_PASSWORD)
+            smtp.login(TEST_SMTP_USER, TEST_SMTP_PASSWORD)
             with pytest.raises(smtplib.SMTPRecipientsRefused) as exc_info:
                 smtp.sendmail(
                     from_addr=SPOOFED_SENDER,
@@ -102,5 +96,6 @@ class TestSenderLoginMapEnforcement:
                 smtp_code,
             )
             assert smtp_code == 553, (
-                f"Expected 553 Sender address rejected, got {smtp_code}: {smtp_error}"
+                f"Expected 553 Sender address rejected, got {smtp_code}: "
+                f"{smtp_error.decode(errors='replace')}"
             )
