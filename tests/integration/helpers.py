@@ -6,10 +6,8 @@
 import base64
 import hashlib
 import logging
-import pathlib
 
 import jubilant
-import pytest
 
 logger = logging.getLogger(__name__)
 
@@ -37,16 +35,3 @@ def integrate_once(juju: jubilant.Juju, endpoint_a: str, endpoint_b: str) -> Non
         if "already exists" not in msg and "already related" not in msg:
             raise
         logger.debug("Relation %s ↔ %s already exists, skipping", endpoint_a, endpoint_b)
-
-
-def select_charm_file(pytestconfig: pytest.Config, marker: str) -> str:
-    """Select charm file matching marker from --charm-file options."""
-    charm_files: list[str] = pytestconfig.getoption("--charm-file", default=[])
-    for path in charm_files:
-        if marker in pathlib.Path(path).name.lower():
-            return path
-    use_existing = pytestconfig.getoption("--use-existing", default=False)
-    if use_existing:
-        return ""
-    provided = ", ".join(charm_files) if charm_files else "<none>"
-    raise AssertionError(f"Missing --charm-file matching '{marker}'. Provided: {provided}.")

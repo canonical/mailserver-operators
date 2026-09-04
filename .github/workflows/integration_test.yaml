@@ -6,63 +6,29 @@ on:
   - cron: "0 15 * * SAT"
 
 jobs:
-  integration-tests-juju-3:
-    strategy:
-      matrix:
-        charm:
-          - name: dovecot
-            working-directory: ./dovecot-charm
-            modules: |
-              [
-                "test_action.py",
-                "test_config.py",
-                "test_ha.py",
-                "test_mail.py",
-                "test_observability.py",
-                "test_storage.py",
-                "test_tls.py"
-              ]
-          - name: opendkim-operator
-            working-directory: ./opendkim-operator
-            modules: '["test_charm.py"]'
-            pre-run-script: ./opendkim-operator/tests/integration/setup-integration-tests.sh
-          - name: postfix-relay-operator
-            working-directory: ./postfix-relay-operator
-            modules: '["test_charm.py"]'
-            pre-run-script: ./postfix-relay-operator/tests/integration/mailcatcher-installation.sh
-    name: Integration tests for ${{ matrix.charm.name }}
-    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
-    secrets: inherit
+  integration-test:
+    uses: canonical/charm-ci/.github/workflows/integration-test.yml@58ae6614a3b143d4e57eff0fd1770e97d8c30fab # v1.0.1
+    permissions:
+      actions: read
+      contents: read
+      packages: write
     with:
       charmcraft-channel: latest/edge
-      extra-arguments: '-x --log-format="%(asctime)s %(levelname)s %(message)s"'
-      juju-channel: 3/stable
-      modules: ${{ matrix.charm.modules }}
-      pre-run-script: ${{ matrix.charm.pre-run-script }}
-      provider: lxd
-      self-hosted-runner: true
-      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
-      trivy-fs-enabled: false
-      with-uv: true
-      working-directory: ${{ matrix.charm.working-directory }}
-  integration-tests-global:
-    uses:
-      canonical/operator-workflows/.github/workflows/integration_test.yaml@main
-    secrets: inherit
-    with:
-      juju-channel: 3/stable
-      modules: |
-        [
-          "test_configurator_maps.py"
-        ]
-      provider: lxd
-      self-hosted-runner: true
-      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
-      trivy-fs-enabled: false
-      with-uv: true
-  allure-report:
-    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+
+  required_status_checks:
+    name: Required Integration Test Status Checks
+    runs-on: ubuntu-latest
     needs:
-    - integration-tests-juju-3
-    - integration-tests-global
-    uses: canonical/operator-workflows/.github/workflows/allure_report.yaml@main
+      - integration-test
+    if: always() && !cancelled()
+    timeout-minutes: 5
+    steps:
+      - name: Check integration-test status
+        run: |
+          RESULT="${{ needs.integration-test.result }}"
+          if [ "$RESULT" = "success" ] || [ "$RESULT" = "skipped" ]; then
+            exit 0
+          else
+            echo "integration-test failed with status: $RESULT"
+            exit 1
+          fi
