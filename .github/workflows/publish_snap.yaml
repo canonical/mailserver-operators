@@ -1,0 +1,33 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: Publish snap
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - opendkim-snap/**
+
+jobs:
+  build:
+    name: Build opendkim snap
+    uses: canonical/data-platform-workflows/.github/workflows/build_snap.yaml@v51.0.0
+    with:
+      path-to-snap-project-directory: ./opendkim-snap
+
+  release:
+    name: Release opendkim snap
+    needs:
+      - build
+    uses: canonical/data-platform-workflows/.github/workflows/release_snap_edge.yaml@v51.0.0
+    with:
+      path-to-snap-project-directory: ./opendkim-snap
+      track: latest
+      artifact-prefix: ${{ needs.build.outputs.artifact-prefix }}
+    secrets:
+      snap-store-token: ${{ secrets.SNAPSTORE_TOKEN }}
+    permissions:
+      contents: write  # Needed to create git tags
