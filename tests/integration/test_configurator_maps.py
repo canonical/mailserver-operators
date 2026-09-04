@@ -14,7 +14,6 @@ import ssl
 import typing
 
 import pytest
-
 from conftest import AUTHORIZED_SENDER, SMTP_PORT, TEST_DOMAIN, TEST_SMTP_PASSWORD, TEST_SMTP_USER
 
 logger = logging.getLogger(__name__)
@@ -56,7 +55,9 @@ class TestSenderLoginMapEnforcement:
             )
             logger.info("Success case: message from %s accepted", AUTHORIZED_SENDER)
 
-    def test_sender_login_map_enforcement_failure(self, postfix_stack: typing.Dict[str, str]) -> None:
+    def test_sender_login_map_enforcement_failure(
+        self, postfix_stack: typing.Dict[str, str]
+    ) -> None:
         """Spoofed user cannot send from an unauthorized address."""
         relay_ip = postfix_stack["postfix_relay_ip"]
 
@@ -95,5 +96,6 @@ class TestSenderLoginMapEnforcement:
                 smtp_code,
             )
             assert smtp_code == 553, (
-                f"Expected 553 Sender address rejected, got {smtp_code}: {smtp_error}"
+                f"Expected 553 Sender address rejected, got {smtp_code}: "
+                f"{smtp_error.decode(errors='replace')}"
             )

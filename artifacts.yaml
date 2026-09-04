@@ -20,4 +20,9 @@ charms:
   charmcraft-yaml: postfix-relay-operator/charmcraft.yaml
   platforms:
   - arch: amd64
-snaps: []
+snaps:
+- name: opendkim
+  snapcraft-yaml: opendkim-snap/snap/snapcraft.yaml
+  pack-dir: opendkim-snap/
+  platforms:
+  - arch: amd64

@@ -14,54 +14,21 @@ jobs:
       packages: write
     with:
       charmcraft-channel: latest/edge
-      extra-arguments: '-x --log-format="%(asctime)s %(levelname)s %(message)s"'
-      juju-channel: 3/stable
-      modules: ${{ matrix.charm.modules }}
-      pre-run-script: ${{ matrix.charm.pre-run-script }}
-      provider: lxd
-      self-hosted-runner: true
-      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
-      trivy-fs-enabled: false
-      with-uv: true
-      working-directory: ${{ matrix.charm.working-directory }}
-  integration-tests-global:
-    uses:
-      canonical/operator-workflows/.github/workflows/integration_test.yaml@main
-    secrets: inherit
-    with:
-      extra-arguments: '-x --log-format="%(asctime)s %(levelname)s %(message)s"'
-      juju-channel: 3/stable
-      modules: |
-        [
-          "test_configurator_maps.py"
-        ]
-      provider: lxd
-      self-hosted-runner: true
-      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
-      trivy-fs-enabled: false
-      with-uv: true
-  integration-tests-stack:
-    uses:
-      canonical/operator-workflows/.github/workflows/integration_test.yaml@main
-    secrets: inherit
-    with:
-      extra-arguments: '-x --log-format="%(asctime)s %(levelname)s %(message)s"'
-      test-tox-env: stack-integration
-      provider: lxd
-      trivy-fs-enabled: false
-      self-hosted-runner: true
-      self-hosted-runner-label: "self-hosted-linux-amd64-noble-large"
-      juju-channel: 3/stable
-      charmcraft-channel: latest/edge
-      modules: |
-        [
-          "test_e2e.py"
-        ]
-      with-uv: true
-  allure-report:
-    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+
+  required_status_checks:
+    name: Required Integration Test Status Checks
+    runs-on: ubuntu-latest
     needs:
-    - integration-tests-juju-3
-    - integration-tests-global
-    - integration-tests-stack
-    uses: canonical/operator-workflows/.github/workflows/allure_report.yaml@main
+      - integration-test
+    if: always() && !cancelled()
+    timeout-minutes: 5
+    steps:
+      - name: Check integration-test status
+        run: |
+          RESULT="${{ needs.integration-test.result }}"
+          if [ "$RESULT" = "success" ] || [ "$RESULT" = "skipped" ]; then
+            exit 0
+          else
+            echo "integration-test failed with status: $RESULT"
+            exit 1
+          fi

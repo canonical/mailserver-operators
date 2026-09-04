@@ -22,21 +22,26 @@ TLS for postfix-relay is provided by self-signed-certificates (CharmHub).
 """
 
 import base64
-from collections.abc import Generator
-import hashlib
 import json
 import logging
 import pathlib
-from secrets import token_hex
 import socket
 import typing
+from collections.abc import Generator
+from secrets import token_hex
 
 import jubilant
 import pytest
 import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-
+from helpers import (
+    integrate_once as _integrate_once,
+)
+from helpers import (
+    sha512_dovecot_password as _sha512_dovecot_password,
+)
+from opcli.pytest_plugin import CharmPathList
 
 logger = logging.getLogger(__name__)
 
@@ -61,17 +66,13 @@ OPENDKIM_SNAP_DIR = _REPO_ROOT / "opendkim-snap"
 
 SMTP_PORT = 587
 AUTHORIZED_SENDER = f"authorized@{TEST_DOMAIN}"
+
+
 # ---------------------------------------------------------------------------
 # pytest CLI options
 # ---------------------------------------------------------------------------
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Register extra CLI options consumed by the integration suite."""
-    parser.addoption(
-        "--charm-file",
-        action="append",
-        default=[],
-        help=("Path to a pre-built .charm file. Pass this option multiple times (one per charm)."),
-    )
     parser.addoption(
         "--keep-models",
         action="store_true",
@@ -92,39 +93,10 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-
-# ---------------------------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------------------------
-def _sha512_dovecot_password(password: str) -> str:
-    """Generate a SSHA512 password hash compatible with dovecot."""
-    salt = b"mailtest"
-    digest = hashlib.sha512(password.encode() + salt).digest()
-    return "{SSHA512}" + base64.b64encode(digest + salt).decode()
-
-
-def _integrate_once(juju: jubilant.Juju, endpoint_a: str, endpoint_b: str) -> None:
-    """Call ``juju integrate`` tolerating 'already related' errors."""
-    try:
-        juju.integrate(endpoint_a, endpoint_b)
-    except Exception as exc:  # noqa: BLE001
-        msg = str(exc)
-        if "already exists" not in msg and "already related" not in msg:
-            raise
-        logger.debug("Relation %s ↔ %s already exists, skipping", endpoint_a, endpoint_b)
-
-
-def _select_charm_file(pytestconfig: pytest.Config, marker: str) -> str:
-    """Select charm file matching marker from --charm-file options."""
-    charm_files: list[str] = pytestconfig.getoption("--charm-file", default=[])
-    for path in charm_files:
-        if marker in pathlib.Path(path).name.lower():
-            return path
-    use_existing = pytestconfig.getoption("--use-existing", default=False)
-    if use_existing:
-        return ""
-    provided = ", ".join(charm_files) if charm_files else "<none>"
-    raise AssertionError(f"Missing --charm-file matching '{marker}'. Provided: {provided}.")
+def _get_charm_path(request: pytest.FixtureRequest, charm_name: str) -> str:
+    """Resolve a charm path only when its application needs deployment."""
+    charm_paths = typing.cast(dict[str, CharmPathList], request.getfixturevalue("charm_paths"))
+    return charm_paths[charm_name].path
 
 
 # ---------------------------------------------------------------------------
@@ -133,12 +105,18 @@ def _select_charm_file(pytestconfig: pytest.Config, marker: str) -> str:
 @pytest.fixture(scope="session", name="juju")
 def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, None, None]:
     """Session-scoped Juju client in a temporary model for integration tests."""
-    logging.getLogger('jubilant.wait').setLevel(logging.WARNING)
+    logging.getLogger("jubilant.wait").setLevel(logging.WARNING)
+
+    def _show_debug_log(juju: jubilant.Juju) -> None:
+        if request.session.testsfailed:
+            print(juju.debug_log(limit=2000), end="")
+
     use_existing = request.config.getoption("--use-existing", default=False)
     if use_existing:
         juju = jubilant.Juju()
         juju.model_config({"automatically-retry-hooks": True})
         yield juju
+        _show_debug_log(juju)
         return
 
     model = request.config.getoption("--model")
@@ -146,6 +124,7 @@ def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, Non
         juju = jubilant.Juju(model=model)
         juju.model_config({"automatically-retry-hooks": True})
         yield juju
+        _show_debug_log(juju)
         return
 
     keep_models = typing.cast(bool, request.config.getoption("--keep-models"))
@@ -153,6 +132,7 @@ def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, Non
         juju.wait_timeout = 15 * 60
         juju.model_config({"automatically-retry-hooks": True})
         yield juju
+        _show_debug_log(juju)
         return
 
 
@@ -173,69 +153,6 @@ def machine_ip_address_fixture() -> str:
     s.close()
     logger.info("Test runner IP: %s", ip)
     return ip
-
-
-# ---------------------------------------------------------------------------
-# Charm-file fixtures
-# ---------------------------------------------------------------------------
-def _select_charm_file_for_app(pytestconfig: pytest.Config, app_name: str) -> str:
-    """Return a charm file path matching *app_name* from repeated --charm-file args."""
-    charm_files = typing.cast(list[str], pytestconfig.getoption("--charm-file"))
-    use_existing = pytestconfig.getoption("--use-existing", default=False)
-
-    # Match more specific names first to avoid postfix-relay matching configurator.
-    match_order = (
-        (CONFIGURATOR_APP, "postfix-relay-configurator"),
-        (POSTFIX_RELAY_APP, "postfix-relay"),
-        (DOVECOT_APP, "dovecot"),
-        (OPENDKIM_APP, "opendkim"),
-    )
-
-    app_to_path: dict[str, str] = {}
-    for path in charm_files:
-        name = pathlib.Path(path).name.lower()
-        for app, marker in match_order:
-            if marker in name:
-                app_to_path[app] = path
-                break
-
-    selected = app_to_path.get(app_name)
-    if selected:
-        return selected
-
-    if use_existing:
-        # In --use-existing mode, deployment may be skipped if apps already exist.
-        return ""
-
-    provided = ", ".join(charm_files) if charm_files else "<none>"
-    raise AssertionError(
-        f"Missing --charm-file for {app_name}. Provided: {provided}. "
-        "Pass one --charm-file per charm artifact."
-    )
-
-
-@pytest.fixture(scope="session", name="dovecot_charm_file")
-def dovecot_charm_file_fixture(pytestconfig: pytest.Config) -> str:
-    """Absolute path to the pre-built dovecot .charm file."""
-    return _select_charm_file_for_app(pytestconfig, DOVECOT_APP)
-
-
-@pytest.fixture(scope="session", name="postfix_relay_charm_file")
-def postfix_relay_charm_file_fixture(pytestconfig: pytest.Config) -> str:
-    """Absolute path to the pre-built postfix-relay .charm file."""
-    return _select_charm_file_for_app(pytestconfig, POSTFIX_RELAY_APP)
-
-
-@pytest.fixture(scope="session", name="opendkim_charm_file")
-def opendkim_charm_file_fixture(pytestconfig: pytest.Config) -> str:
-    """Absolute path to the pre-built opendkim .charm file."""
-    return _select_charm_file_for_app(pytestconfig, OPENDKIM_APP)
-
-
-@pytest.fixture(scope="session", name="configurator_charm_file")
-def configurator_charm_file_fixture(pytestconfig: pytest.Config) -> str:
-    """Absolute path to the pre-built postfix-relay-configurator .charm file."""
-    return _select_charm_file_for_app(pytestconfig, CONFIGURATOR_APP)
 
 
 # ---------------------------------------------------------------------------
@@ -336,17 +253,12 @@ def postfix_stack_fixture(
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session", name="opendkim_app")
 def deploy_opendkim_fixture(
-    opendkim_charm_file: str,
     juju: jubilant.Juju,
+    request: pytest.FixtureRequest,
 ) -> str:
     """Deploy opendkim and optionally replace the store snap with a local build."""
     if not juju.status().apps.get(OPENDKIM_APP):
-        charm_path = (
-            opendkim_charm_file
-            if opendkim_charm_file.startswith(("./", "/"))
-            else f"./{opendkim_charm_file}"
-        )
-        juju.deploy(charm_path, OPENDKIM_APP)
+        juju.deploy(_get_charm_path(request, "opendkim"), OPENDKIM_APP)
         # Charm starts blocked (not yet configured) or waiting for milter relation.
         juju.wait(
             lambda status: (
@@ -393,22 +305,17 @@ def _replace_opendkim_snap(juju: jubilant.Juju, app_name: str) -> None:
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session", name="dovecot_app")
 def deploy_dovecot_fixture(
-    dovecot_charm_file: str,
     self_signed_app: str,
     juju: jubilant.Juju,
+    request: pytest.FixtureRequest,
 ) -> str:
     """Deploy dovecot and wire up TLS."""
     luks_key = token_hex(16)
 
     if not juju.status().apps.get(DOVECOT_APP):
-        charm_path = (
-            dovecot_charm_file
-            if dovecot_charm_file.startswith(("./", "/"))
-            else f"./{dovecot_charm_file}"
-        )
         secret_id = juju.cli("add-secret", "dovecot-luks-key", f"key={luks_key}").strip()
         juju.deploy(
-            charm_path,
+            _get_charm_path(request, "dovecot"),
             app=DOVECOT_APP,
             config={
                 "mailname": TEST_DOMAIN,
@@ -439,19 +346,14 @@ def deploy_dovecot_fixture(
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session", name="postfix_relay_app")
 def deploy_postfix_relay_fixture(
-    postfix_relay_charm_file: str,
     self_signed_app: str,
     juju: jubilant.Juju,
+    request: pytest.FixtureRequest,
 ) -> str:
     """Deploy postfix-relay and integrate with TLS provider."""
     if not juju.status().apps.get(POSTFIX_RELAY_APP):
-        charm_path = (
-            postfix_relay_charm_file
-            if postfix_relay_charm_file.startswith(("./", "/"))
-            else f"./{postfix_relay_charm_file}"
-        )
         juju.deploy(
-            charm_path,
+            _get_charm_path(request, "postfix-relay"),
             app=POSTFIX_RELAY_APP,
             config={
                 "relay_domains": f"- {TEST_DOMAIN}",
@@ -466,9 +368,7 @@ def deploy_postfix_relay_fixture(
     _integrate_once(juju, f"{POSTFIX_RELAY_APP}:certificates", f"{self_signed_app}:certificates")
 
     juju.wait(
-        lambda status: (
-            status.apps[POSTFIX_RELAY_APP].is_active
-        ),
+        lambda status: status.apps[POSTFIX_RELAY_APP].is_active,
         timeout=15 * 60,
     )
     logger.info("postfix-relay is active")
@@ -477,25 +377,22 @@ def deploy_postfix_relay_fixture(
 
 @pytest.fixture(scope="session", name="postfix_relay_configurator_app")
 def deploy_postfix_relay_configurator_fixture(
-    configurator_charm_file: str,
     juju: jubilant.Juju,
+    request: pytest.FixtureRequest,
 ) -> str:
     """Deploy postfix-relay-configurator."""
     if not juju.status().apps.get(CONFIGURATOR_APP):
-        charm_path = (
-            configurator_charm_file
-            if configurator_charm_file.startswith(("./", "/"))
-            else f"./{configurator_charm_file}"
-        )
         juju.deploy(
-            charm_path,
+            _get_charm_path(request, "postfix-relay-configurator"),
             app=CONFIGURATOR_APP,
             config={
                 "sender_login_maps": yaml.dump({AUTHORIZED_SENDER: TEST_SMTP_USER}),
             },
         )
     else:
-        juju.config(CONFIGURATOR_APP, {"sender_login_maps": yaml.dump({AUTHORIZED_SENDER: TEST_SMTP_USER})})
+        juju.config(
+            CONFIGURATOR_APP, {"sender_login_maps": yaml.dump({AUTHORIZED_SENDER: TEST_SMTP_USER})}
+        )
     logger.info("postfix-relay-configurator deployed")
     return CONFIGURATOR_APP
 
@@ -526,7 +423,10 @@ def deploy_configurator_fixture(
     configurator_config = {
         "relay_access_sources": yaml.dump({"192.0.2.0/24": "OK"}),
         "relay_recipient_maps": yaml.dump(
-            {f"noreply@{TEST_DOMAIN}": f"postmaster@{TEST_DOMAIN}", f"{TEST_SMTP_USER}@{TEST_DOMAIN}": "OK"}
+            {
+                f"noreply@{TEST_DOMAIN}": f"postmaster@{TEST_DOMAIN}",
+                f"{TEST_SMTP_USER}@{TEST_DOMAIN}": "OK",
+            }
         ),
         "restrict_recipients": yaml.dump({"blocked-recipient@example.invalid": "REJECT"}),
         "restrict_senders": yaml.dump({"blocked-sender@example.invalid": "REJECT"}),
@@ -578,7 +478,6 @@ def configure_opendkim_fixture(
 
     Returns the opendkim app name once the app is active.
     """
-
     selector = "default"
     keyname = f"{TEST_DOMAIN.replace('.', '-')}-{selector}"
     _, private_key = generate_dkim_keypair(domain=TEST_DOMAIN, selector=selector)
@@ -624,7 +523,9 @@ def configure_opendkim_fixture(
     )
 
     juju.wait(
-        lambda status: jubilant.all_active(status, opendkim_app, postfix_stack["postfix_relay_app"]),
+        lambda status: jubilant.all_active(
+            status, opendkim_app, postfix_stack["postfix_relay_app"]
+        ),
         timeout=5 * 60,
         delay=5,
     )
@@ -651,7 +552,11 @@ def mail_stack_fixture(
     """
     juju.wait(
         lambda status: jubilant.all_active(
-            status, dovecot_app, postfix_stack["postfix_relay_app"], opendkim_configured, SELF_SIGNED_APP
+            status,
+            dovecot_app,
+            postfix_stack["postfix_relay_app"],
+            opendkim_configured,
+            SELF_SIGNED_APP,
         ),
         timeout=5 * 60,
     )
@@ -659,11 +564,15 @@ def mail_stack_fixture(
     status = juju.status()
     dovecot_ip = next(iter(status.apps[dovecot_app].units.values())).public_address
 
-    logger.info("Mail stack ready — dovecot: %s, postfix-relay: %s", dovecot_ip, postfix_stack["postfix_relay_ip"])
+    logger.info(
+        "Mail stack ready — dovecot: %s, postfix-relay: %s",
+        dovecot_ip,
+        postfix_stack["postfix_relay_ip"],
+    )
     return {
         "dovecot_app": dovecot_app,
         "opendkim_app": opendkim_configured,
         "configurator_app": configurator_app,
         "dovecot_ip": dovecot_ip,
-        **postfix_stack
+        **postfix_stack,
     }

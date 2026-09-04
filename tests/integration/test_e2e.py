@@ -17,7 +17,6 @@ from typing import Dict
 import jubilant
 import pytest
 import yaml
-
 from conftest import TEST_DOMAIN, TEST_SMTP_PASSWORD, TEST_SMTP_USER
 
 MAILBOX_USER = f"{TEST_SMTP_USER}@{TEST_DOMAIN}"
@@ -42,7 +41,12 @@ def test_e2e(juju: jubilant.Juju, mail_stack: Dict[str, str]) -> None:
     )
     assert action_result.status == "completed"
 
-    smtp_auth_users = yaml.dump([f"{MAILBOX_USER}:{_sha512_dovecot(TEST_SMTP_PASSWORD)}"])
+    smtp_auth_users = yaml.dump(
+        [
+            f"{TEST_SMTP_USER}:{_sha512_dovecot(TEST_SMTP_PASSWORD)}",
+            f"{MAILBOX_USER}:{_sha512_dovecot(TEST_SMTP_PASSWORD)}",
+        ]
+    )
     juju.config(
         "postfix-relay",
         {
@@ -101,6 +105,7 @@ def _wait_for_subject(host: str, username: str, password: str, subject: str) -> 
     ctx.verify_mode = ssl.CERT_NONE
 
     deadline = time.time() + 120
+    last_error: Exception | None = None
     while time.time() < deadline:
         try:
             conn = imaplib.IMAP4_SSL(host, port=IMAP_PORT, ssl_context=ctx)
@@ -110,15 +115,21 @@ def _wait_for_subject(host: str, username: str, password: str, subject: str) -> 
                 _, data = conn.search(None, f'(HEADER Subject "{subject}")')
                 if data and data[0]:
                     msg_id = data[0].split()[-1]
-                    _, msg_data = conn.fetch(msg_id, "(RFC822)")
-                    return msg_data[0][1]  # type: ignore[index]
+                    status, msg_data = conn.fetch(msg_id, "(RFC822)")
+                    if status == "OK" and msg_data:
+                        response = msg_data[0]
+                        if isinstance(response, tuple) and isinstance(response[1], bytes):
+                            return response[1]
             finally:
                 with contextlib.suppress(Exception):
                     conn.close()
                 with contextlib.suppress(Exception):
                     conn.logout()
-        except Exception:
-            pass
+        except (imaplib.IMAP4.error, OSError) as exc:
+            last_error = exc
         time.sleep(3)
 
-    pytest.fail(f"Message with subject '{subject}' did not arrive in IMAP inbox")
+    pytest.fail(
+        f"Message with subject '{subject}' did not arrive in IMAP inbox; "
+        f"last IMAP error: {last_error}"
+    )
