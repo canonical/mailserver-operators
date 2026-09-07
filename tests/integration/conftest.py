@@ -277,22 +277,23 @@ def deploy_opendkim_fixture(
 
 
 def _replace_opendkim_snap(juju: jubilant.Juju, app_name: str, snap_path: pathlib.Path) -> None:
-    """Refresh the store-installed opendkim snap from the local build."""
+    """Replace the store-installed opendkim snap with the local build."""
     snap_name = snap_path.name
     logger.info("Replacing opendkim snap with local build: %s", snap_path)
 
     status = juju.status()
     for unit_name in status.apps[app_name].units:
         juju.scp(snap_path, f"{unit_name}:/tmp/{snap_name}")
+        juju.exec("sudo", "snap", "remove", "--purge", OPENDKIM_APP, unit=unit_name)
         juju.exec(
             "sudo",
             "snap",
-            "refresh",
+            "install",
             "--dangerous",
             f"/tmp/{snap_name}",  # nosec B108
             unit=unit_name,
         )
-        logger.info("Refreshed local opendkim snap on %s", unit_name)
+        logger.info("Installed local opendkim snap on %s", unit_name)
 
 
 # ---------------------------------------------------------------------------
