@@ -15,7 +15,7 @@ resource "juju_model" "dovecot" {
     juju-http-proxy  = var.proxy.http
     juju-https-proxy = var.proxy.https
     juju-no-proxy    = var.proxy.no_proxy
-    logging-config   = var.logging_config
+    logging-config   = var.logging-config
   }
 }
 

@@ -100,7 +100,7 @@ variable "juju_controller" {
   }
 }
 
-variable "logging_config" {
+variable "logging-config" {
   description = "Juju model logging configuration."
   type        = string
   default     = "<root>=INFO"

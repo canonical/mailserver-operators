@@ -17,10 +17,12 @@ variables {
 
 mock_provider "juju" {
   mock_resource "juju_application" {
+    override_during = plan
     defaults = {
       id           = "opendkim"
       model_type   = "machine"
       unit_numbers = ["0"]
+      units        = 1
     }
   }
 }
@@ -84,7 +86,7 @@ run "deploys_to_specific_machines" {
   }
 
   assert {
-    condition     = length(output.application.machines) == 2 && contains(output.application.machines, "0") && contains(output.application.machines, "1") && output.application.units == null
+    condition     = length(output.application.machines) == 2 && contains(output.application.machines, "0") && contains(output.application.machines, "1") && output.application.units == 1
     error_message = "machine placement output did not match expected"
   }
 }
