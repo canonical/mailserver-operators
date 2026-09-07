@@ -33,6 +33,8 @@ from secrets import token_hex
 import jubilant
 import pytest
 import yaml
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from helpers import integrate_once, sha512_dovecot_password
 from opcli.pytest_plugin import CharmPathList
 
@@ -70,7 +72,7 @@ def _get_charm_path(request: pytest.FixtureRequest, charm_name: str) -> str:
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add integration test command-line options."""
     parser.addoption(
-        "--use-existing",
+        "--keep-models",
         action="store_true",
         default=False,
         help="Keep Juju models after tests complete (useful for debugging).",
@@ -89,7 +91,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-@pytest.fixture(scope="module", name="juju")
+@pytest.fixture(scope="session", name="juju")
 def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, None, None]:
     """Session-scoped Juju client in a temporary model for integration tests."""
     logging.getLogger("jubilant.wait").setLevel(logging.WARNING)

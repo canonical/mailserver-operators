@@ -30,7 +30,7 @@ def integrate_once(juju: jubilant.Juju, endpoint_a: str, endpoint_b: str) -> Non
     """Call ``juju integrate`` tolerating 'already related' errors."""
     try:
         juju.integrate(endpoint_a, endpoint_b)
-    except Exception as exc:  # noqa: BLE001
+    except jubilant.CLIError as exc:
         msg = str(exc)
         if "already exists" not in msg and "already related" not in msg:
             raise
