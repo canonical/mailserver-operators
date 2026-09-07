@@ -18,14 +18,12 @@ variable "channel" {
   description = "The channel to use when deploying a charm."
   type        = string
   default     = "latest/stable"
-  nullable    = false
 }
 
 variable "config" {
   description = "Application config. Details about available options can be found at https://charmhub.io/postfix-relay-configurator/configurations."
   type        = map(string)
   default     = {}
-  nullable    = false
 }
 
 variable "constraints" {
@@ -40,8 +38,7 @@ variable "endpoint_bindings" {
     endpoint = optional(string)
     space    = string
   }))
-  default  = []
-  nullable = false
+  default = []
 }
 
 variable "model_uuid" {

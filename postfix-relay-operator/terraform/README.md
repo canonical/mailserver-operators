@@ -11,7 +11,6 @@ provider `> 1.0.0, < 2.0.0`. The target model must provide Ubuntu 24.04 AMD64 ma
 - `variables.tf` - Module inputs.
 - `outputs.tf` - Module outputs for integrations and consumers.
 - `terraform.tf` - Terraform and provider version requirements.
-- `providers.tf` - Notes that the Juju provider is inherited from the caller.
 
 ## Inputs
 
