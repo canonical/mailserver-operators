@@ -36,7 +36,8 @@ import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from helpers import integrate_once, sha512_dovecot_password
-from opcli.pytest_plugin import CharmPathList
+from opcli.models.artifacts_build import ArtifactsGenerated
+from opcli.pytest_plugin import CharmPathList, artifacts_root_from_yaml_path
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +56,6 @@ TEST_DOMAIN = "mailstack.internal"
 TEST_SMTP_USER = "e2euser"
 TEST_SMTP_PASSWORD = token_hex(16)
 
-# parents[0]=tests/integration, parents[1]=tests, parents[2]=mailserver-operators/
-_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-OPENDKIM_SNAP_DIR = _REPO_ROOT / "opendkim-snap"
-
 SMTP_PORT = 587
 AUTHORIZED_SENDER = f"authorized@{TEST_DOMAIN}"
 
@@ -67,6 +64,24 @@ def _get_charm_path(request: pytest.FixtureRequest, charm_name: str) -> str:
     """Resolve a charm path only when its application needs deployment."""
     charm_paths = typing.cast(dict[str, CharmPathList], request.getfixturevalue("charm_paths"))
     return charm_paths[charm_name].path
+
+
+def _get_snap_path(request: pytest.FixtureRequest, snap_name: str) -> pathlib.Path:
+    """Resolve the single localized snap artifact produced for this test run."""
+    artifacts = typing.cast(ArtifactsGenerated, request.getfixturevalue("opcli_artifacts"))
+    yaml_path = typing.cast(pathlib.Path, request.getfixturevalue("opcli_build_yaml_path"))
+    snap = next((snap for snap in artifacts.snaps if snap.name == snap_name), None)
+    if snap is None:
+        pytest.fail(f"Required snap artifact {snap_name!r} is missing")
+
+    files = [build.file for build in snap.builds if build.file]
+    if len(files) != 1:
+        pytest.fail(f"Expected one localized {snap_name!r} snap artifact, found {len(files)}")
+
+    path = artifacts_root_from_yaml_path(yaml_path) / files[0]
+    if not path.is_file():
+        pytest.fail(f"Localized snap artifact does not exist: {path}")
+    return path
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -87,7 +102,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--use-existing",
         action="store_true",
         default=False,
-        help="Attach to the current Juju model without deploying anything new.",
+        help="Reuse applications in the current Juju model and deploy any that are missing.",
     )
 
 
@@ -257,21 +272,12 @@ def deploy_opendkim_fixture(
             timeout=10 * 60,
         )
 
-    _replace_opendkim_snap(juju, OPENDKIM_APP)
+    _replace_opendkim_snap(juju, OPENDKIM_APP, _get_snap_path(request, OPENDKIM_APP))
     return OPENDKIM_APP
 
 
-def _replace_opendkim_snap(juju: jubilant.Juju, app_name: str) -> None:
-    """Replace the store-installed opendkim snap with a locally-built one if present."""
-    snap_files = sorted(OPENDKIM_SNAP_DIR.glob("opendkim_*.snap"))
-    if not snap_files:
-        logger.warning(
-            "No locally-built opendkim snap found in %s — using store version",
-            OPENDKIM_SNAP_DIR,
-        )
-        return
-
-    snap_path = snap_files[-1]
+def _replace_opendkim_snap(juju: jubilant.Juju, app_name: str, snap_path: pathlib.Path) -> None:
+    """Refresh the store-installed opendkim snap from the local build."""
     snap_name = snap_path.name
     logger.info("Replacing opendkim snap with local build: %s", snap_path)
 
@@ -281,12 +287,12 @@ def _replace_opendkim_snap(juju: jubilant.Juju, app_name: str) -> None:
         juju.exec(
             "sudo",
             "snap",
-            "install",
+            "refresh",
             "--dangerous",
             f"/tmp/{snap_name}",  # nosec B108
             unit=unit_name,
         )
-        logger.info("Installed local opendkim snap on %s", unit_name)
+        logger.info("Refreshed local opendkim snap on %s", unit_name)
 
 
 # ---------------------------------------------------------------------------

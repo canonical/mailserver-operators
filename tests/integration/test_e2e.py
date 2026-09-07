@@ -83,8 +83,7 @@ def test_e2e(juju: jubilant.Juju, mail_stack: Dict[str, str]) -> None:
         server.sendmail(from_addr, [to_addr], message)
 
     raw_message = _wait_for_subject(dovecot_ip, MAILBOX_USER, TEST_SMTP_PASSWORD, subject)
-    # Dovecot accepts login with the full mailbox address (e.g. user@domain) when
-    # auth_username_format is unset; the system user is looked up by local part.
+    # Dovecot's auth_username_format=%n strips the domain before system-user lookup.
     parsed = email.message_from_bytes(raw_message)
 
     assert parsed["Subject"] == subject
