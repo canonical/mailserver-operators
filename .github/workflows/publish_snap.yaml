@@ -13,21 +13,16 @@ on:
 
 jobs:
   build:
-    name: Build opendkim snap
-    uses: canonical/data-platform-workflows/.github/workflows/build_snap.yaml@v51.0.0
-    with:
-      path-to-snap-project-directory: ./opendkim-snap
-
-  release:
-    name: Release opendkim snap
-    needs:
-      - build
-    uses: canonical/data-platform-workflows/.github/workflows/release_snap_edge.yaml@v51.0.0
-    with:
-      path-to-snap-project-directory: ./opendkim-snap
-      track: latest
-      artifact-prefix: ${{ needs.build.outputs.artifact-prefix }}
-    secrets:
-      snap-store-token: ${{ secrets.SNAPSTORE_TOKEN }}
-    permissions:
-      contents: write  # Needed to create git tags
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7.0.1
+    - uses: snapcore/action-build@v1.3.0
+      id: build
+      with:
+        path: ./opendkim-snap
+    - uses: snapcore/action-publish@v1.2.0
+      env:
+        SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPSTORE_TOKEN }}
+      with:
+        snap: ${{ steps.build.outputs.snap }}
+        release: edge
