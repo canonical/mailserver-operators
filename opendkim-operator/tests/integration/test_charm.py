@@ -36,7 +36,7 @@ def generate_opendkim_genkey(domain: str, selector: str) -> typing.Tuple[str, st
     """
     with tempfile.TemporaryDirectory(dir=pathlib.Path.home()) as tmpdirname:
         subprocess.run(  # nosec
-            ["opendkim-genkey", "-s", selector, "-d", domain],
+            ["/usr/sbin/opendkim-genkey", "-s", selector, "-d", domain],
             check=True,
             cwd=tmpdirname,
         )
