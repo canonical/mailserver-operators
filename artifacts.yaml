@@ -6,18 +6,22 @@ rocks: []
 charms:
 - name: dovecot
   charmcraft-yaml: dovecot-charm/charmcraft.yaml
+  channel: 2.3/edge
   platforms:
   - arch: amd64
 - name: opendkim
   charmcraft-yaml: opendkim-operator/charmcraft.yaml
+  channel: 2/edge
   platforms:
   - arch: amd64
 - name: postfix-relay-configurator
   charmcraft-yaml: postfix-relay-configurator-operator/charmcraft.yaml
+  channel: latest/edge
   platforms:
   - arch: amd64
 - name: postfix-relay
   charmcraft-yaml: postfix-relay-operator/charmcraft.yaml
+  channel: 3.8/edge
   platforms:
   - arch: amd64
 snaps: []
