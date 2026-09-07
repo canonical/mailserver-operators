@@ -5,11 +5,11 @@ This module deploys the `dovecot` charm on a machine substrate.
 ## What it does
 
 - Deploys `dovecot` from Charmhub
-- Uses `ubuntu@24.04`
+- Uses the charm's default base unless `base` is set
 - Defaults to the currently published `2.3/edge` channel
 - Deploys one unit by default
-- Sets machine constraints to `arch=amd64 root-disk=20G`
-- Applies `mail-data = 8G` storage by default
+- Applies no machine constraints unless `constraints` is set
+- Applies no storage directives unless `storage_directives` is set; we recommend setting `mail-data = 8G`
 
 The Juju provider is inherited from the caller; this module does not configure a provider block.
 It requires Terraform `>= 1.12, < 2.0` and Juju provider `> 1.0.0, < 2.0.0`.
@@ -35,22 +35,22 @@ For TLS:
 For storage:
 
 - `mail-data` storage is declared by the charm
-- this module defaults it to `8G`
+- we recommend setting `storage_directives` to `{ "mail-data" = "8G" }`
 
 ## Inputs
 
 - `app_name` - application name, defaults to `dovecot`
-- `base` - charm base, defaults to `ubuntu@24.04`
+- `base` - charm base, defaults to `null` (charm's default base)
 - `channel` - charm channel, defaults to `2.3/edge`
 - `config` - charm config map
-- `constraints` - Juju constraints; defaults to amd64 with a 20 GiB root disk
+- `constraints` - Juju constraints, defaults to `null`
 - `endpoint_bindings` - optional endpoint bindings
-- `expose` - optional Juju exposure restricted by CIDRs, endpoints, or spaces
-- `machines` - optional machine IDs for placement
+- `expose` - optional Juju exposure restricted by CIDRs, endpoints, or spaces; defaults to `{}` (exposed with no restrictions)
+- `machines` - optional machine IDs for placement, defaults to `[]`
 - `model_uuid` - required Juju model UUID
 - `resources` - charm resources
 - `revision` - optional charm revision
-- `storage_directives` - storage directives, defaults to `{ "mail-data" = "8G" }`
+- `storage_directives` - storage directives, defaults to `{}`; we recommend setting `{ "mail-data" = "8G" }`
 - `units` - number of units, defaults to `1`
 
 ## Outputs

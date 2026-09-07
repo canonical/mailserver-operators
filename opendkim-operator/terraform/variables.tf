@@ -10,7 +10,7 @@ variable "app_name" {
 variable "base" {
   description = "Base to deploy the charm on."
   type        = string
-  default     = "ubuntu@24.04"
+  default     = null
 }
 
 variable "channel" {
@@ -28,7 +28,7 @@ variable "config" {
 variable "constraints" {
   description = "Juju constraints to apply to the application."
   type        = string
-  default     = "arch=amd64"
+  default     = null
 }
 
 variable "endpoint_bindings" {
@@ -43,7 +43,7 @@ variable "endpoint_bindings" {
 variable "machines" {
   description = "Target machines for the application units."
   type        = set(string)
-  default     = null
+  default     = []
 }
 
 variable "model_uuid" {

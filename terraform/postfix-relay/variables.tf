@@ -28,6 +28,13 @@ variable "cos" {
   }
 }
 
+variable "create_model" {
+  description = "Whether this product creates and owns its Juju model."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "dkim_key_name" {
   description = "Secret field and private-key filename stem used by OpenDKIM."
   type        = string
@@ -100,13 +107,6 @@ variable "logging_config" {
   nullable    = false
 }
 
-variable "create_model" {
-  description = "Whether this product creates and owns its Juju model."
-  type        = bool
-  default     = true
-  nullable    = false
-}
-
 variable "mail_domain" {
   description = "Mail domain whose messages OpenDKIM signs."
   type        = string
@@ -128,18 +128,6 @@ variable "model_cloud" {
   }
 }
 
-variable "model_uuid" {
-  description = "Existing or externally managed Juju model UUID used when create_model is false."
-  type        = string
-  default     = null
-  nullable    = true
-
-  validation {
-    condition     = var.create_model || var.model_uuid != null
-    error_message = "model_uuid is required when create_model is false."
-  }
-}
-
 variable "model_constraints" {
   description = "Default constraints for machines in the Juju model."
   type        = string
@@ -152,6 +140,18 @@ variable "model_name" {
   type        = string
   default     = "postfix-relay"
   nullable    = false
+}
+
+variable "model_uuid" {
+  description = "Existing or externally managed Juju model UUID used when create_model is false."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.create_model || var.model_uuid != null
+    error_message = "model_uuid is required when create_model is false."
+  }
 }
 
 variable "opendkim" {

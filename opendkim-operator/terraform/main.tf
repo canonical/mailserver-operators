@@ -17,6 +17,6 @@ resource "juju_application" "opendkim" {
   endpoint_bindings = var.endpoint_bindings
   machines          = var.machines
   resources         = var.resources
-  units             = var.machines == null ? var.units : null
+  units             = length(var.machines) == 0 ? var.units : null
 }
 

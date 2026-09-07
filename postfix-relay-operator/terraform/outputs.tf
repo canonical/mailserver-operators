@@ -1,14 +1,14 @@
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-output "application" {
-  description = "The deployed Juju application."
-  value       = juju_application.postfix_relay
-}
-
 output "app_name" {
   description = "Deprecated: use application.name."
   value       = juju_application.postfix_relay.name
+}
+
+output "application" {
+  description = "The deployed Juju application."
+  value       = juju_application.postfix_relay
 }
 
 output "provides" {

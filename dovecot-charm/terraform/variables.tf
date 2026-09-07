@@ -10,7 +10,7 @@ variable "app_name" {
 variable "base" {
   description = "The operating system on which to deploy."
   type        = string
-  default     = "ubuntu@24.04"
+  default     = null
 }
 
 variable "channel" {
@@ -28,7 +28,7 @@ variable "config" {
 variable "constraints" {
   description = "Juju constraints to apply for this application."
   type        = string
-  default     = "arch=amd64 root-disk=20G"
+  default     = null
 }
 
 variable "endpoint_bindings" {
@@ -47,14 +47,14 @@ variable "expose" {
     endpoints = optional(string)
     spaces    = optional(string)
   })
-  default  = null
+  default  = {}
   nullable = true
 }
 
 variable "machines" {
   description = "Optional target machine IDs for the application's units."
   type        = set(string)
-  default     = null
+  default     = []
 }
 
 variable "model_uuid" {
@@ -77,9 +77,7 @@ variable "revision" {
 variable "storage_directives" {
   description = "Storage directives for the juju application."
   type        = map(string)
-  default = {
-    "mail-data" = "8G"
-  }
+  default     = {}
 }
 
 variable "units" {

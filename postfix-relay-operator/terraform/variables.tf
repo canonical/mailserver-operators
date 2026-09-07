@@ -10,7 +10,7 @@ variable "app_name" {
 variable "base" {
   description = "The operating system on which to deploy."
   type        = string
-  default     = "ubuntu@24.04"
+  default     = null
 }
 
 variable "channel" {
@@ -28,7 +28,7 @@ variable "config" {
 variable "constraints" {
   description = "Juju constraints to apply for this application."
   type        = string
-  default     = "arch=amd64"
+  default     = null
 }
 
 variable "endpoint_bindings" {
@@ -47,7 +47,7 @@ variable "expose" {
     endpoints = optional(string)
     spaces    = optional(string)
   })
-  default  = null
+  default  = {}
   nullable = true
 }
 
@@ -74,14 +74,14 @@ variable "revision" {
   default     = null
 }
 
-variable "storage_directives" {
-  description = "Storage directives used by the application."
+variable "storage" {
+  description = "Deprecated storage directives; use storage_directives instead."
   type        = map(string)
   default     = {}
 }
 
-variable "storage" {
-  description = "Deprecated storage directives; use storage_directives instead."
+variable "storage_directives" {
+  description = "Storage directives used by the application."
   type        = map(string)
   default     = {}
 }

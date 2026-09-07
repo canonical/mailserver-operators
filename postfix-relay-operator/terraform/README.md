@@ -18,18 +18,18 @@ provider `> 1.0.0, < 2.0.0`. The target model must provide Ubuntu 24.04 AMD64 ma
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `app_name` | `string` | `postfix-relay` | Application name in the model. |
-| `base` | `string` | `ubuntu@24.04` | Base for the machine charm. |
+| `base` | `string` | `null` | Base for the machine charm (defaults to the charm's own default). |
 | `channel` | `string` | `3/stable` | Charm channel. |
 | `config` | `map(string)` | `{}` | Charm configuration. |
-| `constraints` | `string` | `arch=amd64` | Juju constraints. |
+| `constraints` | `string` | `null` | Juju constraints. |
 | `endpoint_bindings` | `set(object({ endpoint = optional(string), space = string }))` | `[]` | Endpoint bindings. |
-| `expose` | `object({ cidrs = optional(string), endpoints = optional(string), spaces = optional(string) })` | `null` | Optional restricted Juju exposure. |
+| `expose` | `object({ cidrs = optional(string), endpoints = optional(string), spaces = optional(string) })` | `{}` | Juju exposure restricted by CIDRs, endpoints, or spaces; `{}` exposes with no restrictions. Pass `null` to not expose. |
 | `machines` | `set(string)` | `[]` | Target machine IDs for units. |
 | `model_uuid` | `string` | required | Juju model UUID. |
 | `resources` | `map(string)` | `{}` | Charm resources. |
 | `revision` | `number` | `null` | Charm revision. |
-| `storage_directives` | `map(string)` | `{}` | Storage directives. |
 | `storage` | `map(string)` | `{}` | Deprecated storage directives input. |
+| `storage_directives` | `map(string)` | `{}` | Storage directives; we recommend setting `{ "mail-data" = "8G" }` where applicable. |
 | `units` | `number` | `1` | Number of units. |
 
 ## Outputs

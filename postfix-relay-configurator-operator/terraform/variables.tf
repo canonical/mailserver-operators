@@ -11,8 +11,7 @@ variable "app_name" {
 variable "base" {
   description = "The operating system on which to deploy"
   type        = string
-  default     = "ubuntu@24.04"
-  nullable    = false
+  default     = null
 }
 
 variable "channel" {
@@ -32,8 +31,7 @@ variable "config" {
 variable "constraints" {
   description = "Deprecated Juju constraints retained for compatibility."
   type        = string
-  default     = "arch=amd64"
-  nullable    = false
+  default     = null
 }
 
 variable "endpoint_bindings" {

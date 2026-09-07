@@ -28,6 +28,13 @@ variable "cos" {
   }
 }
 
+variable "create_model" {
+  description = "Whether this product creates and owns its Juju model."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "dovecot" {
   description = "Dovecot charm deployment options."
   type = object({
@@ -94,13 +101,6 @@ variable "logging_config" {
   nullable    = false
 }
 
-variable "create_model" {
-  description = "Whether this product creates and owns its Juju model."
-  type        = bool
-  default     = true
-  nullable    = false
-}
-
 variable "luks_key" {
   description = "Passphrase stored in a Juju secret for Dovecot encrypted mail storage."
   type        = string
@@ -146,18 +146,6 @@ variable "model_cloud" {
   }
 }
 
-variable "model_uuid" {
-  description = "Existing or externally managed Juju model UUID used when create_model is false."
-  type        = string
-  default     = null
-  nullable    = true
-
-  validation {
-    condition     = var.create_model || var.model_uuid != null
-    error_message = "model_uuid is required when create_model is false."
-  }
-}
-
 variable "model_constraints" {
   description = "Default constraints for machines in the Juju model."
   type        = string
@@ -170,6 +158,18 @@ variable "model_name" {
   type        = string
   default     = "dovecot"
   nullable    = false
+}
+
+variable "model_uuid" {
+  description = "Existing or externally managed Juju model UUID used when create_model is false."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.create_model || var.model_uuid != null
+    error_message = "model_uuid is required when create_model is false."
+  }
 }
 
 variable "postmaster_address" {

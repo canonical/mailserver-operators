@@ -23,12 +23,12 @@ The charm has no storage or OCI image resources.
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `app_name` | `string` | `opendkim` | Application name. |
-| `base` | `string` | `ubuntu@24.04` | Charm base. |
+| `base` | `string` | `null` | Charm base (defaults to the charm's own default). |
 | `channel` | `string` | `2/edge` | Charm channel. |
 | `config` | `map(string)` | `{}` | Charm configuration. |
-| `constraints` | `string` | `arch=amd64` | Juju constraints. |
+| `constraints` | `string` | `null` | Juju constraints. |
 | `endpoint_bindings` | endpoint binding set | `null` | Optional endpoint bindings. |
-| `machines` | `set(string)` | `null` | Optional target machine IDs. |
+| `machines` | `set(string)` | `[]` | Optional target machine IDs. |
 | `model_uuid` | `string` | required | Juju model UUID. |
 | `resources` | `map(string)` | `{}` | Charm resources. |
 | `revision` | `number` | `null` | Charm revision. |

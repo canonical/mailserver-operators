@@ -24,10 +24,10 @@ secrets.
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `app_name` | `string` | `postfix-relay-configurator` | Application name. |
-| `base` | `string` | `ubuntu@24.04` | Charm base. |
+| `base` | `string` | `null` | Charm base (defaults to the charm's own default). |
 | `channel` | `string` | `latest/stable` | Charm channel. |
 | `config` | `map(string)` | `{}` | Charm configuration. |
-| `constraints` | `string` | `arch=amd64` | Deprecated Juju constraints retained for compatibility. |
+| `constraints` | `string` | `null` | Deprecated Juju constraints retained for compatibility. |
 | `endpoint_bindings` | endpoint binding set | `[]` | Endpoint bindings. |
 | `model_uuid` | `string` | required | Juju model UUID. |
 | `resources` | `map(string)` | `{}` | Charm resources. |

@@ -28,5 +28,5 @@ resource "juju_application" "dovecot" {
   machines           = var.machines
   resources          = var.resources
   storage_directives = var.storage_directives
-  units              = var.machines == null ? var.units : null
+  units              = length(var.machines) == 0 ? var.units : null
 }
