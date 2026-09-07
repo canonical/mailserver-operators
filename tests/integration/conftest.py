@@ -33,14 +33,7 @@ from secrets import token_hex
 import jubilant
 import pytest
 import yaml
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from helpers import (
-    integrate_once as _integrate_once,
-)
-from helpers import (
-    sha512_dovecot_password as _sha512_dovecot_password,
-)
+from helpers import integrate_once, sha512_dovecot_password
 from opcli.pytest_plugin import CharmPathList
 
 logger = logging.getLogger(__name__)
@@ -68,13 +61,16 @@ SMTP_PORT = 587
 AUTHORIZED_SENDER = f"authorized@{TEST_DOMAIN}"
 
 
-# ---------------------------------------------------------------------------
-# pytest CLI options
-# ---------------------------------------------------------------------------
+def _get_charm_path(request: pytest.FixtureRequest, charm_name: str) -> str:
+    """Resolve a charm path only when its application needs deployment."""
+    charm_paths = typing.cast(dict[str, CharmPathList], request.getfixturevalue("charm_paths"))
+    return charm_paths[charm_name].path
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Register extra CLI options consumed by the integration suite."""
+    """Add integration test command-line options."""
     parser.addoption(
-        "--keep-models",
+        "--use-existing",
         action="store_true",
         default=False,
         help="Keep Juju models after tests complete (useful for debugging).",
@@ -93,16 +89,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-def _get_charm_path(request: pytest.FixtureRequest, charm_name: str) -> str:
-    """Resolve a charm path only when its application needs deployment."""
-    charm_paths = typing.cast(dict[str, CharmPathList], request.getfixturevalue("charm_paths"))
-    return charm_paths[charm_name].path
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-@pytest.fixture(scope="session", name="juju")
+@pytest.fixture(scope="module", name="juju")
 def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, None, None]:
     """Session-scoped Juju client in a temporary model for integration tests."""
     logging.getLogger("jubilant.wait").setLevel(logging.WARNING)
@@ -217,7 +204,7 @@ def postfix_stack_fixture(
 
     Returns a dict with ``postfix_relay_ip``.
     """
-    _integrate_once(
+    integrate_once(
         juju,
         f"{postfix_relay_app}:juju-info",
         f"{postfix_relay_configurator_app}:juju-info",
@@ -330,7 +317,7 @@ def deploy_dovecot_fixture(
     juju.cli("grant-secret", "dovecot-luks-key", DOVECOT_APP)
 
     # Relate to TLS provider if not already related.
-    _integrate_once(juju, f"{DOVECOT_APP}:certificates", f"{self_signed_app}:certificates")
+    integrate_once(juju, f"{DOVECOT_APP}:certificates", f"{self_signed_app}:certificates")
 
     juju.wait(
         lambda status: status.apps[DOVECOT_APP].is_active,
@@ -359,13 +346,13 @@ def deploy_postfix_relay_fixture(
                 "relay_domains": f"- {TEST_DOMAIN}",
                 "enable_smtp_auth": "true",
                 "smtp_auth_users": yaml.dump(
-                    [f"{TEST_SMTP_USER}:{_sha512_dovecot_password(TEST_SMTP_PASSWORD)}"]
+                    [f"{TEST_SMTP_USER}:{sha512_dovecot_password(TEST_SMTP_PASSWORD)}"]
                 ),
                 "enable_reject_unknown_sender_domain": "false",
             },
         )
 
-    _integrate_once(juju, f"{POSTFIX_RELAY_APP}:certificates", f"{self_signed_app}:certificates")
+    integrate_once(juju, f"{POSTFIX_RELAY_APP}:certificates", f"{self_signed_app}:certificates")
 
     juju.wait(
         lambda status: status.apps[POSTFIX_RELAY_APP].is_active,
@@ -418,7 +405,7 @@ def deploy_configurator_fixture(
     dovecot_unit = next(iter(status.apps[dovecot_app].units.values()))
     dovecot_ip = dovecot_unit.public_address
     logger.info("Routing %s → smtp:[%s]:25", TEST_DOMAIN, dovecot_ip)
-    _integrate_once(juju, f"{postfix_stack['postfix_relay_app']}:milter", f"{opendkim_app}:milter")
+    integrate_once(juju, f"{postfix_stack['postfix_relay_app']}:milter", f"{opendkim_app}:milter")
 
     configurator_config = {
         "relay_access_sources": yaml.dump({"192.0.2.0/24": "OK"}),
