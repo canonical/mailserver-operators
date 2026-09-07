@@ -1,0 +1,58 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+project: mailserver-operators
+path: /home/ubuntu/proj
+kill-timeout: 60m
+warn-timeout: 1m
+backends:
+  integration-test:
+    type: integration-test
+    systems:
+    - ubuntu-24.04:
+        runner: [self-hosted-linux-amd64-noble-large]
+environment:
+  CONCIERGE: '$(HOST: echo "${CONCIERGE:-concierge.yaml}")'
+  OPCLI_GIT_REF: '$(HOST: echo "${OPCLI_GIT_REF:-main}")'
+exclude:
+- .git
+- .tox
+- .venv
+- .*_cache
+integration-suites:
+  tests/integration/:
+    summary: cross-charm integration tests
+    working-dir: ./
+    backends:
+    - integration-test
+    pytest-arguments-template: |
+      -x
+      --log-format="%(asctime)s %(levelname)s %(message)s"
+  dovecot-charm/tests/integration/:
+    summary: Dovecot integration tests
+    working-dir: dovecot-charm/
+    backends:
+    - integration-test
+    pytest-arguments-template: |
+      -x
+      --log-format="%(asctime)s %(levelname)s %(message)s"
+  opendkim-operator/tests/integration/:
+    summary: OpenDKIM integration tests
+    working-dir: opendkim-operator/
+    backends:
+    - integration-test
+    prepare: |
+      "${SPREAD_PATH}/opendkim-operator/tests/integration/setup-integration-tests.sh"
+    pytest-arguments-template: |
+      -x
+      --log-format="%(asctime)s %(levelname)s %(message)s"
+  postfix-relay-operator/tests/integration/:
+    summary: Postfix relay integration tests
+    working-dir: postfix-relay-operator/
+    backends:
+    - integration-test
+    prepare: |
+      "${SPREAD_PATH}/postfix-relay-operator/tests/integration/mailcatcher-installation.sh"
+    pytest-arguments-template: |
+      -x
+      --log-format="%(asctime)s %(levelname)s %(message)s"
