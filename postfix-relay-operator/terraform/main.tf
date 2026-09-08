@@ -25,7 +25,7 @@ resource "juju_application" "postfix_relay" {
   config             = var.config
   constraints        = var.constraints
   endpoint_bindings  = var.endpoint_bindings
-  machines           = length(var.machines) == 0 ? null : var.machines
+  machines           = var.machines == null || length(var.machines) == 0 ? null : var.machines
   resources          = var.resources
   storage_directives = merge(var.storage, var.storage_directives)
   units              = var.machines == null || length(var.machines) == 0 ? var.units : null
