@@ -1,0 +1,18 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Version of the artifact schema
+version_schema: 2
+
+changes:
+- title: Migrate charm publishing from operator-workflows to charm-ci
+  author: ignavar
+  type: minor
+  description: Fixed a broken publish pipeline by replacing the operator-workflows-based publish_charm.yaml with canonical/charm-ci's publish-artifacts.yml, matching the integration test workflow's earlier migration in #45. Publish channels are now declared per charm in artifacts.yaml (dovecot 2.3/edge, opendkim 2/edge, postfix-relay 3.8/edge). This also starts publishing postfix-relay-configurator to latest/edge for the first time.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/54"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: true
