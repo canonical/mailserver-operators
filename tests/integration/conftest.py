@@ -111,33 +111,25 @@ def juju_fixture(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, Non
     """Session-scoped Juju client in a temporary model for integration tests."""
     logging.getLogger("jubilant.wait").setLevel(logging.WARNING)
 
-    def _show_debug_log(juju: jubilant.Juju) -> None:
-        if request.session.testsfailed:
-            print(juju.debug_log(limit=2000), end="")
-
     use_existing = request.config.getoption("--use-existing", default=False)
     if use_existing:
         juju = jubilant.Juju()
         juju.model_config({"automatically-retry-hooks": True})
         yield juju
-        _show_debug_log(juju)
         return
 
-    model = request.config.getoption("--model")
+    model = request.config.getoption("--model", default=None)
     if model:
         juju = jubilant.Juju(model=model)
         juju.model_config({"automatically-retry-hooks": True})
         yield juju
-        _show_debug_log(juju)
         return
 
-    keep_models = typing.cast(bool, request.config.getoption("--keep-models"))
+    keep_models = typing.cast(bool, request.config.getoption("--keep-models", default=False))
     with jubilant.temp_model(keep=keep_models) as juju:
         juju.wait_timeout = 15 * 60
         juju.model_config({"automatically-retry-hooks": True})
         yield juju
-        _show_debug_log(juju)
-        return
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +203,24 @@ def deploy_self_signed_certs_fixture(juju: jubilant.Juju) -> str:
     return SELF_SIGNED_APP
 
 
+def _postfix_stack_active(status: jubilant.Status, postfix_relay_app: str) -> bool:
+    """Return whether Postfix and all configurator subordinates are active."""
+    app = status.apps.get(postfix_relay_app)
+    if not app or not app.is_active:
+        return False
+    for unit in app.units.values():
+        configurators = [
+            subordinate
+            for name, subordinate in (unit.subordinates or {}).items()
+            if CONFIGURATOR_APP in name
+        ]
+        if not configurators:
+            return False
+        if any(sub.workload_status.current != "active" for sub in configurators):
+            return False
+    return True
+
+
 @pytest.fixture(scope="session", name="postfix_stack")
 def postfix_stack_fixture(
     juju: jubilant.Juju,
@@ -227,23 +237,11 @@ def postfix_stack_fixture(
         f"{postfix_relay_configurator_app}:juju-info",
     )
 
-    # Wait for both to be active.
-    def _both_active(status: jubilant.Status) -> bool:
-        if not status.apps.get(POSTFIX_RELAY_APP):
-            return False
-        if not status.apps[POSTFIX_RELAY_APP].is_active:
-            return False
-        for unit in status.apps[POSTFIX_RELAY_APP].units.values():
-            subs = unit.subordinates or {}
-            conf_subs = {k: v for k, v in subs.items() if CONFIGURATOR_APP in k}
-            if not conf_subs:
-                return False
-            for sub in conf_subs.values():
-                if sub.workload_status.current != "active":
-                    return False
-        return True
-
-    juju.wait(_both_active, error=jubilant.any_error, timeout=15 * 60)
+    juju.wait(
+        lambda status: _postfix_stack_active(status, postfix_relay_app),
+        error=jubilant.any_error,
+        timeout=15 * 60,
+    )
     logger.info("postfix-relay + configurator active for maps tests")
 
     status = juju.status()
@@ -438,23 +436,11 @@ def deploy_configurator_fixture(
 
     juju.config(CONFIGURATOR_APP, configurator_config)
 
-    # Wait for both to be active.
-    def _both_active(status: jubilant.Status) -> bool:
-        if not status.apps.get(postfix_stack["postfix_relay_app"]):
-            return False
-        if not status.apps[postfix_stack["postfix_relay_app"]].is_active:
-            return False
-        for unit in status.apps[postfix_stack["postfix_relay_app"]].units.values():
-            subs = unit.subordinates or {}
-            conf_subs = {k: v for k, v in subs.items() if CONFIGURATOR_APP in k}
-            if not conf_subs:
-                return False
-            for sub in conf_subs.values():
-                if sub.workload_status.current != "active":
-                    return False
-        return True
-
-    juju.wait(_both_active, error=jubilant.any_error, timeout=15 * 60)
+    juju.wait(
+        lambda status: _postfix_stack_active(status, postfix_stack["postfix_relay_app"]),
+        error=jubilant.any_error,
+        timeout=15 * 60,
+    )
     logger.info("postfix-relay + configurator active for maps tests")
     return CONFIGURATOR_APP
 
