@@ -33,6 +33,8 @@ header:
   - 'docs/release-notes/template/*.yaml'
   - 'uv.lock'
   - 'opendkim-snap/snap/local/opendkim.conf'
+  - 'opendkim-operator/templates/opendkim.conf.j2'
+  - 'opendkim-operator/tests/unit/files/**'
   - '**/templates/**'
   - '**/lib/**'
   comment: on-failure
