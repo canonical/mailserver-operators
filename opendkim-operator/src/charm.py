@@ -186,7 +186,9 @@ class OpenDKIMCharm(ops.CharmBase):
                 needs_keys = True
 
         signingtable_path = OPENDKIM_KEYS_PATH / config.signingtable_path.name
-        signingtable = "\n".join(" ".join(row) for row in config.signingtable) + "\n"
+        signingtable = "\n".join(" ".join(row) for row in config.signingtable)
+        if signingtable:
+             signingtable += "\n"
         if signingtable != utils.read_text(signingtable_path):
             utils.write_file(signingtable_path, signingtable, 0o644, user=OPENDKIM_USER)
             needs_keys = True
