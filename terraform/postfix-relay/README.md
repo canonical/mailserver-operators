@@ -23,7 +23,7 @@ module "postfix_relay" {
 }
 ```
 
-The module defaults to `latest/edge` for Postfix Relay and `2/edge` for OpenDKIM. Pin revisions for
+The module defaults to `3.8/edge` for Postfix Relay and `2/edge` for OpenDKIM. Pin revisions for
 reproducible deployments. Optional COS integration accepts an in-model endpoint or cross-model
 offer. Postfix Relay COS integration is capability-gated because the currently published revision
 does not expose `cos-agent`.

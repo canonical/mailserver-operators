@@ -22,6 +22,6 @@ locals {
   })
 
   postfix_relay = merge(var.postfix_relay, {
-    channel = coalesce(var.postfix_relay.channel, "latest/${var.risk}")
+    channel = coalesce(var.postfix_relay.channel, "3.8/${var.risk}")
   })
 }

@@ -217,7 +217,7 @@ rm terraform/postfix-relay/postfix-relay.tfplan
 
 Run only the command block for the product you want when installing a single product.
 
-The default channels are `2.3/edge` for Dovecot, `latest/edge` for Postfix Relay, and `2/edge` for
+The default channels are `2.3/edge` for Dovecot, `3.8/edge` for Postfix Relay, and `2/edge` for
 OpenDKIM. For staging and production, test specific revisions and set their `revision` inputs
 instead of accepting future channel updates implicitly.
 

@@ -18,7 +18,7 @@ provider `> 1.0.0, < 2.0.0`. The target model must provide Ubuntu 24.04 AMD64 ma
 | --- | --- | --- | --- |
 | `app_name` | `string` | `postfix-relay` | Application name in the model. |
 | `base` | `string` | `null` | Base for the machine charm (defaults to the charm's own default). |
-| `channel` | `string` | `3/stable` | Charm channel. |
+| `channel` | `string` | `3.8/edge` | Charm channel. |
 | `config` | `map(string)` | `{}` | Charm configuration. |
 | `constraints` | `string` | `null` | Juju constraints. |
 | `endpoint_bindings` | `set(object({ endpoint = optional(string), space = string }))` | `[]` | Endpoint bindings. |

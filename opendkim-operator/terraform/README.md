@@ -27,7 +27,7 @@ The charm has no storage or OCI image resources.
 | `channel` | `string` | `2/edge` | Charm channel. |
 | `config` | `map(string)` | `{}` | Charm configuration. |
 | `constraints` | `string` | `null` | Juju constraints. |
-| `endpoint_bindings` | endpoint binding set | `null` | Optional endpoint bindings. |
+| `endpoint_bindings` | endpoint binding set | `[]` | Optional endpoint bindings. |
 | `machines` | `set(string)` | `[]` | Optional target machine IDs. |
 | `model_uuid` | `string` | required | Juju model UUID. |
 | `resources` | `map(string)` | `{}` | Charm resources. |

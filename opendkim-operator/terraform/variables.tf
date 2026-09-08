@@ -37,7 +37,7 @@ variable "endpoint_bindings" {
     endpoint = optional(string)
     space    = string
   }))
-  default = null
+  default = []
 }
 
 variable "machines" {

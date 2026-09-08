@@ -35,7 +35,7 @@ run "default_product_contract" {
   assert {
     condition = (
       module.opendkim[0].application.charm[0].channel == "2/edge"
-      && module.postfix_relay.application.charm[0].channel == "latest/edge"
+      && module.postfix_relay.application.charm[0].channel == "3.8/edge"
     )
     error_message = "Default channels must use the published edge tracks."
   }
