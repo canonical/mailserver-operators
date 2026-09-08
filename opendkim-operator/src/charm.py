@@ -187,12 +187,14 @@ class OpenDKIMCharm(ops.CharmBase):
 
         signingtable_path = OPENDKIM_KEYS_PATH / config.signingtable_path.name
         signingtable = "\n".join(" ".join(row) for row in config.signingtable)
+        if signingtable:
+             signingtable += "\n"
         if signingtable != utils.read_text(signingtable_path):
             utils.write_file(signingtable_path, signingtable, 0o644, user=OPENDKIM_USER)
             needs_keys = True
 
         keytable_path = OPENDKIM_KEYS_PATH / config.keytable_path.name
-        keytable = "\n".join(" ".join(row) for row in config.keytable)
+        keytable = "\n".join(" ".join(row) for row in config.keytable) + "\n"
         if keytable != utils.read_text(keytable_path):
             utils.write_file(keytable_path, keytable, 0o644, user=OPENDKIM_USER)
             needs_keys = True
