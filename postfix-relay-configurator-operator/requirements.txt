@@ -1,2 +1,2 @@
-ops==3.8.0
-pydantic==2.13.4
+ops==3.8.2
+pydantic==2.13.5

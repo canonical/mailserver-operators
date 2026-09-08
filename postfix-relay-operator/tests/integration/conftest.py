@@ -8,29 +8,21 @@ from collections.abc import Generator
 
 import jubilant
 import pytest
-
-
-@pytest.fixture(scope="module", name="postfix_relay_charm")
-def postfix_relay_charm_fixture(pytestconfig: pytest.Config):
-    """Get value from parameter charm-file."""
-    charm = pytestconfig.getoption("--charm-file")
-    use_existing = pytestconfig.getoption("--use-existing", default=False)
-    if not use_existing:
-        assert charm, "--charm-file must be set"
-    return charm
+from opcli.pytest_plugin import CharmPathList
 
 
 @pytest.fixture(scope="module", name="postfix_relay_app")
 def deploy_postfix_relay_fixture(
-    postfix_relay_charm: str,
     juju: jubilant.Juju,
+    request: pytest.FixtureRequest,
 ) -> str:
     """Deploy postfix-relay."""
     postfix_relay_app_name = "postfix-relay"
 
     if not juju.status().apps.get(postfix_relay_app_name):
+        charm_paths = typing.cast(dict[str, CharmPathList], request.getfixturevalue("charm_paths"))
         juju.deploy(
-            f"./{postfix_relay_charm}",
+            charm_paths["postfix-relay"].path,
             postfix_relay_app_name,
         )
 
