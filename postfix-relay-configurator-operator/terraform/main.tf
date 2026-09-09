@@ -7,13 +7,15 @@ resource "juju_application" "postfix_relay_configurator" {
 
   charm {
     name     = "postfix-relay-configurator"
+    base     = var.base
     channel  = var.channel
     revision = var.revision
-    base     = var.base
   }
 
   config             = var.config
   constraints        = var.constraints
-  units              = 0
+  endpoint_bindings  = var.endpoint_bindings
+  resources          = var.resources
   storage_directives = var.storage
+  units              = 0
 }

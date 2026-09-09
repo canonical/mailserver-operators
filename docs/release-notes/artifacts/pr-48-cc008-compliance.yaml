@@ -1,0 +1,29 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Version of the artifact schema
+version_schema: 2
+
+changes:
+- title: Made Terraform modules CC008 compliant
+  author: alithethird
+  type: minor
+  description: Aligned the default values, variable ordering, and output ordering of the dovecot-charm, opendkim-operator, postfix-relay-operator, and postfix-relay-configurator-operator Terraform modules (and the terraform/dovecot and terraform/postfix-relay products) with the CC008 Charm Terraform Module standard. Added a terraform_modules_compliance CI workflow that runs the CC008 checker on every pull request touching a terraform/ directory. Note that `expose` now defaults to `{}` (exposed with no restrictions) instead of `null` (not exposed); pass `expose = null` explicitly to keep an application unexposed.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/48"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: false
+- title: Fixed CC008 compliance test mocks and validated endpoint_bindings/expose defaults
+  author: Ignavar
+  type: minor
+  description: Reviewed default-value changes against the real Juju provider schema, fixed the opendkim-operator terraform test mock (units) and machines/units regression, and confirmed endpoint_bindings' checker-expected default is invalid for its type.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/48"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: false

@@ -1,18 +1,82 @@
-# Terraform modules
+# Postfix relay Terraform module
 
-This project contains the [Terraform][Terraform] modules to deploy the 
-`postfix-relay` charm with its dependencies.
+This module deploys the `postfix-relay` principal machine charm on Juju.
 
-The modules use the [Terraform Juju provider][Terraform Juju provider] to model
-the bundle deployment onto any Kubernetes environment managed by [Juju][Juju].
+It inherits the Juju provider from its caller and requires Terraform `>= 1.12, < 2.0` and Juju
+provider `> 1.0.0, < 2.0.0`. The target model must provide Ubuntu 24.04 AMD64 machine capacity.
 
-## Module structure
+## Files
 
-- **main.tf** - Defines the Juju application to be deployed.
-- **variables.tf** - Allows customization of the deployment including Juju model name, charm's channel and configuration.
-- **output.tf** - Responsible for integrating the module with other Terraform modules, primarily by defining potential integration endpoints (charm integrations).
-- **versions.tf** - Defines the Terraform provider.
+- `main.tf` - Juju application definition.
+- `variables.tf` - Module inputs.
+- `outputs.tf` - Module outputs for integrations and consumers.
+- `terraform.tf` - Terraform and provider version requirements.
 
-[Terraform]: https://www.terraform.io/
-[Terraform Juju provider]: https://registry.terraform.io/providers/juju/juju/latest
-[Juju]: https://juju.is
+## Inputs
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `app_name` | `string` | `postfix-relay` | Application name in the model. |
+| `base` | `string` | `null` | Base for the machine charm (defaults to the charm's own default). |
+| `channel` | `string` | `3.8/edge` | Charm channel. |
+| `config` | `map(string)` | `{}` | Charm configuration. |
+| `constraints` | `string` | `null` | Juju constraints. |
+| `endpoint_bindings` | `set(object({ endpoint = optional(string), space = string }))` | `[]` | Endpoint bindings. |
+| `expose` | `object({ cidrs = optional(string), endpoints = optional(string), spaces = optional(string) })` | `{}` | Juju exposure restricted by CIDRs, endpoints, or spaces; `{}` exposes with no restrictions. Pass `null` to not expose. |
+| `machines` | `set(string)` | `[]` | Target machine IDs for units. |
+| `model_uuid` | `string` | required | Juju model UUID. |
+| `resources` | `map(string)` | `{}` | Charm resources. |
+| `revision` | `number` | `null` | Charm revision. |
+| `storage` | `map(string)` | `{}` | Deprecated storage directives input. |
+| `storage_directives` | `map(string)` | `{}` | Storage directives; we recommend setting `{ "mail-data" = "8G" }` where applicable. |
+| `units` | `number` | `1` | Number of units. |
+
+## Outputs
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `application` | object | Full Juju application resource. |
+| `app_name` | string | Deprecated application name output. |
+| `provides` | object | Structured endpoint references for `metrics` and `cos-agent`. |
+| `requires` | object | Legacy endpoint names retained for compatibility. |
+| `requires_endpoints` | object | Structured endpoint references for `milter` and `certificates`. |
+
+## Example
+
+```hcl
+module "postfix_relay" {
+  source = "./terraform"
+
+  app_name  = "postfix-relay"
+  model_uuid = juju_model.model.uuid
+
+  endpoint_bindings = [
+    {
+      space    = "dmz"
+      endpoint = "milter"
+    }
+  ]
+
+  machines = ["0"]
+  resources = {}
+  storage_directives = {}
+}
+```
+
+Integrations consume the structured endpoint outputs:
+
+```hcl
+resource "juju_integration" "postfix_opendkim" {
+  model_uuid = juju_model.mail.uuid
+
+  application {
+    name     = module.postfix_relay.requires_endpoints.milter.name
+    endpoint = module.postfix_relay.requires_endpoints.milter.endpoint
+  }
+
+  application {
+    name     = module.opendkim.provides.milter.name
+    endpoint = module.opendkim.provides.milter.endpoint
+  }
+}
+```
