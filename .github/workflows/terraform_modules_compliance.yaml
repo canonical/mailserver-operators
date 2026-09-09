@@ -12,6 +12,6 @@ on:
 
 jobs:
   cc008:
-    uses: canonical/operator-workflows/.github/workflows/terraform_modules_compliance.yaml@feat/terraform-compliance
+    uses: canonical/operator-workflows/.github/workflows/terraform_modules_compliance.yaml@main
     with:
       terraform-directories: '["terraform/dovecot", "terraform/postfix-relay", "dovecot-charm/terraform", "opendkim-operator/terraform", "postfix-relay-operator/terraform", "postfix-relay-configurator-operator/terraform"]'
