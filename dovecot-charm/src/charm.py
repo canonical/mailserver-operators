@@ -205,6 +205,8 @@ class DovecotCharm(CharmBase):
             if self._is_primary:
                 self._ha.install_mail_sync_script()
                 self._ha.setup_mail_sync_timer(dovecot_config)
+            else:
+                self._ha.disable_mail_sync_timer()
         except HASetupError as e:
             self.unit.status = BlockedStatus(str(e))
             return
