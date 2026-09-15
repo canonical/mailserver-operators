@@ -140,6 +140,21 @@ def test_reconcile_skips_sync_script_when_not_primary(ctx, base_state):
     assert not _SpyHA.timer_called
 
 
+def test_reconcile_disables_sync_timer_when_not_primary(ctx, base_state):
+    """A non-primary unit disables any timer left from its former primary role."""
+    state_in = dataclasses.replace(
+        base_state,
+        config={**base_state.config, "primary-unit": "dovecot/1"},
+        relations={_secondary_relation()},
+    )
+    ha = MagicMock(wraps=NoOpHAManager())
+
+    with patch.object(DovecotTestCharm, "_ha", ha):
+        ctx.run(ctx.on.config_changed(), state_in)
+
+    ha.disable_mail_sync_timer.assert_called_once_with()
+
+
 def test_clear_queue_deferred(ctx, base_state):
     """clear-queue action with queue=deferred passes correct args to postsuper."""
     mock_result = MagicMock(stdout="cleared")

@@ -1,0 +1,17 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version_schema: 2
+
+changes:
+- title: Stopped mailbox synchronization on demoted Dovecot units
+  author: Ignavar
+  type: bugfix
+  description: Disabled the mailbox synchronization timer when a Dovecot unit is no longer primary, preventing stale mailbox data from being copied to the newly promoted primary.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/55"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: false

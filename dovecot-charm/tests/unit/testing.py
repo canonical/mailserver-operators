@@ -106,6 +106,9 @@ class NoOpHAManager(HAManager):
     def setup_mail_sync_timer(self, dovecot_config):
         pass
 
+    def disable_mail_sync_timer(self):
+        pass
+
 
 class DovecotTestCharm(DovecotCharm):
     """DovecotCharm with all I/O managers replaced by no-op stubs.
