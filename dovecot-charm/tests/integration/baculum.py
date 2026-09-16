@@ -145,14 +145,14 @@ class Baculum:
         response = self._session.get(f"{self._base}/jobs/show", params=params)
         return self._extract_output(f"show job '{job}' detail", response)
 
-    def list_job_files(self, job_id: int) -> list[dict]:
+    def list_job_files(self, job_id: int) -> list[str]:
         """List the files catalogued for a completed job run.
 
         Args:
             job_id: the job run ID whose backed up files to list.
 
         Returns:
-            A list of file records, each with ``name`` and ``path`` fields.
+            A list of full file paths backed up by the job.
         """
         response = self._session.get(f"{self._base}/jobs/{job_id}/files")
         return self._extract_output(f"list files for job {job_id}", response)
