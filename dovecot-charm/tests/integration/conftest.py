@@ -1,14 +1,17 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import json
 import logging
 import secrets
 import typing
+from pathlib import Path
 
 import jubilant
 import pytest
 from opcli.pytest_plugin import CharmPathList
 
+from . import baculum
 from .helpers import setup_gdpr_test_user, teardown_gdpr_test_user
 
 logger = logging.getLogger(__name__)
@@ -29,6 +32,9 @@ GDPR_TEST_PASSWORD = secrets.token_hex(16)
 CREATE_MAIL_USER_TEST_USER = "cmu-testuser"
 CREATE_MAIL_USER_TEST_MAILBOX = "cmu-testuser@example.com"
 CREATE_MAIL_USER_TEST_PASSWORD = secrets.token_hex(16)
+
+# minio any-charm source file path
+MINIO_ANY_CHARM_SRC = "tests/integration/minio_any_charm_src.py"
 
 
 def _get_charm_path(request: pytest.FixtureRequest) -> str:
@@ -159,6 +165,111 @@ def tls_charm(juju: jubilant.Juju) -> str:
         timeout=10 * 60,
     )
     return tls_app
+
+
+@pytest.fixture(scope="module")
+def bacula_fd(juju: jubilant.Juju, dovecot_charm: str) -> str:
+    bacula_fd_app = "bacula-fd"
+    if bacula_fd_app not in juju.status().apps:
+        logging.info("Deploying bacula-fd...")
+        juju.deploy(bacula_fd_app)
+    else:
+        logging.info(f"{bacula_fd_app} already deployed, skipping deployment.")
+
+    backup_key = secrets.token_hex(16)
+    backup_secret_id = juju.add_secret("dovecot-backup-key", {"backup-key": backup_key})
+    juju.grant_secret("dovecot-backup-key", dovecot_charm)
+    juju.config(dovecot_charm, {"backup-encryption-key": backup_secret_id})
+
+    try:
+        juju.integrate(f"{dovecot_charm}:juju-info", f"{bacula_fd_app}:juju-info")
+    except jubilant.CLIError:
+        logging.info("juju-info relation already present")
+
+    try:
+        juju.integrate(f"{dovecot_charm}:backup", f"{bacula_fd_app}:backup")
+    except jubilant.CLIError:
+        logging.info("backup relation already present")
+
+    return bacula_fd_app
+
+
+@pytest.fixture(scope="module")
+def deploy_minio(juju: jubilant.Juju) -> str:
+    """
+    Deploy a MinIO S3 backend via any-charm for the Bacula storage daemon.
+    Downloads and runs the upstream MinIO server as a systemd unit.
+    """
+    if "minio" not in juju.status().apps:
+        logging.info("Deploying minio (any-charm)...")
+        src_overwrite = {
+            "any_charm.py": Path(MINIO_ANY_CHARM_SRC).read_text(encoding="utf-8"),
+        }
+        juju.deploy(
+            "any-charm",
+            "minio",
+            channel="latest/edge",
+            config={"src-overwrite": json.dumps(src_overwrite)},
+        )
+    return "minio"
+
+
+@pytest.fixture(scope="module")
+def bacula_server(juju: jubilant.Juju, bacula_fd: str, deploy_minio: str) -> str:
+    """Deploy and integrate the full Bacula server stacks."""
+    server_app = "bacula-server"
+    database_app = "bacula-database"
+
+    if server_app not in juju.status().apps:
+        logging.info("Deploying bacula-server...")
+        juju.deploy(server_app)
+    if database_app not in juju.status().apps:
+        logging.info("Deploying bacula-database (postgresql)...")
+        juju.deploy("postgresql", database_app, channel="14/stable")
+    if "s3-integrator" not in juju.status().apps:
+        logging.info("Deploying s3-integrator...")
+        juju.deploy("s3-integrator")
+
+    juju.wait(lambda status: jubilant.all_agents_idle(status, "s3-integrator"), timeout=600)
+
+    minio_address = next(iter(juju.status().apps[deploy_minio].units.values())).public_address
+    juju.config(
+        "s3-integrator",
+        {
+            "endpoint": f"http://{minio_address}:9000",
+            "bucket": "bacula",
+            "s3-uri-style": "path",
+        },
+    )
+    juju.run(
+        unit="s3-integrator/0",
+        action="sync-s3-credentials",
+        params={"access-key": "minioadmin", "secret-key": "minioadmin"},
+    )
+
+    for endpoint in ("bacula-database", "s3-integrator", bacula_fd):
+        try:
+            juju.integrate(server_app, endpoint)
+        except jubilant.CLIError:
+            logging.info(f"{server_app}:{endpoint} relation already present")
+
+    juju.wait(jubilant.all_active, timeout=20 * 60)
+    return server_app
+
+
+@pytest.fixture(scope="module", name="baculum")
+def baculum_client(juju: jubilant.Juju, bacula_server: str) -> baculum.Baculum:
+    """Initialize a Baculum API client against the bacula-server unit."""
+    unit_name = next(iter(juju.status().apps[bacula_server].units))
+    username = "test-admin"
+    password = juju.run(
+        unit_name,
+        "create-api-user",
+        params={"username": username},
+        wait=60,
+    ).results["password"]
+    address = next(iter(juju.status().apps[bacula_server].units.values())).public_address
+    return baculum.Baculum(f"http://{address}:9096/api/v2", username=username, password=password)
 
 
 @pytest.fixture(scope="module")

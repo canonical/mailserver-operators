@@ -316,3 +316,59 @@ def wait_for_sync_trigger(
         "Timed out waiting for sync trigger on "
         f"{unit}; previous mtime={previous_mtime}, previous timer count={previous_timer_count}"
     )
+
+
+def seed_backup_test_message(
+    juju: jubilant.Juju, unit_name: str, user: str, password: str, subject: str
+) -> None:
+    """Create a mail user with a single message carrying the given subject."""
+    setup_gdpr_test_user(juju, unit_name, user, password)
+    juju.exec(
+        (
+            f"printf 'From: {user}@example.com\\nSubject: {subject}\\n\\nbackup body\\n' | "
+            f"doveadm save -u {user} -m INBOX"
+        ),
+        unit=unit_name,
+    )
+
+
+def mailbox_has_subject(juju: jubilant.Juju, unit_name: str, user: str, subject: str) -> bool:
+    """Return True if the user's INBOX contains a message with the given subject."""
+    result = juju.exec(
+        f'doveadm search -u {user} mailbox INBOX HEADER Subject "{subject}"',
+        unit=unit_name,
+    )
+    return bool(result.stdout.strip())
+
+
+def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -> dict:
+    """Poll a Bacula job until its most recent run terminates successfully.
+
+    Bacula reports ``jobstatus == "T"`` when a job terminates normally. Any of the
+    error/fatal statuses (``E``, ``f``, ``A``) raise immediately.
+
+    Args:
+        baculum_client: a ``baculum.Baculum`` API client.
+        job_name: the Bacula job name to wait for.
+        timeout: maximum seconds to wait.
+
+    Returns:
+        The completed job run object.
+
+    Raises:
+        AssertionError: if the job fails or does not complete within the timeout.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        runs = baculum_client.list_job_runs(job_name)
+        if runs:
+            job_run = runs[0]
+            status = job_run["jobstatus"]
+            logging.info("%s job run status: %s", job_name, status)
+            if status == "T":
+                return job_run
+            if status in ("E", "f", "A"):
+                raise AssertionError(f"Bacula job '{job_name}' failed with status {status}")
+        time.sleep(5)
+
+    raise AssertionError(f"Timed out waiting for Bacula job '{job_name}' to complete")
