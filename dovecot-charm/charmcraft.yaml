@@ -55,8 +55,6 @@ requires:
 provides:
   cos-agent:
     interface: cos_agent
-  juju-info:
-    interface: juju-info
 
 config:
   options:
