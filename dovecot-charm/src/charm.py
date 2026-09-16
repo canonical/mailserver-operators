@@ -20,12 +20,17 @@ from charmlibs.interfaces.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
 )
+from charms.backup_integrator.v0.backup import BackupRequirer
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import BlockedStatus, MaintenanceStatus
 
 from constants import (
+    BACKUP_ARCHIVE_PATH,
+    BACKUP_KEY_FILE,
+    BACKUP_MANIFEST_PATH,
+    BACKUP_RELATION_NAME,
     DOVEADM_BIN,
     GDPR_ARCHIVE_DIR,
     GDPR_TAKEOUT_DIR,
@@ -34,12 +39,15 @@ from constants import (
     MAILNAME_FILE,
     PEER_RELATION_NAME,
     REQUIRED_PACKAGES,
+    RUN_AFTER_BACKUP_SCRIPT,
+    RUN_AFTER_RESTORE_SCRIPT,
+    RUN_BEFORE_BACKUP_SCRIPT,
     SYNC_TO_SECONDARY_TARGET,
     TEMPLATES_DIR,
 )
 from dovecot_config import DovecotConfig, DovecotConfigInvalidError, DovecotConfigSecretError
 from dovecot_setup import DovecotSetup
-from exceptions import CharmBlockedError, ConfigurationError, HASetupError
+from exceptions import BackupKeyError, CharmBlockedError, ConfigurationError, HASetupError
 from ha import HAManager
 from storage import StorageManager
 from utils import create_tarball, prepare_user_dir
@@ -54,6 +62,13 @@ class DovecotCharm(CharmBase):
         super().__init__(*args)
 
         self._storage = StorageManager(self)
+        self._backup_requirer = BackupRequirer(
+            charm=self,
+            fileset=[BACKUP_ARCHIVE_PATH, BACKUP_MANIFEST_PATH],
+            run_before_backup=RUN_BEFORE_BACKUP_SCRIPT,
+            run_after_backup=RUN_AFTER_BACKUP_SCRIPT,
+            run_after_restore=RUN_AFTER_RESTORE_SCRIPT,
+        )
         self._dovecot_setup = DovecotSetup(self)
         self._ha = HAManager(self)
 
@@ -69,6 +84,9 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.mail_data_storage_attached, self._reconcile)
         self.framework.observe(self.on.mail_data_storage_detaching, self._reconcile)
         self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._reconcile)
+        self.framework.observe(self.on[BACKUP_RELATION_NAME].relation_created, self._reconcile)
+        self.framework.observe(self.on[BACKUP_RELATION_NAME].relation_changed, self._reconcile)
+        self.framework.observe(self.on[BACKUP_RELATION_NAME].relation_broken, self._reconcile)
         self.framework.observe(self.on.force_sync_action, self._on_force_sync)
 
         self.framework.observe(
@@ -199,6 +217,11 @@ class DovecotCharm(CharmBase):
             self.unit.status = BlockedStatus(str(e))
             return
         try:
+            self._store_backup_encryption_key(dovecot_config)
+        except BackupKeyError as e:
+            self.unit.status = BlockedStatus(str(e))
+            return
+        try:
             self._ha.setup_ssh_keys()
             self._ha.sync_authorized_keys()
             self._ha.sync_known_hosts()
@@ -210,6 +233,25 @@ class DovecotCharm(CharmBase):
             return
         self._open_ports()
         self.unit.status = ops.ActiveStatus()
+
+    def _store_backup_encryption_key(self, dovecot_config: DovecotConfig) -> None:
+        relation = self.model.get_relation(BACKUP_RELATION_NAME)
+        key_file = Path(BACKUP_KEY_FILE)
+
+        if not dovecot_config.backup_encryption_key:
+            key_file.unlink(missing_ok=True)
+            if relation is not None:
+                raise BackupKeyError(
+                    "backup-encryption-key secret must be set when the backup relation is integrated"
+                )
+            return
+
+        try:
+            key_file.parent.mkdir(parents=True, exist_ok=True)
+            key_file.write_text(dovecot_config.backup_encryption_key, encoding="utf-8")
+            os.chmod(key_file, 0o600)
+        except OSError as e:
+            raise BackupKeyError(f"Failed to write backup encryption key file: {e}") from e
 
     def _install(self):
         """Install required packages and set up mailname."""

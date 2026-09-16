@@ -39,11 +39,27 @@ MAILNAME_FILE = "/etc/mailname"
 MAPPER_NAME = "mail-data"
 MAPPER_PATH = f"/dev/mapper/{MAPPER_NAME}"
 PEER_RELATION_NAME = "replicas"
+BACKUP_RELATION_NAME = "backup"
 
 # State file that persists the block-device path across reboots so that the
 # start hook can re-open LUKS without relying on `storage-get` (which fails
 # when Juju has not yet re-provisioned the storage after a VM restart).
 STORAGE_DEV_PATH_FILE = "/var/lib/dovecot/storage-dev-path"
+
+# File holding the passphrase used to encrypt/decrypt backups.
+BACKUP_STATE_DIR = "/var/lib/dovecot/backup"
+BACKUP_KEY_FILE = f"{BACKUP_STATE_DIR}/encryption.key"
+
+# The artifacts to be backed up.
+BACKUP_ROOT = "/var/backups/dovecot"
+BACKUP_ARCHIVE_PATH = f"{BACKUP_ROOT}/mail-data.tar.gz.enc"
+BACKUP_MANIFEST_PATH = f"{BACKUP_ROOT}/manifest.json"
+
+# Backup/restore scripts.
+BACKUP_SCRIPT_SOURCE_DIR = Path(__file__).parent / "backup_scripts"
+RUN_BEFORE_BACKUP_SCRIPT = BACKUP_SCRIPT_SOURCE_DIR / "run-before-backup.sh"
+RUN_AFTER_BACKUP_SCRIPT = BACKUP_SCRIPT_SOURCE_DIR / "run-after-backup.sh"
+RUN_AFTER_RESTORE_SCRIPT = BACKUP_SCRIPT_SOURCE_DIR / "run-after-restore.sh"
 
 TLS_CERT_DIR = Path("/etc/dovecot/private")
 

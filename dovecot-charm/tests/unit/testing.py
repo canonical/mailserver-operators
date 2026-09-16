@@ -119,6 +119,9 @@ class DovecotTestCharm(DovecotCharm):
     _dovecot_setup: DovecotSetup = NoOpDovecotSetup()
     _ha: HAManager = NoOpHAManager()
 
+    def _store_backup_encryption_key(self, dovecot_config):
+        pass
+
     def __init__(self, *args):
         super().__init__(*args)
         # Re-read from the class so patch.object overrides take effect.
@@ -141,6 +144,9 @@ class StorageTestDovecotCharm(DovecotCharm):
     _storage: StorageManager = FakeStorageManager()
     _dovecot_setup: DovecotSetup = NoOpDovecotSetup()
     _ha: HAManager = NoOpHAManager()
+
+    def _store_backup_encryption_key(self, dovecot_config):
+        pass
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -178,9 +184,26 @@ class TLSTestDovecotCharm(DovecotCharm):
     _dovecot_setup: DovecotSetup = TLSDovecotSetup()
     _ha: HAManager = NoOpHAManager()
 
+    def _store_backup_encryption_key(self, dovecot_config):
+        pass
+
     def __init__(self, *args):
         super().__init__(*args)
         self._storage = type(self)._storage
         self._dovecot_setup = type(self)._dovecot_setup
         self._dovecot_setup._charm = self
+        self._ha = type(self)._ha
+
+
+class BackupTestDovecotCharm(DovecotCharm):
+    """DovecotCharm that uses the real backup logic but no-ops storage, setup, and HA."""
+
+    _storage: StorageManager = NoOpStorageManager()
+    _dovecot_setup: DovecotSetup = NoOpDovecotSetup()
+    _ha: HAManager = NoOpHAManager()
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self._storage = type(self)._storage
+        self._dovecot_setup = type(self)._dovecot_setup
         self._ha = type(self)._ha

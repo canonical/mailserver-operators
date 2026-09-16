@@ -63,6 +63,13 @@ class DovecotConfig(BaseModel):
         "",
         description="LUKS passphrase from the luks-key secret. Required when luks_auto_provisioning is true.",
     )
+    backup_encryption_key: str = Field(
+        "",
+        description=(
+            "Backup passphrase from the backup-encryption-key secret. "
+            "Used to encrypt Bacula backup artifacts when the backup relation is integrated."
+        ),
+    )
     sync_schedule: str = Field(
         "daily",
         description="Systemd OnCalendar expression for syncing mail from primary to secondary units.",
@@ -114,23 +121,17 @@ class DovecotConfig(BaseModel):
         if luks_auto_provisioning:
             secret_id = config.get("luks-key", "")
             if secret_id:
-                try:
-                    content = charm.model.get_secret(id=secret_id).get_content()
-                    luks_key = content.get("key", "")
-                    if not luks_key:
-                        msg = (
-                            f"Secret (id={secret_id}) exists but does not contain a 'key' field. "
-                            "Ensure the secret was created with: juju add-secret ... key=<passphrase>"
-                        )
-                        logger.error(msg)
-                        raise DovecotConfigSecretError(msg)
-                except (SecretNotFoundError, ModelError) as e:
-                    msg = (
-                        f"Failed to retrieve luks-key secret (id={secret_id}): {e}. "
-                        "Ensure the secret exists and the charm has grant-secret permission."
-                    )
-                    logger.error(msg)
-                    raise DovecotConfigSecretError(msg) from e
+                luks_key = cls._read_secret_key(charm, secret_id, "luks-key")
+
+        backup_encryption_key = ""
+        backup_secret_id = config.get("backup-encryption-key", "")
+        if backup_secret_id:
+            backup_encryption_key = cls._read_secret_key(
+                charm,
+                backup_secret_id,
+                "backup-encryption-key",
+                "backup-key",
+            )
         try:
             return cls.model_validate(
                 {
@@ -139,6 +140,7 @@ class DovecotConfig(BaseModel):
                     "primary_unit": config.get("primary-unit"),
                     "luks_auto_provisioning": luks_auto_provisioning,
                     "luks_key": luks_key,
+                    "backup_encryption_key": backup_encryption_key,
                     "sync_schedule": config.get("sync-schedule", "daily"),
                 },
                 context={"charm": charm},
@@ -146,3 +148,39 @@ class DovecotConfig(BaseModel):
         except ValidationError as e:
             logger.exception(f"Configuration validation error: {e}")
             raise DovecotConfigInvalidError(e) from e
+
+    @staticmethod
+    def _read_secret_key(
+        charm: "DovecotCharm", secret_id: str, config_name: str, field_name: str = "key"
+    ) -> str:
+        """Fetch a charm secret and return the requested field.
+
+        Args:
+            charm: The charm instance used to fetch the Juju secret.
+            secret_id: Juju secret identifier stored in charm config.
+            config_name: Config option name for error messages.
+            field_name: Secret content field that contains the desired value.
+
+        Raises:
+            DovecotConfigSecretError: If the secret is missing, inaccessible, or malformed.
+        """
+        try:
+            content = charm.model.get_secret(id=secret_id).get_content()
+        except (SecretNotFoundError, ModelError) as e:
+            msg = (
+                f"Failed to retrieve {config_name} secret (id={secret_id}): {e}. "
+                "Ensure the secret exists and the charm has grant-secret permission."
+            )
+            logger.error(msg)
+            raise DovecotConfigSecretError(msg) from e
+
+        key = content.get(field_name, "")
+        if key:
+            return key
+
+        msg = (
+            f"Secret (id={secret_id}) exists but does not contain a '{field_name}' field. "
+            f"Ensure the secret was created with: juju add-secret ... {field_name}=<passphrase>"
+        )
+        logger.error(msg)
+        raise DovecotConfigSecretError(msg)
