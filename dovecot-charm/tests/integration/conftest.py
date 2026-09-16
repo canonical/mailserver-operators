@@ -172,7 +172,7 @@ def bacula_fd(juju: jubilant.Juju, dovecot_charm: str) -> str:
     bacula_fd_app = "bacula-fd"
     if bacula_fd_app not in juju.status().apps:
         logging.info("Deploying bacula-fd...")
-        juju.deploy(bacula_fd_app)
+        juju.deploy(bacula_fd_app, channel="latest/edge")
     else:
         logging.info(f"{bacula_fd_app} already deployed, skipping deployment.")
 
@@ -222,7 +222,7 @@ def bacula_server(juju: jubilant.Juju, bacula_fd: str, deploy_minio: str) -> str
 
     if server_app not in juju.status().apps:
         logging.info("Deploying bacula-server...")
-        juju.deploy(server_app)
+        juju.deploy(server_app, channel="latest/edge")
     if database_app not in juju.status().apps:
         logging.info("Deploying bacula-database (postgresql)...")
         juju.deploy("postgresql", database_app, channel="14/stable")
