@@ -1,5 +1,8 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 import os
-import subprocess
+import subprocess  # nosec
 import textwrap
 import urllib.request
 
@@ -17,12 +20,12 @@ class AnyCharm(AnyCharmBase):
         # dl.min.io no longer serves community release binaries (HTTP 410: the
         # open-source MinIO Server project is archived), so fetch a pinned
         # binary from the archived GitHub releases instead.
-        urllib.request.urlretrieve(
+        urllib.request.urlretrieve(  # nosec B310
             "https://github.com/minio/minio/releases/download/"
             "RELEASE.2025-09-07T16-13-09Z/minio.linux-amd64.RELEASE.2025-09-07T16-13-09Z",
             "/usr/bin/minio",
         )
-        os.chmod("/usr/bin/minio", 0o755)
+        os.chmod("/usr/bin/minio", 0o755)  # nosec B103
         self.unit.status = ops.MaintenanceStatus("setting up minio")
         service = textwrap.dedent(
             """
@@ -46,7 +49,7 @@ class AnyCharm(AnyCharmBase):
         )
         with open("/etc/systemd/system/minio.service", "w") as f:
             f.write(service)
-        subprocess.check_call(["systemctl", "daemon-reload"])
-        subprocess.check_call(["systemctl", "enable", "--now", "minio"])
+        subprocess.check_call(["systemctl", "daemon-reload"])  # nosec B607
+        subprocess.check_call(["systemctl", "enable", "--now", "minio"])  # nosec B607
         self.unit.set_ports(9000, 9001)
         self.unit.status = ops.ActiveStatus()
