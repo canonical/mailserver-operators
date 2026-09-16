@@ -202,6 +202,13 @@ class HAManager:
 
         systemd.service_resume("sync-to-secondary.timer")
 
+    def disable_mail_sync_timer(self) -> None:
+        """Disable mail synchronization when this unit is not the primary."""
+        if not Path(SYNC_TO_SECONDARY_TIMER_TARGET).exists():
+            return
+
+        systemd.service_pause("sync-to-secondary.timer")
+
     def _ensure_root_ssh_login(self, peer_ips: list[str]) -> None:
         """Set PermitRootLogin via an sshd drop-in restricted to peer addresses.
 
