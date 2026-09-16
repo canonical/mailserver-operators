@@ -3,6 +3,7 @@
 
 import logging
 import secrets
+from pathlib import PurePosixPath
 
 import jubilant
 
@@ -42,7 +43,9 @@ def test_bacula_backup_restore_roundtrip(
         baculum.run_backup_job(backup_job)
         backup_run = wait_for_bacula_job(baculum, backup_job)
 
-        backed_up_files = {f["name"] for f in baculum.list_job_files(int(backup_run["jobid"]))}
+        backed_up_files = {
+            PurePosixPath(f).name for f in baculum.list_job_files(int(backup_run["jobid"]))
+        }
         assert "mail-data.tar.gz.enc" in backed_up_files, (
             "encrypted mail archive was not stored in Bacula"
         )
