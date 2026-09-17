@@ -26,6 +26,7 @@ REQUIRED_PACKAGES = [
     "dovecot-sieve",
     "etckeeper",
     "getmail6",
+    "jq",
     "mailutils",
     "mutt",
     "procmail",

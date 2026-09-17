@@ -25,7 +25,7 @@ Configure backup encryption
 
 Create a secret for the backup passphrase and grant it to Dovecot:
 
-.. code-block:: bash
+.. code-block:: shell
 
    juju add-secret dovecot-backup-key backup-key='<passphrase>'
    juju grant-secret dovecot-backup-key dovecot
@@ -37,7 +37,7 @@ Integrate Dovecot with Bacula
 Attach the Bacula file daemon to the same machine as Dovecot and integrate the
 backup relation:
 
-.. code-block:: bash
+.. code-block:: shell
 
    juju deploy bacula-fd
    juju integrate dovecot:juju-info bacula-fd:juju-info

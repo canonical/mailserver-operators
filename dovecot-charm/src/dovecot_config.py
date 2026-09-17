@@ -165,7 +165,7 @@ class DovecotConfig(BaseModel):
             DovecotConfigSecretError: If the secret is missing, inaccessible, or malformed.
         """
         try:
-            content = charm.model.get_secret(id=secret_id).get_content()
+            content = charm.model.get_secret(id=secret_id).get_content(refresh=True)
         except (SecretNotFoundError, ModelError) as e:
             msg = (
                 f"Failed to retrieve {config_name} secret (id={secret_id}): {e}. "
