@@ -88,6 +88,10 @@ config:
         artifacts created by the charm. The secret must have a field named
         "backup-key". Required only when the backup relation is integrated.
         Example: juju add-secret dovecot-backup-key backup-key=<passphrase>
+
+        WARNING: changing this passphrase makes all existing backups that were
+        created with the previous passphrase impossible to restore. Keep the
+        passphrase safe and stable for the lifetime of the backups you need.
       default: ""
       type: secret
     postmaster-address:

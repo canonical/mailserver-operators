@@ -37,8 +37,8 @@ class Baculum:
             timeout: Baculum API request timeout.
         """
         self._base = base_url.rstrip("/")
+        self._timeout = timeout
         self._session = requests.Session()
-        self._session.timeout = timeout
         self._session.auth = (username, password)
         self._session.headers.update({"Content-Type": "application/json"})
 
@@ -80,7 +80,9 @@ class Baculum:
             "pool": job["pool"],
             "fileset": job["fileset"],
         }
-        response = self._session.post(f"{self._base}/jobs/run", json=payload)
+        response = self._session.post(
+            f"{self._base}/jobs/run", json=payload, timeout=self._timeout
+        )
         return "\n".join(self._extract_output(f"run backup '{name}'", response))
 
     def run_restore_job(self, name: str, backup_job_id: int) -> str:
@@ -103,7 +105,9 @@ class Baculum:
             "replace": "always",
             "full": True,
         }
-        response = self._session.post(f"{self._base}/jobs/restore", json=payload)
+        response = self._session.post(
+            f"{self._base}/jobs/restore", json=payload, timeout=self._timeout
+        )
         return "\n".join(
             self._extract_output(f"restore '{name}' from backup {backup_job_id}", response)
         )
@@ -119,7 +123,7 @@ class Baculum:
         """
         job = self.get_job(job=name)
         params = {"name": name, "client": job["client"]}
-        response = self._session.get(f"{self._base}/jobs", params=params)
+        response = self._session.get(f"{self._base}/jobs", params=params, timeout=self._timeout)
         return self._extract_output(f"list jobs '{name}'", response)
 
     def list_job_names(self) -> list[str]:
@@ -128,7 +132,7 @@ class Baculum:
         Returns:
             A list of job names.
         """
-        response = self._session.get(f"{self._base}/jobs/resnames")
+        response = self._session.get(f"{self._base}/jobs/resnames", timeout=self._timeout)
         result = self._extract_output("list job names", response)
         return next(iter(result.values()))
 
@@ -142,7 +146,9 @@ class Baculum:
             Job details object.
         """
         params = {"name": job, "output": "json"}
-        response = self._session.get(f"{self._base}/jobs/show", params=params)
+        response = self._session.get(
+            f"{self._base}/jobs/show", params=params, timeout=self._timeout
+        )
         return self._extract_output(f"show job '{job}' detail", response)
 
     def list_job_files(self, job_id: int) -> list[str]:
@@ -154,5 +160,5 @@ class Baculum:
         Returns:
             A list of full file paths backed up by the job.
         """
-        response = self._session.get(f"{self._base}/jobs/{job_id}/files")
+        response = self._session.get(f"{self._base}/jobs/{job_id}/files", timeout=self._timeout)
         return self._extract_output(f"list files for job {job_id}", response)

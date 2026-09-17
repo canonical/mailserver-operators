@@ -249,8 +249,9 @@ class DovecotCharm(CharmBase):
             return
 
         key_file.parent.mkdir(parents=True, exist_ok=True)
-        key_file.write_text(dovecot_config.backup_encryption_key, encoding="utf-8")
-        os.chmod(key_file, 0o600)
+        fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as key_fh:
+            key_fh.write(dovecot_config.backup_encryption_key)
 
     def _install(self):
         """Install required packages and set up mailname."""

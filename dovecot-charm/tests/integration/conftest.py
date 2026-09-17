@@ -1,11 +1,10 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import json
 import logging
 import secrets
+import socket
 import typing
-from pathlib import Path
 
 import jubilant
 import pytest
@@ -33,14 +32,30 @@ CREATE_MAIL_USER_TEST_USER = "cmu-testuser"
 CREATE_MAIL_USER_TEST_MAILBOX = "cmu-testuser@example.com"
 CREATE_MAIL_USER_TEST_PASSWORD = secrets.token_hex(16)
 
-# minio any-charm source file path
-MINIO_ANY_CHARM_SRC = "tests/integration/minio_any_charm_src.py"
+# S3 backend (microceph radosgw) is provisioned on the runner host by the spread
+# prepare script tests/integration/s3-installation.sh.
+S3_ACCESS_KEY = "my-lovely-key"
+S3_SECRET_KEY = "this-is-very-secret"
+S3_BUCKET = "bacula"
+S3_RGW_PORT = 7480
 
 
 def _get_charm_path(request: pytest.FixtureRequest) -> str:
     """Resolve the Dovecot charm path only when deployment is required."""
     charm_paths = typing.cast(dict[str, CharmPathList], request.getfixturevalue("charm_paths"))
     return charm_paths["dovecot"].path
+
+
+def _host_ip() -> typing.Optional[str]:
+    """Return the host's primary outbound IP, reachable from juju units."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.connect(("8.8.8.8", 80))
+        ip = sock.getsockname()[0]
+        sock.close()
+        return ip
+    except OSError:
+        return None
 
 
 @pytest.fixture(scope="session", name="juju")
@@ -194,28 +209,22 @@ def bacula_fd(juju: jubilant.Juju, dovecot_charm: str) -> str:
     return bacula_fd_app
 
 
-@pytest.fixture(scope="module")
-def deploy_minio(juju: jubilant.Juju) -> str:
+@pytest.fixture(scope="session")
+def s3_address(pytestconfig: pytest.Config) -> str:
+    """Provide the S3 service IP address used in integration tests.
+
+    Defaults to the host's primary outbound IP so that juju units can reach the
+    microceph radosgw provisioned on the runner host by the s3-installation.sh
+    spread prepare script. Can be overridden with --s3-address.
     """
-    Deploy a MinIO S3 backend via any-charm for the Bacula storage daemon.
-    Downloads and runs the upstream MinIO server as a systemd unit.
-    """
-    if "minio" not in juju.status().apps:
-        logging.info("Deploying minio (any-charm)...")
-        src_overwrite = {
-            "any_charm.py": Path(MINIO_ANY_CHARM_SRC).read_text(encoding="utf-8"),
-        }
-        juju.deploy(
-            "any-charm",
-            "minio",
-            channel="latest/edge",
-            config={"src-overwrite": json.dumps(src_overwrite)},
-        )
-    return "minio"
+    address = pytestconfig.getoption("--s3-address", default=None) or _host_ip()
+    if not address:
+        raise RuntimeError("Could not determine S3 address; pass --s3-address explicitly")
+    return address
 
 
 @pytest.fixture(scope="module")
-def bacula_server(juju: jubilant.Juju, bacula_fd: str, deploy_minio: str) -> str:
+def bacula_server(juju: jubilant.Juju, bacula_fd: str, s3_address: str) -> str:
     """Deploy and integrate the full Bacula server stacks."""
     server_app = "bacula-server"
     database_app = "bacula-database"
@@ -232,19 +241,18 @@ def bacula_server(juju: jubilant.Juju, bacula_fd: str, deploy_minio: str) -> str
 
     juju.wait(lambda status: jubilant.all_agents_idle(status, "s3-integrator"), timeout=600)
 
-    minio_address = next(iter(juju.status().apps[deploy_minio].units.values())).public_address
     juju.config(
         "s3-integrator",
         {
-            "endpoint": f"http://{minio_address}:9000",
-            "bucket": "bacula",
+            "endpoint": f"http://{s3_address}:{S3_RGW_PORT}",
+            "bucket": S3_BUCKET,
             "s3-uri-style": "path",
         },
     )
     juju.run(
         unit="s3-integrator/0",
         action="sync-s3-credentials",
-        params={"access-key": "minioadmin", "secret-key": "minioadmin"},
+        params={"access-key": S3_ACCESS_KEY, "secret-key": S3_SECRET_KEY},
     )
 
     for endpoint in ("bacula-database", "s3-integrator", bacula_fd):
