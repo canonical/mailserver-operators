@@ -17,7 +17,7 @@ module "dovecot" {
     ca       = var.juju_ca
   }
 
-  model_cloud       = { name = "maas-prod" }
+  model_uuid         = var.model_uuid
   mail_domain       = "mail.example.com"
   postmaster_address = "postmaster@mail.example.com"
   luks_key           = var.mail_luks_key
@@ -43,13 +43,10 @@ tls = {
 }
 ```
 
-The module defaults to Dovecot `2.3/edge` and 8 GiB of `mail-data` storage. Use a machine cloud
-with block storage for staging; Juju LXD loop storage is suitable only where the controller
-correctly resolves unit storage attachments. Pin charm revisions for reproducible deployments.
-`model_cloud` is required so Juju cannot accidentally create the model on a Kubernetes cloud.
-
-For a centrally managed deployment, set `create_model = false` and pass `model_uuid` instead of
-`model_cloud`. The product then deploys into that model and does not create or own it.
+The module defaults to Dovecot `2.3/edge` and 8 GiB of `mail-data` storage. The supplied
+`model_uuid` must identify an existing machine model with block storage; Juju LXD loop storage is
+suitable only where the controller correctly resolves unit storage attachments. The product does
+not create or own the model. Pin charm revisions for reproducible deployments.
 `juju_controller` accepts either `username`/`password` or JAAS `client_id`/`client_secret`
 credentials.
 TLS offers must be hosted on the configured controller.

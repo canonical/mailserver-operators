@@ -7,8 +7,8 @@ This repository contains two independent CC008 product modules:
 | Postfix Relay | [`postfix-relay/`](postfix-relay/) | Postfix Relay and OpenDKIM |
 | Dovecot | [`dovecot/`](dovecot/) | Dovecot and a default TLS provider |
 
-Each product owns its Juju model, secrets, supported integrations, and CC008-compatible outputs.
-The charm modules remain beside their charms under `<charm>/terraform/`.
+Each product deploys into an existing Juju model and owns its secrets, supported integrations, and
+CC008-compatible outputs. The charm modules remain beside their charms under `<charm>/terraform/`.
 
 See [Installing the Terraform products](INSTALL.md) for a complete deployment procedure.
 

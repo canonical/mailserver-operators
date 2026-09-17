@@ -5,8 +5,8 @@ This guide deploys the two CC008 products from this repository:
 - **Dovecot**: Dovecot, encrypted block storage, and TLS.
 - **Postfix Relay**: Postfix Relay, OpenDKIM, and their `milter` integration.
 
-Each product creates and owns a separate Juju model. They can be installed independently. Deploying
-both does not automatically route Postfix mail to Dovecot because the charms do not yet provide a
+Each product deploys into an existing Juju model and can be installed independently. Deploying both
+does not automatically route Postfix mail to Dovecot because the charms do not yet provide a
 mailbox-backend relation.
 
 ## 1. Prepare the environment
@@ -29,15 +29,15 @@ juju controllers
 juju clouds
 ```
 
-Identify the machine cloud on the target controller. Do not select a Kubernetes cloud: both
-products deploy machine charms. The products require `model_cloud` explicitly to prevent Juju from
-silently choosing a controller's default Kubernetes cloud.
+Create or identify the target machine-backed models before running Terraform. Do not use
+Kubernetes models: both products deploy machine charms.
 
-Use a Juju account that can create models, applications, integrations, and secrets. Confirm the
-correct controller is available:
+Use a Juju account that can manage applications, integrations, and secrets in those models.
+Confirm the correct controller and models are available:
 
 ```bash
 juju show-controller <controller-name> --show-password
+juju models -c <controller-name>
 ```
 
 Treat that output as sensitive.
@@ -100,8 +100,8 @@ the required `juju_controller` object directly from Juju's structured output:
 
 ```bash
 export JUJU_CONTROLLER_NAME="<controller-name>"
-printf 'Juju machine cloud: ' >&2
-IFS= read -r JUJU_MACHINE_CLOUD
+export DOVECOT_MODEL_UUID="<existing-dovecot-model-uuid>"
+export POSTFIX_MODEL_UUID="<existing-postfix-relay-model-uuid>"
 
 export TF_VAR_juju_controller="$(
   juju show-controller "$JUJU_CONTROLLER_NAME" --show-password --format json |
@@ -116,9 +116,6 @@ export TF_VAR_juju_controller="$(
     '
 )"
 export TF_VAR_mail_domain="mail.example.com"
-export TF_VAR_model_cloud="$(
-  jq -cn --arg name "$JUJU_MACHINE_CLOUD" '{name:$name}'
-)"
 export TF_VAR_dkim_private_key="$(cat /secure/path/default.private)"
 export TF_VAR_postmaster_address="postmaster@$TF_VAR_mail_domain"
 
@@ -128,7 +125,6 @@ test -s terraform/dovecot/luks-key.secret ||
 export TF_VAR_luks_key="$(
   cat terraform/dovecot/luks-key.secret
 )"
-unset JUJU_MACHINE_CLOUD
 ```
 
 Verify the required fields before planning without printing their sensitive values:
@@ -165,7 +161,7 @@ Validate, plan, and deploy Dovecot:
 ```bash
 terraform -chdir=terraform/dovecot validate
 terraform -chdir=terraform/dovecot plan \
-  -var='model_name=company-dovecot' \
+  -var="model_uuid=$DOVECOT_MODEL_UUID" \
   -out=dovecot.tfplan &&
 terraform -chdir=terraform/dovecot show dovecot.tfplan &&
 terraform -chdir=terraform/dovecot apply dovecot.tfplan &&
@@ -184,17 +180,13 @@ export TF_VAR_luks_key="$(
 )"
 
 terraform -chdir=terraform/dovecot plan \
-  -var='model_name=company-dovecot' \
-  -var='model_cloud={name="localhost"}' \
+  -var="model_uuid=$DOVECOT_MODEL_UUID" \
   -var='dovecot={storage_directives={"mail-data"="loop,8G"}}' \
   -out=dovecot.tfplan &&
 terraform -chdir=terraform/dovecot show dovecot.tfplan &&
 terraform -chdir=terraform/dovecot apply dovecot.tfplan &&
 rm terraform/dovecot/dovecot.tfplan
 ```
-
-At Terraform's interactive `model_cloud` prompt, the equivalent value is
-`{name="localhost"}`, not `localhost`. Supplying it with `-var` avoids the prompt.
 
 Confirm that the pool exists with
 `juju storage-pools -m <controller-name>:<existing-machine-model>`. If `loop` is unavailable, use a
@@ -207,7 +199,7 @@ Validate, plan, and deploy Postfix Relay with OpenDKIM:
 ```bash
 terraform -chdir=terraform/postfix-relay validate
 terraform -chdir=terraform/postfix-relay plan \
-  -var='model_name=company-postfix-relay' \
+  -var="model_uuid=$POSTFIX_MODEL_UUID" \
   -var='postfix_relay={config={domain="mail.example.com"}}' \
   -out=postfix-relay.tfplan &&
 terraform -chdir=terraform/postfix-relay show postfix-relay.tfplan &&
@@ -241,13 +233,12 @@ attempt, forget those stale records:
 ```bash
 terraform -chdir=terraform/dovecot state rm \
   'juju_application.self_signed_certificates[0]' \
-  juju_secret.dovecot_luks \
-  juju_model.dovecot
+  juju_secret.dovecot_luks
 ```
 
 Do not run `state rm` for resources that still exist and should remain managed. Destroy an
-accidental live model on its original controller first, or restore that controller's Terraform
-credentials and destroy it through Terraform.
+accidental live resources on their original controller first, or restore that controller's
+Terraform credentials and destroy them through Terraform.
 
 ## 6. Verify the deployment
 
@@ -456,7 +447,7 @@ configuration:
 
 ```bash
 terraform -chdir=terraform/postfix-relay plan \
-  -var='model_name=company-postfix-relay' \
+  -var="model_uuid=$POSTFIX_MODEL_UUID" \
   -var='postfix_relay={config={domain="mail.example.com",relay_host="[<dovecot-unit-address>]"}}' \
   -out=route.tfplan
 terraform -chdir=terraform/postfix-relay apply route.tfplan
@@ -509,7 +500,7 @@ git fetch --tags
 git checkout <new-release-tag-or-commit>
 terraform -chdir=terraform/dovecot init -upgrade
 terraform -chdir=terraform/dovecot plan \
-  -var='model_name=company-dovecot' \
+  -var="model_uuid=$DOVECOT_MODEL_UUID" \
   -out=upgrade.tfplan
 terraform -chdir=terraform/dovecot apply upgrade.tfplan
 rm terraform/dovecot/upgrade.tfplan
@@ -522,7 +513,7 @@ To remove Postfix Relay:
 
 ```bash
 terraform -chdir=terraform/postfix-relay plan -destroy \
-  -var='model_name=company-postfix-relay' \
+  -var="model_uuid=$POSTFIX_MODEL_UUID" \
   -out=destroy.tfplan
 terraform -chdir=terraform/postfix-relay apply destroy.tfplan
 rm terraform/postfix-relay/destroy.tfplan
@@ -532,20 +523,22 @@ To remove Dovecot:
 
 ```bash
 terraform -chdir=terraform/dovecot plan -destroy \
-  -var='model_name=company-dovecot' \
+  -var="model_uuid=$DOVECOT_MODEL_UUID" \
   -out=destroy.tfplan
 terraform -chdir=terraform/dovecot apply destroy.tfplan
 rm terraform/dovecot/destroy.tfplan
 ```
 
-Destroying Dovecot removes its model and can destroy the attached mail volume. Preserve required
-mail and DKIM material before teardown, then clear the exported secret variables:
+Destroying Dovecot can destroy its attached mail volume, but neither product removes its Juju
+model. Preserve required mail and DKIM material before teardown, then clear the exported
+variables:
 
 ```bash
 unset TF_VAR_juju_controller
 unset TF_VAR_mail_domain
-unset TF_VAR_model_cloud
 unset TF_VAR_dkim_private_key
 unset TF_VAR_luks_key
 unset TF_VAR_postmaster_address
+unset DOVECOT_MODEL_UUID
+unset POSTFIX_MODEL_UUID
 ```

@@ -2,8 +2,6 @@
 # See LICENSE file for licensing details.
 
 locals {
-  model_uuid = var.create_model ? juju_model.dovecot[0].uuid : var.model_uuid
-
   dovecot = merge(var.dovecot, {
     channel = coalesce(var.dovecot.channel, "2.3/${var.risk}")
   })

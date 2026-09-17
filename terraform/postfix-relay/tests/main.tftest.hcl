@@ -19,9 +19,7 @@ variables {
     username = "admin"
   }
   mail_domain = "mail.example.test"
-  model_cloud = {
-    name = "localhost"
-  }
+  model_uuid  = "00000000-0000-0000-0000-000000000000"
 }
 
 run "default_product_contract" {
@@ -93,21 +91,12 @@ run "cos_offer_contract" {
   }
 }
 
-run "existing_model_contract" {
+run "model_contract" {
   command = plan
 
-  variables {
-    create_model = false
-    model_cloud  = null
-    model_uuid   = "00000000-0000-0000-0000-000000000000"
-  }
-
   assert {
-    condition = (
-      length(juju_model.postfix_relay) == 0
-      && output.models.postfix_relay.model_uuid == "00000000-0000-0000-0000-000000000000"
-    )
-    error_message = "An existing model UUID must suppress model creation and own all product resources."
+    condition     = output.models.postfix_relay.model_uuid == "00000000-0000-0000-0000-000000000000"
+    error_message = "All product resources must use the supplied model UUID."
   }
 }
 

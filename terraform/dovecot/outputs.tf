@@ -18,7 +18,7 @@ output "models" {
         dovecot                  = module.dovecot.application
         self_signed_certificates = var.tls == null ? juju_application.self_signed_certificates[0] : null
       }
-      model_uuid = local.model_uuid
+      model_uuid = var.model_uuid
     }
   }
 }

@@ -42,7 +42,7 @@ output "models" {
         opendkim      = var.enable_opendkim ? module.opendkim[0].application : null
         postfix_relay = module.postfix_relay.application
       }
-      model_uuid = local.model_uuid
+      model_uuid = var.model_uuid
     }
   }
 }

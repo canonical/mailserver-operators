@@ -17,11 +17,9 @@ variables {
     password = "test-password"
     username = "admin"
   }
-  luks_key    = "test-luks-passphrase"
-  mail_domain = "mail.example.test"
-  model_cloud = {
-    name = "localhost"
-  }
+  luks_key           = "test-luks-passphrase"
+  mail_domain        = "mail.example.test"
+  model_uuid         = "00000000-0000-0000-0000-000000000000"
   postmaster_address = "postmaster@mail.example.test"
 }
 
@@ -81,21 +79,12 @@ run "external_tls_contract" {
   }
 }
 
-run "existing_model_contract" {
+run "model_contract" {
   command = plan
 
-  variables {
-    create_model = false
-    model_cloud  = null
-    model_uuid   = "00000000-0000-0000-0000-000000000000"
-  }
-
   assert {
-    condition = (
-      length(juju_model.dovecot) == 0
-      && output.models.dovecot.model_uuid == "00000000-0000-0000-0000-000000000000"
-    )
-    error_message = "An existing model UUID must suppress model creation and own all product resources."
+    condition     = output.models.dovecot.model_uuid == "00000000-0000-0000-0000-000000000000"
+    error_message = "All product resources must use the supplied model UUID."
   }
 }
 

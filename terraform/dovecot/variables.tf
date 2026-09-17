@@ -28,13 +28,6 @@ variable "cos" {
   }
 }
 
-variable "create_model" {
-  description = "Whether this product creates and owns its Juju model."
-  type        = bool
-  default     = true
-  nullable    = false
-}
-
 variable "dovecot" {
   description = "Dovecot charm deployment options."
   type = object({
@@ -94,13 +87,6 @@ variable "juju_controller" {
   }
 }
 
-variable "logging-config" {
-  description = "Juju model logging configuration."
-  type        = string
-  default     = "<root>=INFO"
-  nullable    = false
-}
-
 variable "luks_key" {
   description = "Passphrase stored in a Juju secret for Dovecot encrypted mail storage."
   type        = string
@@ -131,45 +117,10 @@ variable "mail_domain" {
   nullable    = false
 }
 
-variable "model_cloud" {
-  description = "Juju machine cloud used when model_uuid is null."
-  type = object({
-    name   = string
-    region = optional(string)
-  })
-  default  = null
-  nullable = true
-
-  validation {
-    condition     = !var.create_model || var.model_cloud != null
-    error_message = "model_cloud is required when create_model is true."
-  }
-}
-
-variable "model_constraints" {
-  description = "Default constraints for machines in the Juju model."
-  type        = string
-  default     = ""
-  nullable    = false
-}
-
-variable "model_name" {
-  description = "Name of the Juju model created for the product."
-  type        = string
-  default     = "dovecot"
-  nullable    = false
-}
-
 variable "model_uuid" {
-  description = "Existing or externally managed Juju model UUID used when create_model is false."
+  description = "UUID of the existing Juju model where the product is deployed."
   type        = string
-  default     = null
-  nullable    = true
-
-  validation {
-    condition     = var.create_model || var.model_uuid != null
-    error_message = "model_uuid is required when create_model is false."
-  }
+  nullable    = false
 }
 
 variable "postmaster_address" {
@@ -188,17 +139,6 @@ variable "primary_unit" {
     condition     = var.primary_unit == null || length(trimspace(var.primary_unit)) > 0
     error_message = "primary_unit must be null or non-empty."
   }
-}
-
-variable "proxy" {
-  description = "Proxy configuration applied to the Juju model."
-  type = object({
-    http     = optional(string, "")
-    https    = optional(string, "")
-    no_proxy = optional(string, "")
-  })
-  default  = {}
-  nullable = false
 }
 
 variable "risk" {

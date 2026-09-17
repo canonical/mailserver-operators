@@ -2,8 +2,6 @@
 # See LICENSE file for licensing details.
 
 locals {
-  model_uuid = var.create_model ? juju_model.postfix_relay[0].uuid : var.model_uuid
-
   opendkim = merge(var.opendkim, {
     channel = coalesce(var.opendkim.channel, "2/${var.risk}")
   })

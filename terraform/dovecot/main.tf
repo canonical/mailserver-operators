@@ -1,27 +1,9 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-resource "juju_model" "dovecot" {
-  count       = var.create_model ? 1 : 0
-  name        = var.model_name
-  constraints = var.model_constraints
-
-  cloud {
-    name   = var.model_cloud == null ? "" : var.model_cloud.name
-    region = var.model_cloud == null ? null : var.model_cloud.region
-  }
-
-  config = {
-    juju-http-proxy  = var.proxy.http
-    juju-https-proxy = var.proxy.https
-    juju-no-proxy    = var.proxy.no_proxy
-    logging-config   = var.logging-config
-  }
-}
-
 resource "juju_secret" "dovecot_luks" {
   info       = "LUKS passphrase for Dovecot mail storage."
-  model_uuid = local.model_uuid
+  model_uuid = var.model_uuid
   name       = coalesce(var.luks_secret_name, "${local.dovecot.app_name}-luks-key")
   value = {
     key = var.luks_key
@@ -39,7 +21,7 @@ module "dovecot" {
   endpoint_bindings  = local.dovecot.endpoint_bindings
   expose             = local.dovecot.expose
   machines           = local.dovecot.machines
-  model_uuid         = local.model_uuid
+  model_uuid         = var.model_uuid
   resources          = local.dovecot.resources
   revision           = local.dovecot.revision
   storage_directives = local.dovecot.storage_directives
@@ -48,13 +30,13 @@ module "dovecot" {
 
 resource "juju_access_secret" "dovecot_luks" {
   applications = [module.dovecot.application.name]
-  model_uuid   = local.model_uuid
+  model_uuid   = var.model_uuid
   secret_id    = juju_secret.dovecot_luks.secret_id
 }
 
 resource "juju_application" "self_signed_certificates" {
   count      = var.tls == null ? 1 : 0
-  model_uuid = local.model_uuid
+  model_uuid = var.model_uuid
   name       = local.self_signed_certificates.app_name
 
   charm {
@@ -70,7 +52,7 @@ resource "juju_application" "self_signed_certificates" {
 }
 
 resource "juju_integration" "tls_dovecot" {
-  model_uuid = local.model_uuid
+  model_uuid = var.model_uuid
 
   application {
     endpoint            = var.tls == null ? "certificates" : var.tls.kind == "endpoint" ? var.tls.endpoint : null
@@ -87,7 +69,7 @@ resource "juju_integration" "tls_dovecot" {
 
 resource "juju_integration" "cos_dovecot" {
   count      = var.cos == null ? 0 : 1
-  model_uuid = local.model_uuid
+  model_uuid = var.model_uuid
 
   application {
     endpoint = module.dovecot.provides["cos-agent"].endpoint

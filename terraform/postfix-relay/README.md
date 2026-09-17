@@ -17,7 +17,7 @@ module "postfix_relay" {
     ca       = var.juju_ca
   }
 
-  model_cloud      = { name = "maas-prod" }
+  model_uuid       = var.model_uuid
   mail_domain      = "mail.example.com"
   dkim_private_key = file("default.private")
 }
@@ -27,10 +27,7 @@ The module defaults to `3.8/edge` for Postfix Relay and `2/edge` for OpenDKIM. P
 reproducible deployments. Optional COS integration accepts an in-model endpoint or cross-model
 offer. Postfix Relay COS integration is capability-gated because the currently published revision
 does not expose `cos-agent`.
-`model_cloud` is required and must identify a Juju machine cloud, not Kubernetes.
-
-For a centrally managed deployment, set `create_model = false` and pass `model_uuid` instead of
-`model_cloud`. The product then deploys into that model and does not create or own it.
+`model_uuid` must identify an existing Juju machine model. The product does not create or own it.
 `juju_controller` accepts either `username`/`password` or JAAS `client_id`/`client_secret`
 credentials.
 

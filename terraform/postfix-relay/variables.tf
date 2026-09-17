@@ -28,13 +28,6 @@ variable "cos" {
   }
 }
 
-variable "create_model" {
-  description = "Whether this product creates and owns its Juju model."
-  type        = bool
-  default     = true
-  nullable    = false
-}
-
 variable "dkim_key_name" {
   description = "Secret field and private-key filename stem used by OpenDKIM."
   type        = string
@@ -100,58 +93,16 @@ variable "juju_controller" {
   }
 }
 
-variable "logging-config" {
-  description = "Juju model logging configuration."
-  type        = string
-  default     = "<root>=INFO"
-  nullable    = false
-}
-
 variable "mail_domain" {
   description = "Mail domain whose messages OpenDKIM signs."
   type        = string
   nullable    = false
 }
 
-variable "model_cloud" {
-  description = "Juju machine cloud used when model_uuid is null."
-  type = object({
-    name   = string
-    region = optional(string)
-  })
-  default  = null
-  nullable = true
-
-  validation {
-    condition     = !var.create_model || var.model_cloud != null
-    error_message = "model_cloud is required when create_model is true."
-  }
-}
-
-variable "model_constraints" {
-  description = "Default constraints for machines in the Juju model."
-  type        = string
-  default     = ""
-  nullable    = false
-}
-
-variable "model_name" {
-  description = "Name of the Juju model created for the product."
-  type        = string
-  default     = "postfix-relay"
-  nullable    = false
-}
-
 variable "model_uuid" {
-  description = "Existing or externally managed Juju model UUID used when create_model is false."
+  description = "UUID of the existing Juju model where the product is deployed."
   type        = string
-  default     = null
-  nullable    = true
-
-  validation {
-    condition     = var.create_model || var.model_uuid != null
-    error_message = "model_uuid is required when create_model is false."
-  }
+  nullable    = false
 }
 
 variable "opendkim" {
@@ -198,17 +149,6 @@ variable "postfix_relay" {
     revision           = optional(number)
     storage_directives = optional(map(string), {})
     units              = optional(number, 1)
-  })
-  default  = {}
-  nullable = false
-}
-
-variable "proxy" {
-  description = "Proxy configuration applied to the Juju model."
-  type = object({
-    http     = optional(string, "")
-    https    = optional(string, "")
-    no_proxy = optional(string, "")
   })
   default  = {}
   nullable = false
