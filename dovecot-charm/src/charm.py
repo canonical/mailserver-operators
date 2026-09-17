@@ -248,12 +248,9 @@ class DovecotCharm(CharmBase):
                 )
             return
 
-        try:
-            key_file.parent.mkdir(parents=True, exist_ok=True)
-            key_file.write_text(dovecot_config.backup_encryption_key, encoding="utf-8")
-            os.chmod(key_file, 0o600)
-        except OSError as e:
-            raise BackupKeyError(f"Failed to write backup encryption key file: {e}") from e
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_text(dovecot_config.backup_encryption_key, encoding="utf-8")
+        os.chmod(key_file, 0o600)
 
     def _install(self):
         """Install required packages and set up mailname."""
