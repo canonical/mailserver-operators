@@ -1,7 +1,11 @@
 *.json
+*.private
+*.public
+*.secret
 **/.terraform/*
+*.tfplan
 *.tfstate
 *.tfstate.*
+*.tfvars
 .terraform.lock.hcl
 terraform.auto.tfvars
-providers.tf

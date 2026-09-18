@@ -2,6 +2,22 @@
 # See LICENSE file for licensing details.
 
 output "app_name" {
-  description = "Name of the deployed application."
+  description = "Deprecated: use output.application.name instead."
   value       = juju_application.postfix_relay_configurator.name
+}
+
+output "application" {
+  description = "Complete Juju application object for the deployed subordinate machine charm."
+  value       = juju_application.postfix_relay_configurator
+}
+
+output "requires" {
+  description = "Required relations exposed by the subordinate machine charm."
+  value = {
+    juju-info = {
+      kind     = "endpoint"
+      name     = juju_application.postfix_relay_configurator.name
+      endpoint = "juju-info"
+    }
+  }
 }
