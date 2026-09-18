@@ -154,6 +154,7 @@ def dovecot_charm_backup(
     dovecot_charm: str,
     bacula_fd: str,
     backup_secret: str,
+    bacula_server: str,
 ) -> str:
     """Wire up backup-encryption-key and Bacula fd relations for dovecot_charm."""
     _attach_backup(juju, dovecot_charm, bacula_fd, backup_secret)
@@ -250,6 +251,7 @@ def dovecot_old(
     bacula_fd: str,
     backup_secret: str,
     luks_secret: str,
+    bacula_server: str,
 ) -> str:
     """Deploy a published, backup-capable revision of the Dovecot charm."""
     _deploy_dovecot(
