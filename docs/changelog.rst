@@ -12,6 +12,17 @@ The format is based on `Keep a Changelog <https://keepachangelog.com/en/1.1.0/>`
 
 Each revision is versioned by the date of the revision.
 
+2026-09-18
+----------
+
+Added
+~~~~~
+
+- Added an integration test to verify backup portability across charm upgrades:
+  a backup produced by an older published revision can be restored onto a newly
+  deployed revision of the charm, as long as both share the same
+  ``backup-encryption-key`` secret.
+
 2026-09-16
 ----------
 

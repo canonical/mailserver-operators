@@ -4,14 +4,12 @@
 import logging
 import secrets
 import socket
-import socket
 import typing
 
 import jubilant
 import pytest
 from opcli.pytest_plugin import CharmPathList
 
-from . import baculum
 from . import baculum
 from .helpers import setup_gdpr_test_user, teardown_gdpr_test_user
 
