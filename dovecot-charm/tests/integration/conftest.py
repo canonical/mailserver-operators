@@ -25,7 +25,7 @@ BACKUP_SECRET_NAME = "dovecot-backup-key"  # nosec B105  # juju secret label, no
 LUKS_SECRET_NAME = "dovecot-luks-key"  # nosec B105  # juju secret label, not a password
 
 DOVECOT_OLD_APP = "dovecot-old"
-DOVECOT_OLD_REVISION = 17 # revision that supports backup/restore
+DOVECOT_OLD_REVISION = 17  # revision that supports backup/restore
 DOVECOT_OLD_CHANNEL = "latest/edge"
 
 # GDPR action test constants
