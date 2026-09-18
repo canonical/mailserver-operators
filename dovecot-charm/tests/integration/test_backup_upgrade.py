@@ -36,13 +36,13 @@ _BACKUP_TEST_SUBJECT = "bacula-upgrade-roundtrip-test"
 
 def test_backup_restore_across_charm_upgrade(
     juju: jubilant.Juju,
-    dovecot_charm: str,
+    dovecot_charm_backup: str,
     dovecot_old: str,
     baculum: baculum_client_module.Baculum,
 ):
     """Back up on the published revision and restore onto the charm under test."""
     old_unit = f"{dovecot_old}/0"
-    new_unit = f"{dovecot_charm}/0"
+    new_unit = f"{dovecot_charm_backup}/0"
 
     password = secrets.token_hex(16)
     seed_backup_test_message(juju, old_unit, _BACKUP_TEST_USER, password, _BACKUP_TEST_SUBJECT)
@@ -59,7 +59,7 @@ def test_backup_restore_across_charm_upgrade(
         restore_job = next(
             job
             for job in baculum.list_job_names()
-            if job.endswith("-restore") and f"{dovecot_charm}-0" in job
+            if job.endswith("-restore") and f"{dovecot_charm_backup}-0" in job
         )
 
         logger.info("Running backup job %s on the published revision", backup_job)

@@ -69,14 +69,12 @@ def _deploy_dovecot(
     app: str,
     charm: str,
     tls_charm: str,
-    fd_app: str,
-    backup_secret: str,
     luks_secret: str,
     *,
     channel: str | None = None,
     revision: int | None = None,
 ) -> None:
-    """Deploy a Dovecot app and wire up LUKS, TLS, backup secret, and Bacula fd."""
+    """Deploy a Dovecot app and wire up LUKS and TLS."""
     if not juju.status().apps.get(app):
         juju.deploy(
             charm,
@@ -92,12 +90,17 @@ def _deploy_dovecot(
             constraints=DEPLOY_CONSTRAINTS,
         )
     juju.grant_secret(LUKS_SECRET_NAME, app)
-    juju.grant_secret(BACKUP_SECRET_NAME, app)
-    juju.config(app, {"luks-key": luks_secret, "backup-encryption-key": backup_secret})
+    juju.config(app, {"luks-key": luks_secret})
     try:
         juju.integrate(f"{app}:certificates", f"{tls_charm}:certificates")
     except jubilant.CLIError:
         logging.info("TLS relation already present for %s", app)
+
+
+def _attach_backup(juju: jubilant.Juju, app: str, fd_app: str, backup_secret: str) -> None:
+    """Grant the backup secret and wire up Bacula fd relations for an app."""
+    juju.grant_secret(BACKUP_SECRET_NAME, app)
+    juju.config(app, {"backup-encryption-key": backup_secret})
     for endpoint in ("juju-info", "backup"):
         try:
             juju.integrate(f"{app}:{endpoint}", f"{fd_app}:{endpoint}")
@@ -132,19 +135,33 @@ def dovecot_charm(
     juju: jubilant.Juju,
     request: pytest.FixtureRequest,
     tls_charm: str,
-    backup_secret: str,
-    bacula_fd: str,
     luks_secret: str,
 ) -> str:
     """Build and deploy the charm."""
     charm = _get_charm_path(request)
     charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
-    _deploy_dovecot(juju, APP_NAME, charm_path, tls_charm, bacula_fd, backup_secret, luks_secret)
+    _deploy_dovecot(juju, APP_NAME, charm_path, tls_charm, luks_secret)
     juju.wait(
         lambda status: jubilant.all_active(status, APP_NAME, tls_charm),
         timeout=10 * 60,
     )
     return APP_NAME
+
+
+@pytest.fixture(scope="module")
+def dovecot_charm_backup(
+    juju: jubilant.Juju,
+    dovecot_charm: str,
+    bacula_fd: str,
+    backup_secret: str,
+) -> str:
+    """Wire up backup-encryption-key and Bacula fd relations for dovecot_charm."""
+    _attach_backup(juju, dovecot_charm, bacula_fd, backup_secret)
+    juju.wait(
+        lambda status: jubilant.all_active(status, dovecot_charm),
+        timeout=10 * 60,
+    )
+    return dovecot_charm
 
 
 @pytest.fixture(scope="module")
@@ -240,12 +257,11 @@ def dovecot_old(
         DOVECOT_OLD_APP,
         "dovecot",
         tls_charm,
-        bacula_fd,
-        backup_secret,
         luks_secret,
         channel=DOVECOT_OLD_CHANNEL,
         revision=DOVECOT_OLD_REVISION,
     )
+    _attach_backup(juju, DOVECOT_OLD_APP, bacula_fd, backup_secret)
 
     juju.wait(
         lambda status: jubilant.all_active(status, DOVECOT_OLD_APP, tls_charm),
