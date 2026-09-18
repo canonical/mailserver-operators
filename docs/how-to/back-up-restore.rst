@@ -1,5 +1,6 @@
 .. meta::
-   :description: How to back up and restore the __charm_name__ charm and its associated data.
+.. meta::
+:description: Learn how to back up and restore the Dovecot charm and its associated data.
 
 .. _how_to_back_up_restore:
 
@@ -18,7 +19,7 @@ Prerequisites
 
 - A deployed Dovecot application with mail storage configured.
 - A Bacula deployment consisting of ``bacula-server``, PostgreSQL, an
-   S3-compatible storage integrator, and ``bacula-fd``.
+  S3-compatible storage integrator, and ``bacula-fd``.
 
 Configure backup encryption
 ---------------------------
@@ -47,10 +48,10 @@ The charm ships three client-side hook scripts and publishes their absolute
 paths from the charm payload to the backup relation:
 
 - ``run-before-backup`` creates a tarball from ``/srv/mail``, encrypts it, and
-   writes a manifest.
+  writes a manifest.
 - ``run-after-backup`` removes the backed up files from the unit.
 - ``run-after-restore`` decrypts the restored artifact, repopulates
-   ``/srv/mail``, and starts Dovecot again.
+  ``/srv/mail``, and starts Dovecot again.
 
 Run a backup
 ------------
