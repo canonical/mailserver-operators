@@ -4,12 +4,14 @@
 import logging
 import secrets
 import socket
+import socket
 import typing
 
 import jubilant
 import pytest
 from opcli.pytest_plugin import CharmPathList
 
+from . import baculum
 from . import baculum
 from .helpers import setup_gdpr_test_user, teardown_gdpr_test_user
 
@@ -38,6 +40,13 @@ GDPR_TEST_PASSWORD = secrets.token_hex(16)
 CREATE_MAIL_USER_TEST_USER = "cmu-testuser"
 CREATE_MAIL_USER_TEST_MAILBOX = "cmu-testuser@example.com"
 CREATE_MAIL_USER_TEST_PASSWORD = secrets.token_hex(16)
+
+# S3 backend (microceph radosgw) is provisioned on the runner host by the spread
+# prepare script tests/integration/s3-installation.sh.
+S3_ACCESS_KEY = "my-lovely-key"
+S3_SECRET_KEY = "this-is-very-secret"  # nosec B105
+S3_BUCKET = "bacula"
+S3_RGW_PORT = 7480
 
 # S3 backend (microceph radosgw) is provisioned on the runner host by the spread
 # prepare script tests/integration/s3-installation.sh.
