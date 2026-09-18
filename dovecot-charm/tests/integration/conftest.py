@@ -49,11 +49,9 @@ def _get_charm_path(request: pytest.FixtureRequest) -> str:
 def _host_ip() -> typing.Optional[str]:
     """Return the host's primary outbound IP, reachable from juju units."""
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.connect(("8.8.8.8", 80))
-        ip = sock.getsockname()[0]
-        sock.close()
-        return ip
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            return sock.getsockname()[0]
     except OSError:
         return None
 
