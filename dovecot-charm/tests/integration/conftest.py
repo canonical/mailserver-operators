@@ -22,6 +22,7 @@ MAILNAME = "example.com"
 
 DEPLOY_CONSTRAINTS = {"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"}
 BACKUP_SECRET_NAME = "dovecot-backup-key"  # nosec B105  # juju secret label, not a password
+LUKS_SECRET_NAME = "dovecot-luks-key"  # nosec B105  # juju secret label, not a password
 
 DOVECOT_OLD_APP = "dovecot-old"
 DOVECOT_OLD_REVISION = 17
@@ -70,19 +71,13 @@ def _deploy_dovecot(
     tls_charm: str,
     fd_app: str,
     backup_secret: str,
+    luks_secret: str,
     *,
     channel: str | None = None,
     revision: int | None = None,
 ) -> None:
-    """Deploy a Dovecot app and wire up LUKS, TLS, backup secret, and Bacula fd.
-
-    Idempotent: skips deployment if the application already exists. Does not wait
-    for the deployment to settle so callers can add further relations first.
-    """
-    secret_label = f"{app}-luks-key"
+    """Deploy a Dovecot app and wire up LUKS, TLS, backup secret, and Bacula fd."""
     if not juju.status().apps.get(app):
-        luks_key = secrets.token_hex(16)
-        secret_id = juju.cli("add-secret", secret_label, f"key={luks_key}").strip()
         juju.deploy(
             charm,
             app=app,
@@ -93,13 +88,12 @@ def _deploy_dovecot(
                 "postmaster-address": f"postmaster@{MAILNAME}",
                 "primary-unit": f"{app}/0",
                 "luks-auto-provisioning": True,
-                "luks-key": secret_id,
             },
             constraints=DEPLOY_CONSTRAINTS,
         )
-    juju.grant_secret(secret_label, app)
+    juju.grant_secret(LUKS_SECRET_NAME, app)
     juju.grant_secret(BACKUP_SECRET_NAME, app)
-    juju.config(app, {"backup-encryption-key": backup_secret})
+    juju.config(app, {"luks-key": luks_secret, "backup-encryption-key": backup_secret})
     try:
         juju.integrate(f"{app}:certificates", f"{tls_charm}:certificates")
     except jubilant.CLIError:
@@ -140,11 +134,12 @@ def dovecot_charm(
     tls_charm: str,
     backup_secret: str,
     bacula_fd: str,
+    luks_secret: str,
 ) -> str:
     """Build and deploy the charm."""
     charm = _get_charm_path(request)
     charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
-    _deploy_dovecot(juju, APP_NAME, charm_path, tls_charm, bacula_fd, backup_secret)
+    _deploy_dovecot(juju, APP_NAME, charm_path, tls_charm, bacula_fd, backup_secret, luks_secret)
     juju.wait(
         lambda status: jubilant.all_active(status, APP_NAME, tls_charm),
         timeout=10 * 60,
@@ -217,6 +212,13 @@ def backup_secret(juju: jubilant.Juju) -> str:
 
 
 @pytest.fixture(scope="module")
+def luks_secret(juju: jubilant.Juju) -> str:
+    """Create the LUKS key secret shared by all Dovecot deployments."""
+    luks_key = secrets.token_hex(16)
+    return juju.add_secret(LUKS_SECRET_NAME, {"key": luks_key})
+
+
+@pytest.fixture(scope="module")
 def bacula_fd(juju: jubilant.Juju) -> str:
     fd_app = "bacula-fd"
     if fd_app not in juju.status().apps:
@@ -230,15 +232,9 @@ def dovecot_old(
     tls_charm: str,
     bacula_fd: str,
     backup_secret: str,
-    bacula_server: str,
+    luks_secret: str,
 ) -> str:
-    """Deploy a published, backup-capable revision of the Dovecot charm.
-
-    The shared bacula-fd subordinate is also attached here so a backup taken on
-    this revision can be restored onto the charm under test. bacula-fd is a
-    subordinate charm, so the same application can serve multiple principals and
-    the server relation already exists at the application level.
-    """
+    """Deploy a published, backup-capable revision of the Dovecot charm."""
     _deploy_dovecot(
         juju,
         DOVECOT_OLD_APP,
@@ -246,6 +242,7 @@ def dovecot_old(
         tls_charm,
         bacula_fd,
         backup_secret,
+        luks_secret,
         channel=DOVECOT_OLD_CHANNEL,
         revision=DOVECOT_OLD_REVISION,
     )
