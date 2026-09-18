@@ -23,11 +23,11 @@ _BACKUP_TEST_SUBJECT = "bacula-roundtrip-test"
 
 def test_bacula_backup_restore_roundtrip(
     juju: jubilant.Juju,
-    dovecot_charm: str,
+    dovecot_charm_backup: str,
     baculum: baculum_client_module.Baculum,
 ):
     """End-to-end: back up the mail store, wipe it, restore, and verify the mail returns."""
-    unit_name = f"{dovecot_charm}/0"
+    unit_name = f"{dovecot_charm_backup}/0"
 
     password = secrets.token_hex(16)
     seed_backup_test_message(juju, unit_name, _BACKUP_TEST_USER, password, _BACKUP_TEST_SUBJECT)
