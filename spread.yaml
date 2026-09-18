@@ -33,6 +33,8 @@ integration-suites:
     working-dir: dovecot-charm/
     backends:
     - integration-test
+    prepare: |
+      "${SPREAD_PATH}/dovecot-charm/tests/integration/s3-installation.sh"
     pytest-arguments-template: |
       -x
       --log-format="%(asctime)s %(levelname)s %(message)s"

@@ -25,3 +25,9 @@ def pytest_addoption(parser: Parser) -> None:
         default=False,
         help="Use the currently active Juju model instead of creating a temporary one",
     )
+    parser.addoption(
+        "--s3-address",
+        action="store",
+        default=None,
+        help="IP address of the microceph radosgw S3 endpoint on the runner host",
+    )
