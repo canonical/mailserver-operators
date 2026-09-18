@@ -9,7 +9,7 @@ requires-python = ">=3.12"
 dependencies = [
     "charmlibs-apt==1.0.0.post1",
     "charmlibs-interfaces-tls-certificates==1.10.1",
-    "charmlibs-snap==1.0.1.post0",
+    "charmlibs-snap==2.0.0",
     "cosl==1.10.3",
     "cryptography==50.0.1",
     "email-validator==2.3.0",
