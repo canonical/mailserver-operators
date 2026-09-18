@@ -35,7 +35,7 @@ CREATE_MAIL_USER_TEST_PASSWORD = secrets.token_hex(16)
 # S3 backend (microceph radosgw) is provisioned on the runner host by the spread
 # prepare script tests/integration/s3-installation.sh.
 S3_ACCESS_KEY = "my-lovely-key"
-S3_SECRET_KEY = "this-is-very-secret"
+S3_SECRET_KEY = "this-is-very-secret"  # nosec B105
 S3_BUCKET = "bacula"
 S3_RGW_PORT = 7480
 

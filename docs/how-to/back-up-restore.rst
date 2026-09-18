@@ -36,7 +36,7 @@ Integrate Dovecot with Bacula
 -----------------------------
 
 Attach the Bacula file daemon to the same machine as Dovecot and integrate the
-backup relation:
+``backup`` relation:
 
 .. code-block:: shell
 
@@ -45,7 +45,7 @@ backup relation:
    juju integrate dovecot:backup bacula-fd:backup
 
 The charm ships three client-side hook scripts and publishes their absolute
-paths from the charm payload to the backup relation:
+paths from the charm payload to the ``backup`` relation:
 
 - ``run-before-backup`` creates a tarball from ``/srv/mail``, encrypts it, and
   writes a manifest.
@@ -57,7 +57,10 @@ Run a backup
 ------------
 
 Backups are initiated from the Bacula side, typically through
-Baculum (Bacula's web interface) or the configured Bacula schedule.
+Baculum (Bacula's web interface) or the configured Bacula schedule. See
+`How to use the Baculum web interface
+<https://canonical.com/juju/docs/backup-charms/latest/how-to/use-baculum/>`_
+for how to run a manual backup job.
 Dovecot publishes only these encrypted backup artifacts to Bacula:
 
 - ``/var/backups/dovecot/mail-data.tar.gz.enc``
@@ -66,7 +69,12 @@ Dovecot publishes only these encrypted backup artifacts to Bacula:
 Run a restore
 -------------
 
-Run the restore job from Bacula. The restored encrypted artifact is placed back
+Run the restore job from Bacula. See
+`How to use the Baculum web interface
+<https://canonical.com/juju/docs/backup-charms/latest/how-to/use-baculum/>`_
+for how to run a restore job. When selecting the destination in the restore
+wizard, set the "Restore to directory" option to ``/`` so files are restored to
+their original locations. The restored encrypted artifact is placed back
 onto the Dovecot unit by Bacula, and the Dovecot post-restore hook decrypts it
 and restores the mail tree under ``/srv/mail``.
 
