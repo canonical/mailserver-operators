@@ -39,30 +39,40 @@ juju config dovecot primary-unit
 
 For a planned failover from `dovecot/0` to `dovecot/1`:
 
-1. Drain or pause traffic to the current primary. This includes client traffic
-   through HAProxy and mail delivery from Postfix. Do not allow both units to
-   receive writes during the transition.
+### Drain traffic
 
-1. Copy the latest mail to the secondary:
+Drain or pause traffic to the current primary. This includes client traffic
+through HAProxy and mail delivery from Postfix. Do not allow both units to
+receive writes during the transition.
 
-   ```bash
-   juju run dovecot/0 force-sync
-   ```
+### Synchronize the secondary
 
-   Do not continue if the action fails. Fix replication or restore the secondary
-   before changing the primary.
+Copy the latest mail to the secondary:
 
-1. Set the secondary as the new primary:
+```bash
+juju run dovecot/0 force-sync
+```
 
-   ```bash
-   juju config dovecot primary-unit=dovecot/1
-   juju wait-for application dovecot --timeout=15m
-   ```
+Do not continue if the action fails. Fix replication or restore the secondary
+before changing the primary.
 
-1. Update every route that used the old primary.
+### Promote the secondary
 
-1. Restore traffic and verify that new mail can be delivered and retrieved
-   through the external endpoint.
+Set the secondary as the new primary:
+
+```bash
+juju config dovecot primary-unit=dovecot/1
+juju wait-for application dovecot --timeout=15m
+```
+
+### Update routing
+
+Update every route that used the old primary.
+
+### Restore traffic
+
+Restore traffic and verify that new mail can be delivered and retrieved through
+the external endpoint.
 
 After the configuration change, the old primary becomes the secondary. Its sync
 timer is stopped, and the new primary installs or enables its timer to copy mail
