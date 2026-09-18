@@ -3,12 +3,14 @@
 
 import logging
 import secrets
+import socket
 import typing
 
 import jubilant
 import pytest
 from opcli.pytest_plugin import CharmPathList
 
+from . import baculum
 from .helpers import setup_gdpr_test_user, teardown_gdpr_test_user
 
 logger = logging.getLogger(__name__)
@@ -30,11 +32,28 @@ CREATE_MAIL_USER_TEST_USER = "cmu-testuser"
 CREATE_MAIL_USER_TEST_MAILBOX = "cmu-testuser@example.com"
 CREATE_MAIL_USER_TEST_PASSWORD = secrets.token_hex(16)
 
+# S3 backend (microceph radosgw) is provisioned on the runner host by the spread
+# prepare script tests/integration/s3-installation.sh.
+S3_ACCESS_KEY = "my-lovely-key"
+S3_SECRET_KEY = "this-is-very-secret"  # nosec B105
+S3_BUCKET = "bacula"
+S3_RGW_PORT = 7480
+
 
 def _get_charm_path(request: pytest.FixtureRequest) -> str:
     """Resolve the Dovecot charm path only when deployment is required."""
     charm_paths = typing.cast(dict[str, CharmPathList], request.getfixturevalue("charm_paths"))
     return charm_paths["dovecot"].path
+
+
+def _host_ip() -> typing.Optional[str]:
+    """Return the host's primary outbound IP, reachable from juju units."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            return sock.getsockname()[0]
+    except OSError:
+        return None
 
 
 @pytest.fixture(scope="session", name="juju")
@@ -159,6 +178,104 @@ def tls_charm(juju: jubilant.Juju) -> str:
         timeout=10 * 60,
     )
     return tls_app
+
+
+@pytest.fixture(scope="module")
+def bacula_fd(juju: jubilant.Juju, dovecot_charm: str) -> str:
+    bacula_fd_app = "bacula-fd"
+    if bacula_fd_app not in juju.status().apps:
+        logging.info("Deploying bacula-fd...")
+        juju.deploy(bacula_fd_app, channel="latest/edge")
+    else:
+        logging.info(f"{bacula_fd_app} already deployed, skipping deployment.")
+
+    backup_key = secrets.token_hex(16)
+    backup_secret_id = juju.add_secret("dovecot-backup-key", {"backup-key": backup_key})
+    juju.grant_secret("dovecot-backup-key", dovecot_charm)
+    juju.config(dovecot_charm, {"backup-encryption-key": backup_secret_id})
+
+    try:
+        juju.integrate(f"{dovecot_charm}:juju-info", f"{bacula_fd_app}:juju-info")
+    except jubilant.CLIError:
+        logging.info("juju-info relation already present")
+
+    try:
+        juju.integrate(f"{dovecot_charm}:backup", f"{bacula_fd_app}:backup")
+    except jubilant.CLIError:
+        logging.info("backup relation already present")
+
+    return bacula_fd_app
+
+
+@pytest.fixture(scope="session")
+def s3_address(pytestconfig: pytest.Config) -> str:
+    """Provide the S3 service IP address used in integration tests.
+
+    Defaults to the host's primary outbound IP so that juju units can reach the
+    microceph radosgw provisioned on the runner host by the s3-installation.sh
+    spread prepare script. Can be overridden with --s3-address.
+    """
+    address = pytestconfig.getoption("--s3-address", default=None) or _host_ip()
+    if not address:
+        raise RuntimeError("Could not determine S3 address; pass --s3-address explicitly")
+    return address
+
+
+@pytest.fixture(scope="module")
+def bacula_server(juju: jubilant.Juju, bacula_fd: str, s3_address: str) -> str:
+    """Deploy and integrate the full Bacula server stacks."""
+    server_app = "bacula-server"
+    database_app = "bacula-database"
+
+    if server_app not in juju.status().apps:
+        logging.info("Deploying bacula-server...")
+        juju.deploy(server_app, channel="latest/edge")
+    if database_app not in juju.status().apps:
+        logging.info("Deploying bacula-database (postgresql)...")
+        juju.deploy("postgresql", database_app, channel="14/stable")
+    if "s3-integrator" not in juju.status().apps:
+        logging.info("Deploying s3-integrator...")
+        juju.deploy("s3-integrator")
+
+    juju.wait(lambda status: jubilant.all_agents_idle(status, "s3-integrator"), timeout=600)
+
+    juju.config(
+        "s3-integrator",
+        {
+            "endpoint": f"http://{s3_address}:{S3_RGW_PORT}",
+            "bucket": S3_BUCKET,
+            "s3-uri-style": "path",
+        },
+    )
+    juju.run(
+        unit="s3-integrator/0",
+        action="sync-s3-credentials",
+        params={"access-key": S3_ACCESS_KEY, "secret-key": S3_SECRET_KEY},
+    )
+
+    for endpoint in ("bacula-database", "s3-integrator", bacula_fd):
+        try:
+            juju.integrate(server_app, endpoint)
+        except jubilant.CLIError:
+            logging.info(f"{server_app}:{endpoint} relation already present")
+
+    juju.wait(jubilant.all_active, timeout=20 * 60)
+    return server_app
+
+
+@pytest.fixture(scope="module", name="baculum")
+def baculum_client(juju: jubilant.Juju, bacula_server: str) -> baculum.Baculum:
+    """Initialize a Baculum API client against the bacula-server unit."""
+    unit_name = next(iter(juju.status().apps[bacula_server].units))
+    username = "test-admin"
+    password = juju.run(
+        unit_name,
+        "create-api-user",
+        params={"username": username},
+        wait=60,
+    ).results["password"]
+    address = next(iter(juju.status().apps[bacula_server].units.values())).public_address
+    return baculum.Baculum(f"http://{address}:9096/api/v2", username=username, password=password)
 
 
 @pytest.fixture(scope="module")

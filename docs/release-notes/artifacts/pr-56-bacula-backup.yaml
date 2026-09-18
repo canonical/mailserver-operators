@@ -1,0 +1,21 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version_schema: 2
+
+changes:
+- title: Added charm-encrypted backup and restore support for Dovecot
+  author: swetha1654
+  type: major
+  description: |
+    Added a backup relation that integrates Dovecot with Bacula. Dovecot encrypts the mail store
+    under /srv/mail before handing the artifact to Bacula, and decrypts it on restore, so
+    Bacula-native encryption is not required. The encryption passphrase is provided through
+    the `backup-encryption-key` secret.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/56"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: true

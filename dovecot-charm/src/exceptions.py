@@ -35,3 +35,9 @@ class HASetupError(CharmBlockedError):
     """Raised when HA setup (SSH keys, sync scripts, sshd config, etc.) fails."""
 
     pass
+
+
+class BackupKeyError(CharmBlockedError):
+    """Raised when the backup encryption key cannot be stored or reset."""
+
+    pass

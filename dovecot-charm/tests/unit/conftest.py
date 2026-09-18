@@ -7,6 +7,7 @@ import ops.testing
 import pytest
 import yaml
 from testing import (
+    BackupTestDovecotCharm,
     DovecotTestCharm,
     NoOpDovecotSetup,
     NoOpHAManager,
@@ -16,6 +17,7 @@ from testing import (
 )
 
 __all__ = [
+    "BackupTestDovecotCharm",
     "DovecotTestCharm",
     "NoOpDovecotSetup",
     "NoOpHAManager",
@@ -41,6 +43,12 @@ def ctx():
 def storage_ctx():
     """Context using StorageTestDovecotCharm: real StorageManager, no-op dovecot/HA."""
     return ops.testing.Context(StorageTestDovecotCharm, meta=_META, app_name="dovecot")
+
+
+@pytest.fixture
+def backup_ctx():
+    """Context using BackupTestDovecotCharm: real BackupManager, no-op storage/setup/HA."""
+    return ops.testing.Context(BackupTestDovecotCharm, meta=_META, app_name="dovecot")
 
 
 @pytest.fixture
