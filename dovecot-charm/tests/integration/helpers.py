@@ -14,8 +14,6 @@ from email.message import EmailMessage
 import jubilant
 from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 
-from .baculum import Baculum
-
 logger = logging.getLogger(__name__)
 
 MAIL_ROOT = "/srv/mail"
@@ -374,11 +372,3 @@ def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -
         time.sleep(5)
 
     raise AssertionError(f"Timed out waiting for Bacula job '{job_name}' to complete")
-
-
-def bacula_job_for_app(baculum: Baculum, app: str, suffix: str) -> str:
-    """Return the Bacula job for the given app whose name ends with ``suffix``."""
-    unit_token = f"{app}-0"
-    return next(
-        job for job in baculum.list_job_names() if job.endswith(suffix) and unit_token in job
-    )

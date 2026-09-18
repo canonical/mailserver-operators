@@ -23,9 +23,9 @@ MAILNAME = "example.com"
 DEPLOY_CONSTRAINTS = {"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"}
 BACKUP_SECRET_NAME = "dovecot-backup-key"  # nosec B105  # juju secret label, not a password
 
-OLD_APP = "dovecot-old"
-OLD_REVISION = 17
-OLD_CHANNEL = "latest/edge"
+DOVECOT_OLD_APP = "dovecot-old"
+DOVECOT_OLD_REVISION = 17
+DOVECOT_OLD_CHANNEL = "latest/edge"
 
 # GDPR action test constants
 MAIL_ROOT = "/srv/mail"
@@ -38,13 +38,6 @@ GDPR_TEST_PASSWORD = secrets.token_hex(16)
 CREATE_MAIL_USER_TEST_USER = "cmu-testuser"
 CREATE_MAIL_USER_TEST_MAILBOX = "cmu-testuser@example.com"
 CREATE_MAIL_USER_TEST_PASSWORD = secrets.token_hex(16)
-
-# S3 backend (microceph radosgw) is provisioned on the runner host by the spread
-# prepare script tests/integration/s3-installation.sh.
-S3_ACCESS_KEY = "my-lovely-key"
-S3_SECRET_KEY = "this-is-very-secret"  # nosec B105
-S3_BUCKET = "bacula"
-S3_RGW_PORT = 7480
 
 # S3 backend (microceph radosgw) is provisioned on the runner host by the spread
 # prepare script tests/integration/s3-installation.sh.
@@ -75,11 +68,13 @@ def _deploy_dovecot(
     app: str,
     charm: str,
     tls_charm: str,
+    fd_app: str,
+    backup_secret: str,
     *,
     channel: str | None = None,
     revision: int | None = None,
 ) -> None:
-    """Deploy a Dovecot app with an auto-provisioned LUKS secret and TLS relation.
+    """Deploy a Dovecot app and wire up LUKS, TLS, backup secret, and Bacula fd.
 
     Idempotent: skips deployment if the application already exists. Does not wait
     for the deployment to settle so callers can add further relations first.
@@ -102,17 +97,13 @@ def _deploy_dovecot(
             },
             constraints=DEPLOY_CONSTRAINTS,
         )
-    juju.cli("grant-secret", secret_label, app)
+    juju.grant_secret(secret_label, app)
+    juju.grant_secret(BACKUP_SECRET_NAME, app)
+    juju.config(app, {"backup-encryption-key": backup_secret})
     try:
         juju.integrate(f"{app}:certificates", f"{tls_charm}:certificates")
     except jubilant.CLIError:
         logging.info("TLS relation already present for %s", app)
-
-
-def _attach_backup_fd(juju: jubilant.Juju, app: str, fd_app: str, backup_secret: str) -> None:
-    """Grant the backup secret to ``app`` and relate it to the ``fd_app`` file daemon."""
-    juju.grant_secret(BACKUP_SECRET_NAME, app)
-    juju.config(app, {"backup-encryption-key": backup_secret})
     for endpoint in ("juju-info", "backup"):
         try:
             juju.integrate(f"{app}:{endpoint}", f"{fd_app}:{endpoint}")
@@ -147,11 +138,13 @@ def dovecot_charm(
     juju: jubilant.Juju,
     request: pytest.FixtureRequest,
     tls_charm: str,
+    backup_secret: str,
+    bacula_fd: str,
 ) -> str:
     """Build and deploy the charm."""
     charm = _get_charm_path(request)
     charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
-    _deploy_dovecot(juju, APP_NAME, charm_path, tls_charm)
+    _deploy_dovecot(juju, APP_NAME, charm_path, tls_charm, bacula_fd, backup_secret)
     juju.wait(
         lambda status: jubilant.all_active(status, APP_NAME, tls_charm),
         timeout=10 * 60,
@@ -224,11 +217,10 @@ def backup_secret(juju: jubilant.Juju) -> str:
 
 
 @pytest.fixture(scope="module")
-def bacula_fd(juju: jubilant.Juju, dovecot_charm: str, backup_secret: str) -> str:
+def bacula_fd(juju: jubilant.Juju) -> str:
     fd_app = "bacula-fd"
     if fd_app not in juju.status().apps:
         juju.deploy(fd_app, channel="latest/edge")
-    _attach_backup_fd(juju, dovecot_charm, fd_app, backup_secret)
     return fd_app
 
 
@@ -249,20 +241,20 @@ def dovecot_old(
     """
     _deploy_dovecot(
         juju,
-        OLD_APP,
+        DOVECOT_OLD_APP,
         "dovecot",
         tls_charm,
-        channel=OLD_CHANNEL,
-        revision=OLD_REVISION,
+        bacula_fd,
+        backup_secret,
+        channel=DOVECOT_OLD_CHANNEL,
+        revision=DOVECOT_OLD_REVISION,
     )
-
-    _attach_backup_fd(juju, OLD_APP, bacula_fd, backup_secret)
 
     juju.wait(
-        lambda status: jubilant.all_active(status, OLD_APP, tls_charm),
+        lambda status: jubilant.all_active(status, DOVECOT_OLD_APP, tls_charm),
         timeout=20 * 60,
     )
-    return OLD_APP
+    return DOVECOT_OLD_APP
 
 
 @pytest.fixture(scope="session")
