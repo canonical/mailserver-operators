@@ -163,7 +163,7 @@ def dovecot_charm_backup(
     """Wire up backup-encryption-key and Bacula fd relations for dovecot_charm."""
     _attach_backup(juju, dovecot_charm, bacula_fd, backup_secret)
     juju.wait(
-        lambda status: jubilant.all_active(status, dovecot_charm),
+        lambda status: jubilant.all_active(status, dovecot_charm, bacula_fd),
         timeout=10 * 60,
     )
     return dovecot_charm
@@ -267,7 +267,7 @@ def dovecot_old(
     _attach_backup(juju, DOVECOT_OLD_APP, bacula_fd, backup_secret)
 
     juju.wait(
-        lambda status: jubilant.all_active(status, DOVECOT_OLD_APP, tls_charm),
+        lambda status: jubilant.all_active(status, DOVECOT_OLD_APP, tls_charm, bacula_fd),
         timeout=20 * 60,
     )
     return DOVECOT_OLD_APP
