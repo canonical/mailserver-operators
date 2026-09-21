@@ -22,6 +22,7 @@ import jubilant
 
 from . import baculum as baculum_client_module
 from .helpers import (
+    find_bacula_job,
     mailbox_has_subject,
     seed_backup_test_message,
     teardown_gdpr_test_user,
@@ -51,16 +52,8 @@ def test_backup_restore_across_charm_upgrade(
             "seeded message not found before backup"
         )
 
-        backup_job = next(
-            job
-            for job in baculum.list_job_names()
-            if job.endswith("-backup") and f"{dovecot_old}-0" in job
-        )
-        restore_job = next(
-            job
-            for job in baculum.list_job_names()
-            if job.endswith("-restore") and f"{dovecot_charm_backup}-0" in job
-        )
+        backup_job = find_bacula_job(baculum, "-backup", contains=f"{dovecot_old}-0")
+        restore_job = find_bacula_job(baculum, "-restore", contains=f"{dovecot_charm_backup}-0")
 
         logger.info("Running backup job %s on the published revision", backup_job)
         baculum.run_backup_job(backup_job)

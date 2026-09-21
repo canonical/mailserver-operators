@@ -341,6 +341,39 @@ def mailbox_has_subject(juju: jubilant.Juju, unit_name: str, user: str, subject:
     return bool(result.stdout.strip())
 
 
+def find_bacula_job(
+    baculum_client, suffix: str, contains: str | None = None, timeout: int = 120
+) -> str:
+    """Poll Bacula's job list until a matching job name appears.
+
+    bacula-server only gains a Job/Client entry for a given bacula-fd once its own
+    relation-changed hook processes that fd's relation data, which can lag briefly
+    behind the fd (and its principal) reporting active in ``juju status``.
+
+    Args:
+        baculum_client: a ``baculum.Baculum`` API client.
+        suffix: required job name suffix, e.g. ``"-backup"`` or ``"-restore"``.
+        contains: optional substring the job name must also contain.
+        timeout: maximum seconds to wait.
+
+    Returns:
+        The matching job name.
+
+    Raises:
+        AssertionError: if no matching job appears within the timeout.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for job in baculum_client.list_job_names():
+            if job.endswith(suffix) and (contains is None or contains in job):
+                return job
+        time.sleep(5)
+    raise AssertionError(
+        f"Timed out waiting for a Bacula job name ending with {suffix!r}"
+        + (f" containing {contains!r}" if contains else "")
+    )
+
+
 def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -> dict:
     """Poll a Bacula job until its most recent run terminates successfully.
 
