@@ -64,6 +64,16 @@ def _host_ip() -> typing.Optional[str]:
         return None
 
 
+def _integrate(juju: jubilant.Juju, requirer: str, provider: str) -> None:
+    """Integrate two endpoints, tolerating only an already-exists relation error."""
+    try:
+        juju.integrate(requirer, provider)
+    except jubilant.CLIError as e:
+        if "already exists" not in (e.stderr or ""):
+            raise
+        logging.info("%s:%s relation already present", requirer, provider)
+
+
 def _deploy_dovecot(
     juju: jubilant.Juju,
     app: str,
@@ -91,10 +101,7 @@ def _deploy_dovecot(
         )
     juju.grant_secret(LUKS_SECRET_NAME, app)
     juju.config(app, {"luks-key": luks_secret})
-    try:
-        juju.integrate(f"{app}:certificates", f"{tls_charm}:certificates")
-    except jubilant.CLIError:
-        logging.info("TLS relation already present for %s", app)
+    _integrate(juju, f"{app}:certificates", f"{tls_charm}:certificates")
 
 
 def _attach_backup(juju: jubilant.Juju, app: str, fd_app: str, backup_secret: str) -> None:
@@ -102,10 +109,7 @@ def _attach_backup(juju: jubilant.Juju, app: str, fd_app: str, backup_secret: st
     juju.grant_secret(BACKUP_SECRET_NAME, app)
     juju.config(app, {"backup-encryption-key": backup_secret})
     for endpoint in ("juju-info", "backup"):
-        try:
-            juju.integrate(f"{app}:{endpoint}", f"{fd_app}:{endpoint}")
-        except jubilant.CLIError:
-            logging.info("%s relation already present for %s", endpoint, app)
+        _integrate(juju, f"{app}:{endpoint}", f"{fd_app}:{endpoint}")
 
 
 @pytest.fixture(scope="session", name="juju")
@@ -192,11 +196,8 @@ def dovecot_charm_manual_storage(
             config=config,
             constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
         )
-    try:
-        logging.info("Adding TLS relation...")
-        juju.integrate(f"{charm_name}:certificates", f"{tls_charm}:certificates")
-    except jubilant.CLIError:
-        logging.info("TLS relation already there...")
+    logging.info("Adding TLS relation...")
+    _integrate(juju, f"{charm_name}:certificates", f"{tls_charm}:certificates")
 
     logging.info("Waiting for blocked status...")
     juju.wait(
@@ -320,10 +321,7 @@ def bacula_server(juju: jubilant.Juju, bacula_fd: str, s3_address: str) -> str:
     )
 
     for endpoint in (database_app, s3_app, bacula_fd):
-        try:
-            juju.integrate(server_app, endpoint)
-        except jubilant.CLIError:
-            logging.info(f"{server_app}:{endpoint} relation already present")
+        _integrate(juju, server_app, endpoint)
     juju.wait(
         lambda status: jubilant.all_active(status, server_app, database_app, s3_app),
         timeout=20 * 60,
@@ -382,11 +380,8 @@ def dovecot_charm_dual_unit(
         )
 
     juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
-    try:
-        logging.info("Adding TLS relation...")
-        juju.integrate(f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
-    except jubilant.CLIError:
-        logging.info("TLS relation already there...")
+    logging.info("Adding TLS relation...")
+    _integrate(juju, f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
 
     logging.info("Waiting for primary unit to be active...")
     juju.wait(
