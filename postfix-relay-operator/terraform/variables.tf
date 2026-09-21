@@ -74,12 +74,6 @@ variable "revision" {
   default     = null
 }
 
-variable "storage" {
-  description = "Deprecated storage directives; use storage_directives instead."
-  type        = map(string)
-  default     = {}
-}
-
 variable "storage_directives" {
   description = "Storage directives used by the application."
   type        = map(string)

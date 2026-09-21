@@ -27,6 +27,6 @@ resource "juju_application" "postfix_relay" {
   endpoint_bindings  = var.endpoint_bindings
   machines           = var.machines == null || length(var.machines) == 0 ? null : var.machines
   resources          = var.resources
-  storage_directives = merge(var.storage, var.storage_directives)
+  storage_directives = var.storage_directives
   units              = var.machines == null || length(var.machines) == 0 ? var.units : null
 }

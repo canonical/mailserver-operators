@@ -110,7 +110,6 @@ variable "opendkim" {
   type = object({
     app_name    = optional(string, "opendkim")
     base        = optional(string, "ubuntu@24.04")
-    channel     = optional(string)
     config      = optional(map(string), {})
     constraints = optional(string, "arch=amd64")
     endpoint_bindings = optional(set(object({
@@ -131,7 +130,6 @@ variable "postfix_relay" {
   type = object({
     app_name               = optional(string, "postfix-relay")
     base                   = optional(string, "ubuntu@24.04")
-    channel                = optional(string)
     config                 = optional(map(string), {})
     constraints            = optional(string, "arch=amd64")
     enable_cos_integration = optional(bool, false)
@@ -155,13 +153,13 @@ variable "postfix_relay" {
 }
 
 variable "risk" {
-  description = "Default charm channel risk used when a per-charm channel is not supplied."
+  description = "Charm channel risk used for the Postfix Relay and OpenDKIM deployments."
   type        = string
   default     = "edge"
   nullable    = false
 
   validation {
-    condition     = contains(["stable", "candidate", "beta", "edge"], var.risk)
-    error_message = "risk must be one of stable, candidate, beta, or edge."
+    condition     = var.risk == "edge"
+    error_message = "risk must be edge because Postfix Relay 3.8 and OpenDKIM 2 are published only on edge."
   }
 }

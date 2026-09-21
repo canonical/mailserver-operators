@@ -32,11 +32,6 @@ run "deploys_application" {
   command = plan
 
   assert {
-    condition     = output.app_name == "dovecot"
-    error_message = "deprecated app_name output did not match"
-  }
-
-  assert {
     condition     = output.application.name == "dovecot"
     error_message = "application name did not match"
   }

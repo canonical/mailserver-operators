@@ -21,6 +21,7 @@ variables {
   mail_domain        = "mail.example.test"
   model_uuid         = "00000000-0000-0000-0000-000000000000"
   postmaster_address = "postmaster@mail.example.test"
+  risk               = "edge"
 }
 
 run "default_product_contract" {
@@ -135,11 +136,11 @@ run "local_lxd_block_storage" {
   }
 }
 
-run "reject_invalid_risk" {
+run "reject_unpublished_risk" {
   command = plan
 
   variables {
-    risk = "dangerous"
+    risk = "stable"
   }
 
   expect_failures = [var.risk]

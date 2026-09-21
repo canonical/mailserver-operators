@@ -15,6 +15,7 @@ run "basic_deploy" {
     base              = "ubuntu@24.04"
     channel           = "latest/edge"
     config            = {}
+    constraints       = "arch=amd64"
     endpoint_bindings = []
     model_uuid        = "00000000-0000-0000-0000-000000000000"
     resources         = {}
@@ -28,8 +29,8 @@ run "basic_deploy" {
   }
 
   assert {
-    condition     = output.app_name == "postfix-relay-configurator"
-    error_message = "deprecated app_name did not match expected"
+    condition     = output.application.constraints == "arch=amd64"
+    error_message = "application constraints did not match expected"
   }
 
   assert {

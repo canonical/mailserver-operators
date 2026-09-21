@@ -8,9 +8,8 @@ the deployment onto any Juju-managed environment.
 
 It inherits provider configuration from its caller and requires Terraform `>= 1.12, < 2.0` and
 Juju provider `> 1.0.0, < 2.0.0`. The charm is subordinate: the module creates no units and it
-becomes deployed on the principal machine through its `juju-info` integration. Deprecated
-constraint and storage inputs remain available for backward compatibility. The module handles no
-secrets.
+becomes deployed on the principal machine through its `juju-info` integration. The module handles
+no secrets.
 
 ## Module structure
 
@@ -27,19 +26,17 @@ secrets.
 | `base` | `string` | `null` | Charm base (defaults to the charm's own default). |
 | `channel` | `string` | `latest/stable` | Charm channel. |
 | `config` | `map(string)` | `{}` | Charm configuration. |
-| `constraints` | `string` | `null` | Deprecated Juju constraints retained for compatibility. |
+| `constraints` | `string` | `null` | Juju constraints. |
 | `endpoint_bindings` | endpoint binding set | `[]` | Endpoint bindings. |
 | `model_uuid` | `string` | required | Juju model UUID. |
 | `resources` | `map(string)` | `{}` | Charm resources. |
 | `revision` | `number` | `null` | Charm revision. |
-| `storage` | `map(string)` | `{}` | Deprecated storage directives retained for compatibility. |
 
 ## Outputs
 
 | Name | Description |
 |---|---|
 | `application` | Full `juju_application` object. |
-| `app_name` | Deprecated application name. |
 | `requires` | Structured `juju-info` endpoint object. |
 
 ## Relation usage

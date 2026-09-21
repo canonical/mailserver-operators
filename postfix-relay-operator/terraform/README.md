@@ -27,7 +27,6 @@ provider `> 1.0.0, < 2.0.0`. The target model must provide Ubuntu 24.04 AMD64 ma
 | `model_uuid` | `string` | required | Juju model UUID. |
 | `resources` | `map(string)` | `{}` | Charm resources. |
 | `revision` | `number` | `null` | Charm revision. |
-| `storage` | `map(string)` | `{}` | Deprecated storage directives input. |
 | `storage_directives` | `map(string)` | `{}` | Storage directives; we recommend setting `{ "mail-data" = "8G" }` where applicable. |
 | `units` | `number` | `1` | Number of units. |
 
@@ -36,10 +35,8 @@ provider `> 1.0.0, < 2.0.0`. The target model must provide Ubuntu 24.04 AMD64 ma
 | Name | Type | Description |
 | --- | --- | --- |
 | `application` | object | Full Juju application resource. |
-| `app_name` | string | Deprecated application name output. |
 | `provides` | object | Structured endpoint references for `metrics` and `cos-agent`. |
-| `requires` | object | Legacy endpoint names retained for compatibility. |
-| `requires_endpoints` | object | Structured endpoint references for `milter` and `certificates`. |
+| `requires` | object | Structured endpoint references for `milter` and `certificates`. |
 
 ## Example
 
@@ -70,8 +67,8 @@ resource "juju_integration" "postfix_opendkim" {
   model_uuid = juju_model.mail.uuid
 
   application {
-    name     = module.postfix_relay.requires_endpoints.milter.name
-    endpoint = module.postfix_relay.requires_endpoints.milter.endpoint
+    name     = module.postfix_relay.requires.milter.name
+    endpoint = module.postfix_relay.requires.milter.endpoint
   }
 
   application {

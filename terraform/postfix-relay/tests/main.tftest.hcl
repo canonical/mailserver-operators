@@ -20,6 +20,7 @@ variables {
   }
   mail_domain = "mail.example.test"
   model_uuid  = "00000000-0000-0000-0000-000000000000"
+  risk        = "edge"
 }
 
 run "default_product_contract" {
@@ -117,11 +118,11 @@ run "restricted_exposure" {
   }
 }
 
-run "reject_invalid_risk" {
+run "reject_unpublished_risk" {
   command = plan
 
   variables {
-    risk = "dangerous"
+    risk = "stable"
   }
 
   expect_failures = [var.risk]

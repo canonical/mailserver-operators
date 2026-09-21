@@ -1,6 +1,6 @@
 # Dovecot Terraform product
 
-This CC008 product deploys Dovecot into a Juju machine model with encrypted mail storage and TLS.
+This Terraform product deploys Dovecot into a Juju machine model with encrypted mail storage and TLS.
 It creates the LUKS secret, grants it to Dovecot, and deploys `self-signed-certificates` by default.
 
 See the repository's [product installation guide](../INSTALL.md) for prerequisites, secure
@@ -21,6 +21,7 @@ module "dovecot" {
   mail_domain       = "mail.example.com"
   postmaster_address = "postmaster@mail.example.com"
   luks_key           = var.mail_luks_key
+  risk               = "edge"
 }
 ```
 
@@ -51,5 +52,5 @@ not create or own the model. Pin charm revisions for reproducible deployments.
 credentials.
 TLS offers must be hosted on the configured controller.
 
-Outputs follow the CC008 product contract: `metadata`, `models`, `provides`, and `requires`.
+Outputs follow the product contract: `metadata`, `models`, `provides`, and `requires`.
 The LUKS passphrase and controller credentials remain sensitive Terraform state values.

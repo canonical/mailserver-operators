@@ -58,8 +58,8 @@ resource "juju_integration" "postfix_relay_opendkim" {
   model_uuid = var.model_uuid
 
   application {
-    endpoint = module.postfix_relay.requires_endpoints.milter.endpoint
-    name     = module.postfix_relay.requires_endpoints.milter.name
+    endpoint = module.postfix_relay.requires.milter.endpoint
+    name     = module.postfix_relay.requires.milter.name
   }
 
   application {
@@ -83,26 +83,6 @@ resource "juju_integration" "cos_opendkim" {
     offer_url           = var.cos.kind == "offer" ? var.cos.url : null
     offering_controller = var.cos.kind == "offer" ? var.cos.controller : null
   }
-}
-
-moved {
-  from = juju_secret.opendkim_private_key
-  to   = juju_secret.opendkim_private_key[0]
-}
-
-moved {
-  from = module.opendkim
-  to   = module.opendkim[0]
-}
-
-moved {
-  from = juju_access_secret.opendkim_private_key
-  to   = juju_access_secret.opendkim_private_key[0]
-}
-
-moved {
-  from = juju_integration.postfix_relay_opendkim
-  to   = juju_integration.postfix_relay_opendkim[0]
 }
 
 resource "juju_integration" "cos_postfix_relay" {

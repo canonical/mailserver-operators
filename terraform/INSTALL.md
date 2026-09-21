@@ -1,6 +1,6 @@
 # Installing the Terraform products
 
-This guide deploys the two CC008 products from this repository:
+This guide deploys the two Terraform products from this repository:
 
 - **Dovecot**: Dovecot, encrypted block storage, and TLS.
 - **Postfix Relay**: Postfix Relay, OpenDKIM, and their `milter` integration.
@@ -116,6 +116,7 @@ export TF_VAR_juju_controller="$(
     '
 )"
 export TF_VAR_mail_domain="mail.example.com"
+export TF_VAR_risk="edge"
 export TF_VAR_dkim_private_key="$(cat /secure/path/default.private)"
 export TF_VAR_postmaster_address="postmaster@$TF_VAR_mail_domain"
 
@@ -539,6 +540,7 @@ unset TF_VAR_mail_domain
 unset TF_VAR_dkim_private_key
 unset TF_VAR_luks_key
 unset TF_VAR_postmaster_address
+unset TF_VAR_risk
 unset DOVECOT_MODEL_UUID
 unset POSTFIX_MODEL_UUID
 ```

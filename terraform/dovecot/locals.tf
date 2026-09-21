@@ -3,7 +3,7 @@
 
 locals {
   dovecot = merge(var.dovecot, {
-    channel = coalesce(var.dovecot.channel, "2.3/${var.risk}")
+    channel = "2.3/${var.risk}"
   })
 
   dovecot_config = merge(var.dovecot.config, {
@@ -14,5 +14,7 @@ locals {
     primary-unit           = coalesce(var.primary_unit, "${var.dovecot.app_name}/0")
   })
 
-  self_signed_certificates = var.self_signed_certificates
+  self_signed_certificates = merge(var.self_signed_certificates, {
+    channel = "1/stable"
+  })
 }

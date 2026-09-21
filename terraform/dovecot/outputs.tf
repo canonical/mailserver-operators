@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 
 output "metadata" {
-  description = "Metadata describing this CC008 product module."
+  description = "Metadata describing this product module."
   value = {
     product   = "dovecot"
     substrate = "machine"

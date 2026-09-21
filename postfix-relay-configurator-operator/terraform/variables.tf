@@ -27,7 +27,7 @@ variable "config" {
 }
 
 variable "constraints" {
-  description = "Deprecated Juju constraints retained for compatibility."
+  description = "Juju constraints to apply to this application."
   type        = string
   default     = null
 }
@@ -59,11 +59,4 @@ variable "revision" {
   type        = number
   default     = null
   nullable    = true
-}
-
-variable "storage" {
-  description = "Deprecated storage directives retained for compatibility."
-  type        = map(string)
-  default     = {}
-  nullable    = false
 }

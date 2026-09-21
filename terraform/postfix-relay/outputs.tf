@@ -26,7 +26,7 @@ output "integration_gaps" {
 }
 
 output "metadata" {
-  description = "Metadata describing this CC008 product module."
+  description = "Metadata describing this product module."
   value = {
     product   = "postfix-relay"
     substrate = "machine"
@@ -59,6 +59,6 @@ output "provides" {
 output "requires" {
   description = "Aggregated endpoints required by the product components."
   value = {
-    postfix_relay_milter = module.postfix_relay.requires_endpoints.milter
+    postfix_relay_milter = module.postfix_relay.requires.milter
   }
 }

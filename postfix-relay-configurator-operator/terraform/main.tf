@@ -12,10 +12,9 @@ resource "juju_application" "postfix_relay_configurator" {
     revision = var.revision
   }
 
-  config             = var.config
-  constraints        = var.constraints
-  endpoint_bindings  = var.endpoint_bindings
-  resources          = var.resources
-  storage_directives = var.storage
-  units              = 0
+  config            = var.config
+  constraints       = var.constraints
+  endpoint_bindings = var.endpoint_bindings
+  resources         = var.resources
+  units             = 0
 }

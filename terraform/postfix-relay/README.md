@@ -1,6 +1,6 @@
 # Postfix Relay Terraform product
 
-This CC008 product deploys Postfix Relay and OpenDKIM into a Juju machine model. It creates the
+This Terraform product deploys Postfix Relay and OpenDKIM into a Juju machine model. It creates the
 private-key secret, grants it to OpenDKIM, and integrates OpenDKIM with Postfix over `milter`.
 
 See the repository's [product installation guide](../INSTALL.md) for prerequisites, secure
@@ -20,6 +20,7 @@ module "postfix_relay" {
   model_uuid       = var.model_uuid
   mail_domain      = "mail.example.com"
   dkim_private_key = file("default.private")
+  risk             = "edge"
 }
 ```
 
@@ -31,7 +32,7 @@ does not expose `cos-agent`.
 `juju_controller` accepts either `username`/`password` or JAAS `client_id`/`client_secret`
 credentials.
 
-Outputs follow the CC008 product contract: `metadata`, `models`, `provides`, and `requires`.
+Outputs follow the product contract: `metadata`, `models`, `provides`, and `requires`.
 `dkim` contains only non-sensitive DNS publication coordinates. Private keys and controller
 credentials remain sensitive Terraform state values.
 

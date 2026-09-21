@@ -3,7 +3,7 @@
 
 locals {
   opendkim = merge(var.opendkim, {
-    channel = coalesce(var.opendkim.channel, "2/${var.risk}")
+    channel = "2/${var.risk}"
   })
 
   opendkim_config = merge(var.opendkim.config, {
@@ -20,6 +20,6 @@ locals {
   })
 
   postfix_relay = merge(var.postfix_relay, {
-    channel = coalesce(var.postfix_relay.channel, "3.8/${var.risk}")
+    channel = "3.8/${var.risk}"
   })
 }

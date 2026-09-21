@@ -1,6 +1,6 @@
 # Terraform products
 
-This repository contains two independent CC008 product modules:
+This repository contains two independent Terraform product modules:
 
 | Product | Path | Components |
 |---|---|---|
@@ -8,7 +8,7 @@ This repository contains two independent CC008 product modules:
 | Dovecot | [`dovecot/`](dovecot/) | Dovecot and a default TLS provider |
 
 Each product deploys into an existing Juju model and owns its secrets, supported integrations, and
-CC008-compatible outputs. The charm modules remain beside their charms under `<charm>/terraform/`.
+standardized outputs. The charm modules remain beside their charms under `<charm>/terraform/`.
 
 See [Installing the Terraform products](INSTALL.md) for a complete deployment procedure.
 

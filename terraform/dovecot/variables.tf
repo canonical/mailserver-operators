@@ -33,7 +33,6 @@ variable "dovecot" {
   type = object({
     app_name    = optional(string, "dovecot")
     base        = optional(string, "ubuntu@24.04")
-    channel     = optional(string)
     config      = optional(map(string), {})
     constraints = optional(string, "arch=amd64 root-disk=20G")
     endpoint_bindings = optional(set(object({
@@ -142,14 +141,14 @@ variable "primary_unit" {
 }
 
 variable "risk" {
-  description = "Default charm channel risk used when a per-charm channel is not supplied."
+  description = "Charm channel risk used for the Dovecot deployment."
   type        = string
   default     = "edge"
   nullable    = false
 
   validation {
-    condition     = contains(["stable", "candidate", "beta", "edge"], var.risk)
-    error_message = "risk must be one of stable, candidate, beta, or edge."
+    condition     = var.risk == "edge"
+    error_message = "risk must be edge because Dovecot 2.3 is published only on edge."
   }
 }
 
@@ -158,7 +157,6 @@ variable "self_signed_certificates" {
   type = object({
     app_name    = optional(string, "self-signed-certificates")
     base        = optional(string, "ubuntu@22.04")
-    channel     = optional(string, "1/stable")
     config      = optional(map(string), {})
     constraints = optional(string, "arch=amd64")
     revision    = optional(number)

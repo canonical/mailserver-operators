@@ -55,11 +55,6 @@ run "principal_machine_deploy" {
   }
 
   assert {
-    condition     = output.app_name == output.application.name
-    error_message = "deprecated app_name output did not match expected"
-  }
-
-  assert {
     condition = output.provides == {
       metrics = {
         kind     = "endpoint"
@@ -76,7 +71,7 @@ run "principal_machine_deploy" {
   }
 
   assert {
-    condition = output.requires_endpoints == {
+    condition = output.requires == {
       milter = {
         kind     = "endpoint"
         name     = output.application.name
@@ -88,11 +83,6 @@ run "principal_machine_deploy" {
         endpoint = "certificates"
       }
     }
-    error_message = "requires_endpoints output did not match expected structure"
-  }
-
-  assert {
-    condition     = output.requires.milter == "milter"
-    error_message = "legacy requires output must remain backward compatible"
+    error_message = "requires output did not match expected structure"
   }
 }

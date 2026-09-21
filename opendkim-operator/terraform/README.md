@@ -39,7 +39,6 @@ The charm has no storage or OCI image resources.
 | Name | Description |
 |---|---|
 | `application` | Full `juju_application` object. |
-| `app_name` | Deprecated application name. |
 | `provides` | Structured `milter` and `cos-agent` endpoint objects. |
 
 ## Example

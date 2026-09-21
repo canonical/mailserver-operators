@@ -56,11 +56,6 @@ run "deploys_with_units" {
   }
 
   assert {
-    condition     = output.app_name == output.application.name
-    error_message = "deprecated app_name output did not match expected"
-  }
-
-  assert {
     condition = output.provides == {
       "cos-agent" = {
         kind     = "endpoint"

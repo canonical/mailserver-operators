@@ -56,7 +56,6 @@ For storage:
 ## Outputs
 
 - `application` - full `juju_application` object
-- `app_name` - deprecated application name
 - `provides.cos-agent` - `{ kind, name, endpoint }`
 - `requires.certificates` - `{ kind, name, endpoint }`
 
