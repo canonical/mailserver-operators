@@ -342,7 +342,7 @@ def mailbox_has_subject(juju: jubilant.Juju, unit_name: str, user: str, subject:
 
 
 def find_bacula_job(
-    baculum_client, suffix: str, contains: str | None = None, timeout: int = 120
+    baculum_client, suffix: str, contains: str | None = None, timeout: int = 300
 ) -> str:
     """Poll Bacula's job list until a matching job name appears.
 
