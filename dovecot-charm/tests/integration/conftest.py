@@ -291,6 +291,7 @@ def bacula_server(juju: jubilant.Juju, bacula_fd: str, s3_address: str) -> str:
     """Deploy and integrate the full Bacula server stacks."""
     server_app = "bacula-server"
     database_app = "bacula-database"
+    s3_app = "s3-integrator"
 
     if server_app not in juju.status().apps:
         logging.info("Deploying bacula-server...")
@@ -298,14 +299,14 @@ def bacula_server(juju: jubilant.Juju, bacula_fd: str, s3_address: str) -> str:
     if database_app not in juju.status().apps:
         logging.info("Deploying bacula-database (postgresql)...")
         juju.deploy("postgresql", database_app, channel="14/stable")
-    if "s3-integrator" not in juju.status().apps:
+    if s3_app not in juju.status().apps:
         logging.info("Deploying s3-integrator...")
-        juju.deploy("s3-integrator")
+        juju.deploy(s3_app)
 
-    juju.wait(lambda status: jubilant.all_agents_idle(status, "s3-integrator"), timeout=600)
+    juju.wait(lambda status: jubilant.all_agents_idle(status, s3_app), timeout=600)
 
     juju.config(
-        "s3-integrator",
+        s3_app,
         {
             "endpoint": f"http://{s3_address}:{S3_RGW_PORT}",
             "bucket": S3_BUCKET,
@@ -313,18 +314,20 @@ def bacula_server(juju: jubilant.Juju, bacula_fd: str, s3_address: str) -> str:
         },
     )
     juju.run(
-        unit="s3-integrator/0",
+        unit=f"{s3_app}/0",
         action="sync-s3-credentials",
         params={"access-key": S3_ACCESS_KEY, "secret-key": S3_SECRET_KEY},
     )
 
-    for endpoint in ("bacula-database", "s3-integrator", bacula_fd):
+    for endpoint in (database_app, s3_app, bacula_fd):
         try:
             juju.integrate(server_app, endpoint)
         except jubilant.CLIError:
             logging.info(f"{server_app}:{endpoint} relation already present")
-
-    juju.wait(jubilant.all_active, timeout=20 * 60)
+    juju.wait(
+        lambda status: jubilant.all_active(status, server_app, database_app, s3_app),
+        timeout=20 * 60,
+    )
     return server_app
 
 
