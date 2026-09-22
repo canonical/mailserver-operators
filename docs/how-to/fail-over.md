@@ -9,7 +9,7 @@ myst:
 # How to manually fail over Dovecot
 
 Dovecot supports an active/passive deployment with one primary and one secondary
-unit. Mail is copied asynchronously from the primary to the secondary by
+unit. Mails are copied asynchronously from the primary to the secondary by
 `doveadm dsync`. The units do not use shared mail storage and the charm does not
 automatically change external routing.
 
@@ -30,7 +30,6 @@ Before starting, ensure that:
 
 Check the units and current primary:
 
-```bash
 juju status dovecot --relations
 juju config dovecot primary-unit
 ```
@@ -49,7 +48,6 @@ receive writes during the transition.
 
 Copy the latest mail to the secondary:
 
-```bash
 juju run dovecot/0 force-sync
 ```
 
@@ -60,7 +58,6 @@ before changing the primary.
 
 Set the secondary as the new primary:
 
-```bash
 juju config dovecot primary-unit=dovecot/1
 juju wait-for application dovecot --timeout=15m
 ```

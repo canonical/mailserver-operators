@@ -30,7 +30,7 @@ basic operations you can complete with the charm.
     :maxdepth: 1
 
     Integrate with COS <integrate-with-cos>
-    Fail over Dovecot <fail-over>
+    Handle Dovecot failover and failback <fail-over>
 
 Update and refresh
 ------------------
