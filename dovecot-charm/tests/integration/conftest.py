@@ -128,7 +128,15 @@ def juju_fixture(request: pytest.FixtureRequest):
         return
 
     keep_models = typing.cast(bool, request.config.getoption("--keep-models"))
-    with jubilant.temp_model(keep=keep_models, config={"automatically-retry-hooks": True}) as juju:
+    model_config = {
+        "automatically-retry-hooks": True,
+        # bacula-server only picks up a newly related bacula-fd's Job/Client entry on
+        # its next update-status hook. Juju's 5m default made that reconcile race
+        # against test polling timeouts of the same order; shortening the interval
+        # makes the reconcile happen quickly and reliably instead.
+        "update-status-hook-interval": "10s",
+    }
+    with jubilant.temp_model(keep=keep_models, config=model_config) as juju:
         juju.wait_timeout = 10 * 60
         yield juju
         return
