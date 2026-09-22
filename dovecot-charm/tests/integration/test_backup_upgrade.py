@@ -39,6 +39,8 @@ def test_backup_restore_across_charm_upgrade(
     juju: jubilant.Juju,
     dovecot_charm_backup: str,
     dovecot_old: str,
+    bacula_fd: str,
+    bacula_fd_old: str,
     baculum: baculum_client_module.Baculum,
 ):
     """Back up on the published revision and restore onto the charm under test."""
@@ -52,8 +54,10 @@ def test_backup_restore_across_charm_upgrade(
             "seeded message not found before backup"
         )
 
-        backup_job = find_bacula_job(baculum, "-backup", contains=f"{dovecot_old}-0")
-        restore_job = find_bacula_job(baculum, "-restore", contains=f"{dovecot_charm_backup}-0")
+        # Bacula job names are derived from the bacula-fd subordinate's own unit name
+        # (e.g. "bacula-fd-old-0"), not the principal dovecot unit's name.
+        backup_job = find_bacula_job(baculum, "-backup", contains=f"{bacula_fd_old}-0")
+        restore_job = find_bacula_job(baculum, "-restore", contains=f"{bacula_fd}-0")
 
         logger.info("Running backup job %s on the published revision", backup_job)
         baculum.run_backup_job(backup_job)
