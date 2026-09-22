@@ -12,6 +12,7 @@ import time
 from email.message import EmailMessage
 
 import jubilant
+import requests
 from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger(__name__)
@@ -364,7 +365,18 @@ def find_bacula_job(
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        for job in baculum_client.list_job_names():
+        try:
+            jobs = baculum_client.list_job_names()
+        except requests.exceptions.RequestException:
+            # bacula-server's Baculum API can drop connections briefly while it
+            # reconciles config after a new client/fd relation joins. Treat this
+            # as transient and keep polling instead of failing the whole test.
+            logging.warning(
+                "Transient error listing Bacula job names, retrying", exc_info=True
+            )
+            time.sleep(5)
+            continue
+        for job in jobs:
             if job.endswith(suffix) and (contains is None or contains in job):
                 return job
         time.sleep(5)
@@ -393,7 +405,18 @@ def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        runs = baculum_client.list_job_runs(job_name)
+        try:
+            runs = baculum_client.list_job_runs(job_name)
+        except requests.exceptions.RequestException:
+            # See the matching comment in find_bacula_job: the Baculum API can
+            # drop connections transiently while bacula-server reconciles config.
+            logging.warning(
+                "Transient error listing Bacula job runs for %s, retrying",
+                job_name,
+                exc_info=True,
+            )
+            time.sleep(5)
+            continue
         if runs:
             job_run = runs[0]
             status = job_run["jobstatus"]
