@@ -335,10 +335,18 @@ def seed_backup_test_message(
 
 def mailbox_has_subject(juju: jubilant.Juju, unit_name: str, user: str, subject: str) -> bool:
     """Return True if the user's INBOX contains a message with the given subject."""
-    result = juju.exec(
-        f'doveadm search -u {user} mailbox INBOX HEADER Subject "{subject}"',
-        unit=unit_name,
-    )
+    try:
+        result = juju.exec(
+            f'doveadm search -u {user} mailbox INBOX HEADER Subject "{subject}"',
+            unit=unit_name,
+        )
+    except jubilant.TaskError as exc:
+        # A user that doesn't exist yet (e.g. a freshly deployed charm before restore)
+        # obviously has no matching mail; doveadm exits non-zero in that case instead
+        # of returning an empty result.
+        if "doesn't exist" in exc.task.stderr:
+            return False
+        raise
     return bool(result.stdout.strip())
 
 
