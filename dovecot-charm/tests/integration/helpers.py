@@ -371,9 +371,7 @@ def find_bacula_job(
             # bacula-server's Baculum API can drop connections briefly while it
             # reconciles config after a new client/fd relation joins. Treat this
             # as transient and keep polling instead of failing the whole test.
-            logging.warning(
-                "Transient error listing Bacula job names, retrying", exc_info=True
-            )
+            logging.warning("Transient error listing Bacula job names, retrying", exc_info=True)
             time.sleep(5)
             continue
         for job in jobs:
