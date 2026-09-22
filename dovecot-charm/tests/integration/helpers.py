@@ -430,7 +430,13 @@ def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -
             if status == "T":
                 return job_run
             if status in ("E", "f", "A"):
-                raise AssertionError(f"Bacula job '{job_name}' failed with status {status}")
+                try:
+                    job_log = baculum_client.get_job_log(int(job_run["jobid"]))
+                except requests.exceptions.RequestException:
+                    job_log = "<failed to fetch job log>"
+                raise AssertionError(
+                    f"Bacula job '{job_name}' failed with status {status}:\n{job_log}"
+                )
         time.sleep(5)
 
     raise AssertionError(f"Timed out waiting for Bacula job '{job_name}' to complete")

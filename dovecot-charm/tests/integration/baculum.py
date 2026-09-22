@@ -162,6 +162,24 @@ class Baculum:
         )
         return self._extract_output(f"show job '{job}' detail", response)
 
+    def get_job_log(self, job_id: int) -> str:
+        """Fetch the Bacula job log for a job run, for diagnosing failures.
+
+        Args:
+            job_id: the job run ID whose log to fetch.
+
+        Returns:
+            The job log as a single string, one Bacula log line per entry.
+        """
+        response = self._session.get(f"{self._base}/joblog/{job_id}/", timeout=self._timeout)
+        output = self._extract_output(f"get job log for job {job_id}", response)
+        if isinstance(output, list):
+            return "\n".join(
+                entry.get("text", str(entry)) if isinstance(entry, dict) else str(entry)
+                for entry in output
+            )
+        return str(output)
+
     def list_job_files(self, job_id: int) -> list[str]:
         """List the files catalogued for a completed job run.
 
