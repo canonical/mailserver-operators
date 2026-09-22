@@ -85,22 +85,29 @@ class Baculum:
         )
         return "\n".join(self._extract_output(f"run backup '{name}'", response))
 
-    def run_restore_job(self, name: str, backup_job_id: int) -> str:
+    def run_restore_job(self, name: str, backup_job_id: int, source: str | None = None) -> str:
         """Run a restore job.
 
         Args:
             name: restore job name.
             backup_job_id: backup job run ID to restore.
+            source: name of the backup job the data was originally backed up with.
+                Defaults to ``name``, i.e. restoring onto the same client that produced
+                the backup. Pass a different backup job name to restore data onto a
+                different client, e.g. when restoring a backup taken on one charm unit
+                onto a separately deployed unit.
 
         Returns:
             Baculum API output.
         """
-        job = self.get_job(job=name)
+        restore_job = self.get_job(job=name)
+        backup_job = self.get_job(job=source) if source else restore_job
         payload = {
             "id": backup_job_id,
             "restorejob": name,
-            "client": job["client"],
-            "fileset": job["fileset"],
+            "client": backup_job["client"],
+            "restoreclient": restore_job["client"],
+            "fileset": backup_job["fileset"],
             "where": "/",
             "replace": "always",
             "full": True,
