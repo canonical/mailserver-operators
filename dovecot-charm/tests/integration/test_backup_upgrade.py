@@ -79,9 +79,10 @@ def test_backup_restore_across_charm_upgrade(
         logger.info(
             "Restoring backup %s onto %s via %s", backup_run["jobid"], new_unit, restore_job
         )
-        baculum.run_restore_job(
+        restore_output = baculum.run_restore_job(
             restore_job, backup_job_id=int(backup_run["jobid"]), source=backup_job
         )
+        logger.info("run restore job output: %s", restore_output)
         wait_for_bacula_job(baculum, restore_job)
 
         assert mailbox_has_subject(juju, new_unit, _BACKUP_TEST_USER, _BACKUP_TEST_SUBJECT), (
