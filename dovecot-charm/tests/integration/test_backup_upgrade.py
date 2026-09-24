@@ -76,6 +76,22 @@ def test_backup_restore_across_charm_upgrade(
             "message unexpectedly present on the freshly deployed charm"
         )
 
+        # Bacula's restore only restores mail data files under /srv/mail; it does not
+        # (and should not) recreate system user accounts. In a real disaster-recovery
+        # scenario, account provisioning is a separate step from data restore, so
+        # provision the destination account here before restoring onto it. This does
+        # not seed any mail (create-mail-user only creates the system user and mail
+        # directory), so the "message not yet present" assertion above stays valid.
+        action_result = juju.run(
+            new_unit,
+            "create-mail-user",
+            params={"username": _BACKUP_TEST_USER, "password": password},
+        )
+        assert action_result.status == "completed", (
+            f"create-mail-user action failed for {_BACKUP_TEST_USER} on {new_unit}: "
+            f"status={action_result.status}"
+        )
+
         logger.info(
             "Restoring backup %s onto %s via %s", backup_run["jobid"], new_unit, restore_job
         )
