@@ -85,37 +85,49 @@ class Baculum:
         )
         return "\n".join(self._extract_output(f"run backup '{name}'", response))
 
-    def run_restore_job(self, name: str, backup_job_id: int, source: str | None = None) -> str:
-        """Run a restore job.
+    def run_restore_job(self, name: str, backup_job_id: int) -> str:
+        """Run a restore job onto the same client that produced the backup.
+
+        Args:
+            name: restore job name.
+            backup_job_id: backup job run ID to restore.
+
+        Returns:
+            Baculum API output.
+        """
+        job = self.get_job(job=name)
+        payload = {
+            "id": backup_job_id,
+            "restorejob": name,
+            "client": job["client"],
+            "fileset": job["fileset"],
+            "where": "/",
+            "replace": "always",
+            "full": True,
+        }
+        response = self._session.post(
+            f"{self._base}/jobs/restore", json=payload, timeout=self._timeout
+        )
+        return "\n".join(
+            self._extract_output(f"restore '{name}' from backup {backup_job_id}", response)
+        )
+
+    def run_cross_client_restore_job(self, name: str, backup_job_id: int, source: str) -> str:
+        """Run a restore job, restoring data backed up by one job onto a different client.
 
         Args:
             name: restore job name.
             backup_job_id: backup job run ID to restore.
             source: name of the backup job the data was originally backed up with.
-                Defaults to ``name``, i.e. restoring onto the same client that produced
-                the backup. Pass a different backup job name to restore data onto a
-                different client, e.g. when restoring a backup taken on one charm unit
-                onto a separately deployed unit.
 
         Returns:
             Baculum API output.
         """
         restore_job = self.get_job(job=name)
-        backup_job = self.get_job(job=source) if source else restore_job
-        # Baculum's "jobs/restore" REST endpoint only understands a single
-        # "client" parameter and has no concept of Bacula's separate
-        # "restoreclient" parameter, so it can't express a cross-client restore
-        # (restoring data backed up on one client onto a different one):
-        # sending "restoreclient" to that endpoint is silently dropped, and the
-        # whole restore job (including RunScripts) ends up running on the
-        # client that produced the backup instead of the restore target.
-        #
-        # Bacula's own "restore" bconsole command does support this: "client"
-        # is only used to validate that the given jobid/fileset were produced
-        # by that client, while "restoreclient" (if given) becomes the actual
-        # effective client used for both the data write and the RunScripts.
-        # Issue the raw bconsole command via Baculum's console passthrough
-        # endpoint to get access to it.
+        backup_job = self.get_job(job=source)
+        # Baculum's "jobs/restore" REST endpoint has no "restoreclient" parameter, so
+        # it can't target a different client than the backup's own; issue a raw
+        # bconsole "restore" command instead, which does support "restoreclient".
         command = [
             "restore",
             f'client="{backup_job["client"]}"',
@@ -144,11 +156,8 @@ class Baculum:
         Returns:
             A list of job run objects.
         """
-        # Job names embed the owning bacula-fd subordinate's own unit name and are
-        # therefore already unique, so filter by name alone. Filtering by client too
-        # is unreliable for restores: a restore run's recorded client can be the
-        # source (backup) client, the restore target client, or both depending on
-        # the Bacula version, so an extra client filter can silently hide the run.
+        # Job names are already unique per bacula-fd unit, and a restore run's
+        # recorded client is unreliable across Bacula versions, so filter by name only.
         params = {"name": name}
         response = self._session.get(f"{self._base}/jobs", params=params, timeout=self._timeout)
         return self._extract_output(f"list jobs '{name}'", response)
@@ -177,27 +186,6 @@ class Baculum:
             f"{self._base}/jobs/show", params=params, timeout=self._timeout
         )
         return self._extract_output(f"show job '{job}' detail", response)
-
-    def get_console_messages(self, limit: int = 0) -> str:
-        """Fetch pending Bacula director console messages, for diagnosing job failures.
-
-        This surfaces the director's own ``messages`` command output, which contains
-        a failed job's fatal error.
-
-        Args:
-            limit: maximum number of messages to return (0 for all pending ones).
-
-        Returns:
-            The console messages as a single string, one message per line.
-        """
-        params = {"limit": limit} if limit else {}
-        response = self._session.get(
-            f"{self._base}/joblog/messages", params=params, timeout=self._timeout
-        )
-        output = self._extract_output("get console messages", response)
-        if isinstance(output, list):
-            return "\n".join(str(entry) for entry in output)
-        return str(output)
 
     def list_job_files(self, job_id: int) -> list[str]:
         """List the files catalogued for a completed job run.

@@ -95,7 +95,7 @@ def test_backup_restore_across_charm_upgrade(
         logger.info(
             "Restoring backup %s onto %s via %s", backup_run["jobid"], new_unit, restore_job
         )
-        baculum.run_restore_job(
+        baculum.run_cross_client_restore_job(
             restore_job, backup_job_id=int(backup_run["jobid"]), source=backup_job
         )
         wait_for_bacula_job(baculum, restore_job)

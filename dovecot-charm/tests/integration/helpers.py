@@ -430,18 +430,7 @@ def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -
             if status == "T":
                 return job_run
             if status in ("E", "f", "A"):
-                # The per-job catalog log lookup is unreliable in this setup
-                # (returns empty), so rely on the director's pending console
-                # messages instead, which reliably contain the job's fatal
-                # error.
-                try:
-                    console_messages = baculum_client.get_console_messages()
-                except requests.exceptions.RequestException:
-                    console_messages = "<failed to fetch console messages>"
-                raise AssertionError(
-                    f"Bacula job '{job_name}' failed with status {status}:\n"
-                    f"--- console messages ---\n{console_messages}"
-                )
+                raise AssertionError(f"Bacula job '{job_name}' failed with status {status}")
         time.sleep(5)
 
     raise AssertionError(f"Timed out waiting for Bacula job '{job_name}' to complete")
