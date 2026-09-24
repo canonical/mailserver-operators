@@ -102,15 +102,17 @@ class Baculum:
         """
         restore_job = self.get_job(job=name)
         backup_job = self.get_job(job=source) if source else restore_job
-        # "client" selects which Client resource actually runs the restore job,
-        # including its RunScripts, so it must be the restore *target* (the
-        # restore job's own client), not the backup source. "fileset" must
-        # still be the backup source's, since the given jobid was catalogued
-        # under that FileSet and Bacula rejects a mismatched one.
+        # Bacula's restore command validates that "client" matches the client
+        # that actually produced the given jobid/fileset (the backup source),
+        # rejecting any other combination as an invalid property. "restoreclient"
+        # is what Bacula actually uses as the job's effective client (including
+        # for RunScripts and the file write target), so it must be the restore
+        # target.
         payload = {
             "id": backup_job_id,
             "restorejob": name,
-            "client": restore_job["client"],
+            "client": backup_job["client"],
+            "restoreclient": restore_job["client"],
             "fileset": backup_job["fileset"],
             "where": "/",
             "replace": "always",
