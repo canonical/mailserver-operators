@@ -156,8 +156,6 @@ class Baculum:
         Returns:
             A list of job run objects.
         """
-        # Job names are already unique per bacula-fd unit, and a restore run's
-        # recorded client is unreliable across Bacula versions, so filter by name only.
         params = {"name": name}
         response = self._session.get(f"{self._base}/jobs", params=params, timeout=self._timeout)
         return self._extract_output(f"list jobs '{name}'", response)
