@@ -13,7 +13,16 @@ from email.message import EmailMessage
 
 import jubilant
 import requests
-from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
+from tenacity import (
+    RetryError,
+    Retrying,
+    retry,
+    retry_if_exception_type,
+    retry_if_result,
+    stop_after_attempt,
+    stop_after_delay,
+    wait_fixed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -371,25 +380,32 @@ def find_bacula_job(
     Raises:
         AssertionError: if no matching job appears within the timeout.
     """
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            jobs = baculum_client.list_job_names()
-        except requests.exceptions.RequestException:
-            # bacula-server's Baculum API can drop connections briefly while it
-            # reconciles config after a new client/fd relation joins. Treat this
-            # as transient and keep polling instead of failing the whole test.
-            logging.warning("Transient error listing Bacula job names, retrying", exc_info=True)
-            time.sleep(5)
-            continue
-        for job in jobs:
-            if job.endswith(suffix) and (contains is None or contains in job):
-                return job
-        time.sleep(5)
-    raise AssertionError(
-        f"Timed out waiting for a Bacula job name ending with {suffix!r}"
-        + (f" containing {contains!r}" if contains else "")
-    )
+
+    def _find() -> str | None:
+        jobs = baculum_client.list_job_names()
+        return next(
+            (
+                job
+                for job in jobs
+                if job.endswith(suffix) and (contains is None or contains in job)
+            ),
+            None,
+        )
+
+    try:
+        job = Retrying(
+            stop=stop_after_delay(timeout),
+            wait=wait_fixed(5),
+            retry=retry_if_exception_type(requests.exceptions.RequestException)
+            | retry_if_result(lambda job: job is None),
+            reraise=True,
+        )(_find)
+    except (RetryError, requests.exceptions.RequestException) as exc:
+        raise AssertionError(
+            f"Timed out waiting for a Bacula job name ending with {suffix!r}"
+            + (f" containing {contains!r}" if contains else "")
+        ) from exc
+    return job
 
 
 def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -> dict:
@@ -409,28 +425,25 @@ def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -
     Raises:
         AssertionError: if the job fails or does not complete within the timeout.
     """
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            runs = baculum_client.list_job_runs(job_name)
-        except requests.exceptions.RequestException:
-            # See the matching comment in find_bacula_job: the Baculum API can
-            # drop connections transiently while bacula-server reconciles config.
-            logging.warning(
-                "Transient error listing Bacula job runs for %s, retrying",
-                job_name,
-                exc_info=True,
-            )
-            time.sleep(5)
-            continue
-        if runs:
-            job_run = runs[0]
-            status = job_run["jobstatus"]
-            logging.info("%s job run status: %s", job_name, status)
-            if status == "T":
-                return job_run
-            if status in ("E", "f", "A"):
-                raise AssertionError(f"Bacula job '{job_name}' failed with status {status}")
-        time.sleep(5)
 
-    raise AssertionError(f"Timed out waiting for Bacula job '{job_name}' to complete")
+    def _poll_job_run() -> dict | None:
+        runs = baculum_client.list_job_runs(job_name)
+        if not runs:
+            return None
+        job_run = runs[0]
+        status = job_run["jobstatus"]
+        logging.info("%s job run status: %s", job_name, status)
+        if status in ("E", "f", "A"):
+            raise AssertionError(f"Bacula job '{job_name}' failed with status {status}")
+        return job_run if status == "T" else None
+
+    try:
+        return Retrying(
+            stop=stop_after_delay(timeout),
+            wait=wait_fixed(5),
+            retry=retry_if_exception_type(requests.exceptions.RequestException)
+            | retry_if_result(lambda job_run: job_run is None),
+            reraise=True,
+        )(_poll_job_run)
+    except (RetryError, requests.exceptions.RequestException) as exc:
+        raise AssertionError(f"Timed out waiting for Bacula job '{job_name}' to complete") from exc
