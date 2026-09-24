@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    "description lang=en": "How to manually fail over a replicated Dovecot deployment to its secondary unit"
+    "description lang=en": "How to manually fail over a replicated Dovecot charm deployment to its secondary unit"
 ---
 
 (how_to_failover)=
@@ -39,7 +39,7 @@ juju config dovecot primary-unit
 
 ## Plan a failover between two Dovecot units
 
-For a planned failover from `dovecot/0` to `dovecot/1`:
+The steps in this section assume a planned failover from `dovecot/0` to `dovecot/1`.
 
 ### Stop traffic to the current primary
 
@@ -69,15 +69,15 @@ juju wait-for application dovecot --timeout=15m
 
 ### Update routing
 
-Update every route that used the old primary to target the new primary.
+Update every route that used the old primary (`dovecot/0`) to target the new primary (`dovecot/1`).
 
 ### Restore traffic
 
 Restore traffic and verify that new mail can be delivered and retrieved through
 the external endpoint.
 
-After the configuration change, the old primary becomes the secondary. Its sync
-timer is stopped, and the new primary installs or enables its timer to copy mail
+After the configuration change, the old primary (`dovecot/0`) becomes the secondary. Its sync
+timer is stopped, and the new primary (`dovecot/1`) installs or enables its timer to copy mail
 in the opposite direction.
 
 ## Handle an unplanned failover
