@@ -1,0 +1,21 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version_schema: 2
+
+changes:
+- title: Dovecot backups now include mail user accounts
+  author: swetha1654
+  type: minor
+  description: |
+    Dovecot's Bacula backup now also captures the mail group's system accounts (username and
+    password hash) alongside the mail data, and recreates any missing accounts automatically
+    during restore. This removes the need to manually run the `create-mail-user` action for
+    every user before restoring onto a fresh unit.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/61"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: false
