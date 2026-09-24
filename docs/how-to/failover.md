@@ -110,17 +110,18 @@ variable "dovecot_primary_unit" {
   default = "dovecot/0"
 }
 
-# Pass the value to the Dovecot module.
 primary_unit = var.dovecot_primary_unit
-
-# Resolve the selected unit address and use it for both:
-# - the Postfix delivery target
-# - the HAProxy or ingress-configurator backend
 ```
 
-For a planned failover, stop traffic to the current primary and run `force-sync`
-before applying the Terraform change. Review the plan to confirm that it changes
-all three surfaces:
+Add this pattern to your Terraform module and adapt it to your deployment. Use
+the selected unit to derive its IP address, then use that address as both the
+Postfix delivery target and the HAProxy or ingress-configurator backend. Changing
+the variable then updates the Dovecot primary and its dependent routes together.
+
+For a planned failover, stop traffic to the current primary and run `force-sync`.
+Follow the [Terraform CLI workflow](https://developer.hashicorp.com/terraform/cli/run)
+to create, review, and apply an execution plan for the new primary. Confirm that
+the plan changes all three surfaces:
 
 - Dovecot `primary-unit`
 - Postfix delivery to Dovecot
