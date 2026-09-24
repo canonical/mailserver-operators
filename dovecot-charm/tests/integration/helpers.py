@@ -443,8 +443,18 @@ def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -
                     if job_log:
                         break
                     time.sleep(2)
+                # The catalog log lookup can come back empty even after retries (e.g.
+                # if the failure happened before any log records were written to the
+                # catalog). Fall back to the director's pending console messages,
+                # which often still contain the job's fatal error.
+                try:
+                    console_messages = baculum_client.get_console_messages()
+                except requests.exceptions.RequestException:
+                    console_messages = "<failed to fetch console messages>"
                 raise AssertionError(
-                    f"Bacula job '{job_name}' failed with status {status}:\n{job_log}"
+                    f"Bacula job '{job_name}' failed with status {status}:\n"
+                    f"--- job log ---\n{job_log}\n"
+                    f"--- console messages ---\n{console_messages}"
                 )
         time.sleep(5)
 

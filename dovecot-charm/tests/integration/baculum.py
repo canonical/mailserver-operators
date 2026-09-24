@@ -180,6 +180,28 @@ class Baculum:
             )
         return str(output)
 
+    def get_console_messages(self, limit: int = 0) -> str:
+        """Fetch pending Bacula director console messages, for diagnosing failures.
+
+        This surfaces the director's own ``messages`` command output, which often
+        contains a job's fatal error even when the per-job catalog log lookup
+        hasn't caught up yet.
+
+        Args:
+            limit: maximum number of messages to return (0 for all pending ones).
+
+        Returns:
+            The console messages as a single string, one message per line.
+        """
+        params = {"limit": limit} if limit else {}
+        response = self._session.get(
+            f"{self._base}/joblog/messages", params=params, timeout=self._timeout
+        )
+        output = self._extract_output("get console messages", response)
+        if isinstance(output, list):
+            return "\n".join(str(entry) for entry in output)
+        return str(output)
+
     def list_job_files(self, job_id: int) -> list[str]:
         """List the files catalogued for a completed job run.
 
