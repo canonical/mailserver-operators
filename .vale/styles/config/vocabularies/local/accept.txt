@@ -1,8 +1,6 @@
 AI
 cron
 cutover
-doveadm
-dsync
 failback
 failover
 Procmail
