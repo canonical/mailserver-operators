@@ -82,15 +82,15 @@ in the opposite direction.
 
 ## Handle an unplanned failover
 
-If the primary is unavailable, skip `force-sync` and promote the secondary, then
-update the external routes. Mail received since the last successful sync may be
-missing. The maximum expected loss is determined by the `sync-schedule` interval
-and whether the most recent sync succeeded.
+If the primary is unavailable, skip `force-sync`, promote the secondary, and
+update the external routes to point to the new primary. Mail received since the
+last successful sync may be missing. The maximum expected loss is determined by
+the `sync-schedule` interval and whether the most recent sync succeeded.
 
 ```{warning}
-Fence the failed unit before restoring traffic. A recovered former primary must
-not accept mail until it has reconciled as the secondary and received a current
-copy from the new primary. This avoids divergent mailboxes.
+If the former primary recovers, do not return it to routing until it has rejoined
+as the secondary and synchronized with the new primary. Otherwise, the units can
+contain conflicting mailbox changes.
 ```
 
 ## Fail back
