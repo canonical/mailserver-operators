@@ -4,7 +4,7 @@ myst:
     "description lang=en": "How to manually fail over a replicated Dovecot deployment to its secondary unit"
 ---
 
-(how_to_fail_over)=
+(how_to_failover)=
 
 # How to manually fail over Dovecot
 
@@ -26,45 +26,50 @@ Before starting, ensure that:
 - The secondary has joined the `replicas` peer relation.
 - You know which external routes and mail delivery services target the current
   primary.
-- You have a maintenance window or a way to drain new IMAP and SMTP traffic.
+- You have a maintenance window for the failover.
+- You can stop new IMAP connections and SMTP deliveries to the current primary
+  and allow existing connections to finish.
 
 Check the units and current primary:
 
+```shell
 juju status dovecot --relations
 juju config dovecot primary-unit
 ```
 
-## Planned failover
+## Plan a failover between two Dovecot units
 
 For a planned failover from `dovecot/0` to `dovecot/1`:
 
-### Drain traffic
+### Stop traffic to the current primary
 
-Drain or pause traffic to the current primary. This includes client traffic
-through HAProxy and mail delivery from Postfix. Do not allow both units to
-receive writes during the transition.
+Stop routing new IMAP connections and SMTP deliveries to the current primary.
+Wait for existing client sessions and in progress mail deliveries to finish, or
+terminate them before continuing.
 
 ### Synchronize the secondary
 
 Copy the latest mail to the secondary:
 
+```shell
 juju run dovecot/0 force-sync
 ```
 
-Do not continue if the action fails. Fix replication or restore the secondary
-before changing the primary.
+If `force-sync` fails, resolve the reported error and rerun the action. Continue
+only after the synchronization succeeds.
 
 ### Promote the secondary
 
 Set the secondary as the new primary:
 
+```shell
 juju config dovecot primary-unit=dovecot/1
 juju wait-for application dovecot --timeout=15m
 ```
 
 ### Update routing
 
-Update every route that used the old primary.
+Update every route that used the old primary to target the new primary.
 
 ### Restore traffic
 
@@ -75,7 +80,7 @@ After the configuration change, the old primary becomes the secondary. Its sync
 timer is stopped, and the new primary installs or enables its timer to copy mail
 in the opposite direction.
 
-## Unplanned failover
+## Handle an unplanned failover
 
 If the primary is unavailable, skip `force-sync` and promote the secondary, then
 update the external routes. Mail received since the last successful sync may be
@@ -90,9 +95,9 @@ copy from the new primary. This avoids divergent mailboxes.
 
 ## Fail back
 
-Failback uses the same procedure in reverse. Drain traffic, run `force-sync` on
-the current primary, change `primary-unit`, update routing, and then restore
-traffic. Never fail back by changing routing alone.
+Failback uses the same procedure in reverse. Stop traffic to the current
+primary, run `force-sync`, change `primary-unit`, update routing, and then
+restore traffic. Never fail back by changing routing alone.
 
 ## Manage failover with Terraform
 
@@ -113,8 +118,9 @@ primary_unit = var.dovecot_primary_unit
 # - the HAProxy or ingress-configurator backend
 ```
 
-For a planned failover, drain traffic and run `force-sync` before applying the
-Terraform change. Review the plan to confirm that it changes all three surfaces:
+For a planned failover, stop traffic to the current primary and run `force-sync`
+before applying the Terraform change. Review the plan to confirm that it changes
+all three surfaces:
 
 - Dovecot `primary-unit`
 - Postfix delivery to Dovecot

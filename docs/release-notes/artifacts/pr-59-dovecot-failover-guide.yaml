@@ -11,7 +11,7 @@ changes:
   urls:
     pr:
       - "https://github.com/canonical/mailserver-operators/pull/59"
-    related_doc: "https://github.com/canonical/mailserver-operators/blob/main/docs/how-to/fail-over.md"
+    related_doc: "https://github.com/canonical/mailserver-operators/blob/main/docs/how-to/failover.md"
     related_issue:
   visibility: public
   highlight: false
