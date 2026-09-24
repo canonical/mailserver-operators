@@ -95,19 +95,10 @@ def test_backup_restore_across_charm_upgrade(
         logger.info(
             "Restoring backup %s onto %s via %s", backup_run["jobid"], new_unit, restore_job
         )
-        restore_output = baculum.run_restore_job(
+        baculum.run_restore_job(
             restore_job, backup_job_id=int(backup_run["jobid"]), source=backup_job
         )
-        logger.info("run restore job output: %s", restore_output)
         wait_for_bacula_job(baculum, restore_job)
-        # Always log pending console messages, even on success: the after-restore
-        # RunScript is configured with FailJobOnError=no, so a failure there does
-        # not fail the Bacula job itself and would otherwise go unnoticed. The
-        # per-job catalog log lookup (get_job_log) is unreliable in this setup
-        # (silently returns empty, likely due to the catalog's SQL_ASCII/UTF8
-        # encoding mismatch warnings breaking that query), so use the director's
-        # own pending console messages instead.
-        logger.info("post-restore console messages: %s", baculum.get_console_messages())
 
         assert mailbox_has_subject(juju, new_unit, _BACKUP_TEST_USER, _BACKUP_TEST_SUBJECT), (
             "message was not restored onto the newly deployed charm"

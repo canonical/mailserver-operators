@@ -178,30 +178,11 @@ class Baculum:
         )
         return self._extract_output(f"show job '{job}' detail", response)
 
-    def get_job_log(self, job_id: int) -> str:
-        """Fetch the Bacula job log for a job run, for diagnosing failures.
-
-        Args:
-            job_id: the job run ID whose log to fetch.
-
-        Returns:
-            The job log as a single string, one Bacula log line per entry.
-        """
-        response = self._session.get(f"{self._base}/joblog/{job_id}/", timeout=self._timeout)
-        output = self._extract_output(f"get job log for job {job_id}", response)
-        if isinstance(output, list):
-            return "\n".join(
-                entry.get("text", str(entry)) if isinstance(entry, dict) else str(entry)
-                for entry in output
-            )
-        return str(output)
-
     def get_console_messages(self, limit: int = 0) -> str:
-        """Fetch pending Bacula director console messages, for diagnosing failures.
+        """Fetch pending Bacula director console messages, for diagnosing job failures.
 
-        This surfaces the director's own ``messages`` command output, which often
-        contains a job's fatal error even when the per-job catalog log lookup
-        hasn't caught up yet.
+        This surfaces the director's own ``messages`` command output, which contains
+        a failed job's fatal error.
 
         Args:
             limit: maximum number of messages to return (0 for all pending ones).

@@ -430,10 +430,8 @@ def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -
             if status == "T":
                 return job_run
             if status in ("E", "f", "A"):
-                # The per-job catalog log lookup (get_job_log) is unreliable in
-                # this setup (silently returns empty, likely due to the
-                # catalog's SQL_ASCII/UTF8 encoding mismatch warnings breaking
-                # that query), so rely on the director's pending console
+                # The per-job catalog log lookup is unreliable in this setup
+                # (returns empty), so rely on the director's pending console
                 # messages instead, which reliably contain the job's fatal
                 # error.
                 try:
