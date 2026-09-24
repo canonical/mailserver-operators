@@ -83,7 +83,12 @@ def test_backup_restore_across_charm_upgrade(
             restore_job, backup_job_id=int(backup_run["jobid"]), source=backup_job
         )
         logger.info("run restore job output: %s", restore_output)
-        wait_for_bacula_job(baculum, restore_job)
+        restore_run = wait_for_bacula_job(baculum, restore_job)
+        # Always log the restore job's own Bacula log, even on success: the
+        # after-restore RunScript is configured with FailJobOnError=no, so a
+        # failure there does not fail the Bacula job itself and would otherwise
+        # go unnoticed.
+        logger.info("restore job log: %s", baculum.get_job_log(int(restore_run["jobid"])))
 
         assert mailbox_has_subject(juju, new_unit, _BACKUP_TEST_USER, _BACKUP_TEST_SUBJECT), (
             "message was not restored onto the newly deployed charm"
