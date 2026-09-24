@@ -430,10 +430,19 @@ def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -
             if status == "T":
                 return job_run
             if status in ("E", "f", "A"):
-                try:
-                    job_log = baculum_client.get_job_log(int(job_run["jobid"]))
-                except requests.exceptions.RequestException:
-                    job_log = "<failed to fetch job log>"
+                # The catalog's Log table may not yet contain the job's log lines
+                # the instant the status flips, since Bacula's messages daemon
+                # writes them slightly asynchronously; retry briefly before giving up.
+                job_log = ""
+                for _ in range(5):
+                    try:
+                        job_log = baculum_client.get_job_log(int(job_run["jobid"]))
+                    except requests.exceptions.RequestException:
+                        job_log = "<failed to fetch job log>"
+                        break
+                    if job_log:
+                        break
+                    time.sleep(2)
                 raise AssertionError(
                     f"Bacula job '{job_name}' failed with status {status}:\n{job_log}"
                 )
