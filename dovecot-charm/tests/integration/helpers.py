@@ -430,30 +430,18 @@ def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -
             if status == "T":
                 return job_run
             if status in ("E", "f", "A"):
-                # The catalog's Log table may not yet contain the job's log lines
-                # the instant the status flips, since Bacula's messages daemon
-                # writes them slightly asynchronously; retry briefly before giving up.
-                job_log = ""
-                for _ in range(5):
-                    try:
-                        job_log = baculum_client.get_job_log(int(job_run["jobid"]))
-                    except requests.exceptions.RequestException:
-                        job_log = "<failed to fetch job log>"
-                        break
-                    if job_log:
-                        break
-                    time.sleep(2)
-                # The catalog log lookup can come back empty even after retries (e.g.
-                # if the failure happened before any log records were written to the
-                # catalog). Fall back to the director's pending console messages,
-                # which often still contain the job's fatal error.
+                # The per-job catalog log lookup (get_job_log) is unreliable in
+                # this setup (silently returns empty, likely due to the
+                # catalog's SQL_ASCII/UTF8 encoding mismatch warnings breaking
+                # that query), so rely on the director's pending console
+                # messages instead, which reliably contain the job's fatal
+                # error.
                 try:
                     console_messages = baculum_client.get_console_messages()
                 except requests.exceptions.RequestException:
                     console_messages = "<failed to fetch console messages>"
                 raise AssertionError(
                     f"Bacula job '{job_name}' failed with status {status}:\n"
-                    f"--- job log ---\n{job_log}\n"
                     f"--- console messages ---\n{console_messages}"
                 )
         time.sleep(5)
