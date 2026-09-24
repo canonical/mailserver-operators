@@ -85,4 +85,32 @@ fi
 find /srv/mail -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
 cp -a "$staging_dir/srv/mail/." /srv/mail/
 
+# Recreate mail user accounts backed up alongside the mail data (see
+# run-before-backup.sh), so a restore onto a fresh unit doesn't need a separate
+# manual account-provisioning step. Only accounts already existing are left
+# untouched; new ones are created to mirror exactly what create-mail-user does,
+# with the original password hash restored directly (no plaintext needed).
+accounts_file="$staging_dir/mail-users.tsv"
+if [[ -f "$accounts_file" ]]; then
+    while IFS=: read -r user hash; do
+        [[ -z "$user" ]] && continue
+        if ! getent passwd "$user" >/dev/null 2>&1; then
+            useradd_cmd=(/usr/sbin/useradd --no-create-home -d "/srv/mail/$user" -s /usr/sbin/nologin)
+            if [[ "$user" == *"@"* ]]; then
+                useradd_cmd=(/usr/sbin/useradd --badname --no-create-home -d "/srv/mail/$user" -s /usr/sbin/nologin)
+            fi
+            useradd_cmd+=("$user")
+            "${useradd_cmd[@]}"
+        fi
+        usermod -aG mail "$user"
+        usermod -p "$hash" "$user"
+        # The restored mail directory is owned by whatever uid/gid the source unit
+        # assigned; reconcile it to this unit's (possibly differently numbered)
+        # account so ownership stays correct regardless of uid drift across units.
+        if [[ -d "/srv/mail/$user" ]]; then
+            chown -R "$user":mail "/srv/mail/$user"
+        fi
+    done <"$accounts_file"
+fi
+
 

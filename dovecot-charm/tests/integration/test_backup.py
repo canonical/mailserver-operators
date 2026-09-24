@@ -9,6 +9,7 @@ import jubilant
 
 from . import baculum as baculum_client_module
 from .helpers import (
+    get_shadow_hash,
     mailbox_has_subject,
     seed_backup_test_message,
     teardown_gdpr_test_user,
@@ -69,3 +70,54 @@ def test_bacula_backup_restore_roundtrip(
         )
     finally:
         teardown_gdpr_test_user(juju, unit_name, _BACKUP_TEST_USER)
+
+
+_ACCOUNT_TEST_USER = "backup-account-testuser"
+_ACCOUNT_TEST_SUBJECT = "bacula-account-roundtrip-test"
+
+
+def test_bacula_backup_restore_recreates_deleted_account(
+    juju: jubilant.Juju,
+    dovecot_charm: str,
+    baculum: baculum_client_module.Baculum,
+):
+    """A restore recreates a mail user account that no longer exists on the unit.
+
+    Bacula's restore only restores mail data files under /srv/mail; the account
+    (and its original password) is restored separately, from a manifest backed up
+    alongside the mail data (see run-before-backup.sh/run-after-restore.sh).
+    """
+    unit_name = f"{dovecot_charm}/0"
+
+    password = secrets.token_hex(16)
+    seed_backup_test_message(juju, unit_name, _ACCOUNT_TEST_USER, password, _ACCOUNT_TEST_SUBJECT)
+    try:
+        original_hash = get_shadow_hash(juju, unit_name, _ACCOUNT_TEST_USER)
+        assert original_hash, "test account was not created before backup"
+
+        backup_job = next(j for j in baculum.list_job_names() if j.endswith("-backup"))
+        restore_job = next(j for j in baculum.list_job_names() if j.endswith("-restore"))
+
+        logger.info("Running backup job %s", backup_job)
+        baculum.run_backup_job(backup_job)
+        backup_run = wait_for_bacula_job(baculum, backup_job)
+
+        # Delete the account entirely (not just its mail), simulating a restore
+        # onto a unit where the account was never provisioned.
+        juju.exec(f"userdel -r {_ACCOUNT_TEST_USER} 2>/dev/null || true", unit=unit_name)
+        assert get_shadow_hash(juju, unit_name, _ACCOUNT_TEST_USER) is None, (
+            "test account should be gone after userdel"
+        )
+
+        logger.info("Running restore job %s from backup %s", restore_job, backup_run["jobid"])
+        baculum.run_restore_job(restore_job, backup_job_id=int(backup_run["jobid"]))
+        wait_for_bacula_job(baculum, restore_job)
+
+        assert get_shadow_hash(juju, unit_name, _ACCOUNT_TEST_USER) == original_hash, (
+            "account was not recreated with its original password hash after restore"
+        )
+        assert mailbox_has_subject(juju, unit_name, _ACCOUNT_TEST_USER, _ACCOUNT_TEST_SUBJECT), (
+            "message was not restored alongside the recreated account"
+        )
+    finally:
+        teardown_gdpr_test_user(juju, unit_name, _ACCOUNT_TEST_USER)

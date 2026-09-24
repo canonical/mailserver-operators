@@ -341,6 +341,13 @@ def mailbox_has_subject(juju: jubilant.Juju, unit_name: str, user: str, subject:
     return bool(result.stdout.strip())
 
 
+def get_shadow_hash(juju: jubilant.Juju, unit_name: str, user: str) -> str | None:
+    """Return the user's /etc/shadow password hash, or None if the account doesn't exist."""
+    result = juju.exec(f"getent shadow {user} 2>/dev/null | cut -d: -f2 || true", unit=unit_name)
+    hash_value = result.stdout.strip()
+    return hash_value or None
+
+
 def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -> dict:
     """Poll a Bacula job until its most recent run terminates successfully.
 

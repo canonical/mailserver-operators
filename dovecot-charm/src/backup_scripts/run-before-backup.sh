@@ -9,6 +9,7 @@ umask 077
 
 staging_dir=/var/backups/dovecot/staging
 key_file=/var/lib/dovecot/backup/encryption.key
+accounts_file="$staging_dir/mail-users.tsv"
 plaintext_archive="$staging_dir/mail-data.tar.gz"
 encrypted_archive_tmp="$staging_dir/mail-data.tar.gz.enc.tmp"
 encrypted_archive=/var/backups/dovecot/mail-data.tar.gz.enc
@@ -16,8 +17,8 @@ manifest_tmp="$staging_dir/manifest.json.tmp"
 manifest=/var/backups/dovecot/manifest.json
 
 mkdir -p "$staging_dir"
-rm -f "$plaintext_archive" "$encrypted_archive_tmp" "$manifest_tmp"
-trap 'rm -f "$plaintext_archive" "$encrypted_archive_tmp" "$manifest_tmp"' EXIT
+rm -f "$plaintext_archive" "$encrypted_archive_tmp" "$manifest_tmp" "$accounts_file"
+trap 'rm -f "$plaintext_archive" "$encrypted_archive_tmp" "$manifest_tmp" "$accounts_file"' EXIT
 
 if [[ ! -f "$key_file" ]]; then
     echo "Missing backup encryption key file: $key_file" >&2
@@ -29,7 +30,27 @@ if ! mountpoint -q /srv/mail; then
     exit 1
 fi
 
-tar --create --gzip --file "$plaintext_archive" --directory / srv/mail
+# Capture mail user accounts (username + password hash) alongside the mail data
+# so a restore onto a fresh unit can recreate them, instead of requiring a
+# separate manual account-provisioning step. Only the "mail" group's members are
+# captured (every account created via the create-mail-user action is added to
+# that group), never the full system passwd/shadow files, so unrelated system
+# accounts are never touched by a restore.
+: > "$accounts_file"
+mail_group_members="$(getent group mail | cut -d: -f4)"
+if [[ -n "$mail_group_members" ]]; then
+    IFS=',' read -ra mail_users <<<"$mail_group_members"
+    for user in "${mail_users[@]}"; do
+        hash="$(getent shadow "$user" 2>/dev/null | cut -d: -f2)"
+        if [[ -n "$hash" ]]; then
+            printf '%s:%s\n' "$user" "$hash" >>"$accounts_file"
+        fi
+    done
+fi
+
+tar --create --gzip --file "$plaintext_archive" \
+    --directory / srv/mail \
+    --directory "$staging_dir" mail-users.tsv
 openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -salt \
     -in "$plaintext_archive" \
     -out "$encrypted_archive_tmp" \
@@ -46,10 +67,11 @@ archive_hmac="$(openssl dgst -sha256 -mac HMAC -macopt "hexkey:$mac_key" -hex "$
 timestamp="$(date -Iseconds --utc)"
 cat > "$manifest_tmp" <<EOF
 {
-  "format": 1,
+  "format": 2,
   "created_at": "$timestamp",
   "archive": "/var/backups/dovecot/mail-data.tar.gz.enc",
   "mail_root": "/srv/mail",
+  "accounts": "mail-users.tsv",
   "integrity": {
     "algorithm": "HMAC-SHA256",
     "value": "$archive_hmac"
