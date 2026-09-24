@@ -102,25 +102,35 @@ class Baculum:
         """
         restore_job = self.get_job(job=name)
         backup_job = self.get_job(job=source) if source else restore_job
-        # Bacula's restore command validates that "client" matches the client
-        # that actually produced the given jobid/fileset (the backup source),
-        # rejecting any other combination as an invalid property. "restoreclient"
-        # is what Bacula actually uses as the job's effective client (including
-        # for RunScripts and the file write target), so it must be the restore
-        # target.
-        payload = {
-            "id": backup_job_id,
-            "restorejob": name,
-            "client": backup_job["client"],
-            "restoreclient": restore_job["client"],
-            "fileset": backup_job["fileset"],
-            "where": "/",
-            "replace": "always",
-            "full": True,
-        }
-        response = self._session.post(
-            f"{self._base}/jobs/restore", json=payload, timeout=self._timeout
-        )
+        # Baculum's "jobs/restore" REST endpoint only understands a single
+        # "client" parameter and has no concept of Bacula's separate
+        # "restoreclient" parameter, so it can't express a cross-client restore
+        # (restoring data backed up on one client onto a different one):
+        # sending "restoreclient" to that endpoint is silently dropped, and the
+        # whole restore job (including RunScripts) ends up running on the
+        # client that produced the backup instead of the restore target.
+        #
+        # Bacula's own "restore" bconsole command does support this: "client"
+        # is only used to validate that the given jobid/fileset were produced
+        # by that client, while "restoreclient" (if given) becomes the actual
+        # effective client used for both the data write and the RunScripts.
+        # Issue the raw bconsole command via Baculum's console passthrough
+        # endpoint to get access to it.
+        command = [
+            "restore",
+            f'client="{backup_job["client"]}"',
+            f'restoreclient="{restore_job["client"]}"',
+            f'jobid="{backup_job_id}"',
+            f'fileset="{backup_job["fileset"]}"',
+            "select",
+            "all",
+            "done",
+            f'restorejob="{name}"',
+            'where="/"',
+            'replace="always"',
+            "yes",
+        ]
+        response = self._session.put(f"{self._base}/console/", json=command, timeout=self._timeout)
         return "\n".join(
             self._extract_output(f"restore '{name}' from backup {backup_job_id}", response)
         )
