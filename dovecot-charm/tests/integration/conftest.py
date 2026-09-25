@@ -28,6 +28,11 @@ DOVECOT_OLD_APP = "dovecot-old"
 DOVECOT_OLD_REVISION = 17  # revision that supports backup/restore
 DOVECOT_OLD_CHANNEL = "latest/edge"
 
+BACULA_FD_CHANNEL = "latest/edge"
+BACULA_FD_REVISION = 24
+BACULA_SERVER_CHANNEL = "latest/edge"
+BACULA_SERVER_REVISION = 50
+
 # GDPR action test constants
 MAIL_ROOT = "/srv/mail"
 GDPR_ARCHIVE_DIR = f"{MAIL_ROOT}/archives"
@@ -172,6 +177,7 @@ def dovecot_charm_backup(
     _attach_backup(juju, dovecot_charm, bacula_fd, backup_secret)
     juju.wait(
         lambda status: jubilant.all_active(status, dovecot_charm, bacula_fd),
+        error=jubilant.any_error,
         timeout=10 * 60,
     )
     return dovecot_charm
@@ -249,7 +255,7 @@ def luks_secret(juju: jubilant.Juju) -> str:
 def bacula_fd(juju: jubilant.Juju) -> str:
     fd_app = "bacula-fd"
     if fd_app not in juju.status().apps:
-        juju.deploy(fd_app, channel="latest/edge")
+        juju.deploy(fd_app, channel=BACULA_FD_CHANNEL, revision=BACULA_FD_REVISION)
     return fd_app
 
 
@@ -276,6 +282,7 @@ def dovecot_old(
 
     juju.wait(
         lambda status: jubilant.all_active(status, DOVECOT_OLD_APP, tls_charm, bacula_fd_old),
+        error=jubilant.any_error,
         timeout=20 * 60,
     )
     return DOVECOT_OLD_APP
@@ -304,7 +311,7 @@ def bacula_server(juju: jubilant.Juju, bacula_fd: str, s3_address: str) -> str:
 
     if server_app not in juju.status().apps:
         logging.info("Deploying bacula-server...")
-        juju.deploy(server_app, channel="latest/edge")
+        juju.deploy(server_app, channel=BACULA_SERVER_CHANNEL, revision=BACULA_SERVER_REVISION)
     if database_app not in juju.status().apps:
         logging.info("Deploying bacula-database (postgresql)...")
         juju.deploy("postgresql", database_app, channel="14/stable")
@@ -332,6 +339,7 @@ def bacula_server(juju: jubilant.Juju, bacula_fd: str, s3_address: str) -> str:
         _integrate(juju, server_app, endpoint)
     juju.wait(
         lambda status: jubilant.all_active(status, server_app, database_app, s3_app),
+        error=jubilant.any_error,
         timeout=20 * 60,
     )
     return server_app
@@ -343,7 +351,9 @@ def bacula_fd_old(juju: jubilant.Juju, bacula_server: str) -> str:
     fd_app = "bacula-fd-old"
     if fd_app not in juju.status().apps:
         logging.info("Deploying %s...", fd_app)
-        juju.deploy("bacula-fd", app=fd_app, channel="latest/edge")
+        juju.deploy(
+            "bacula-fd", app=fd_app, channel=BACULA_FD_CHANNEL, revision=BACULA_FD_REVISION
+        )
     _integrate(juju, bacula_server, fd_app)
     return fd_app
 
