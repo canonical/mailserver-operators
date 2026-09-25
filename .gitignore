@@ -11,6 +11,8 @@ __pycache__/
 *.egg-info/
 */*.rock
 terraform/tests/.terraform
+**/.terraform/
+**/.terraform.lock.hcl
 .opencode/
 plans/
 
@@ -25,4 +27,3 @@ plans/
 .vale/styles/config/vocabularies/*
 !.vale/styles/config/vocabularies/local
 # END VALE WORKFLOW IGNORE
-

@@ -21,6 +21,7 @@ header:
   - '.licenserc.yaml'
   - 'CODEOWNERS'
   - 'LICENSE'
+  - '**/MAJOR_VERSION'
   - 'trivy.yaml'
   - 'postfix-relay-operator/templates/*'
   - 'postfix-relay-operator/files/**'
