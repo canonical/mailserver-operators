@@ -31,6 +31,7 @@ from constants import (
     BACKUP_KEY_FILE,
     BACKUP_MANIFEST_PATH,
     BACKUP_RELATION_NAME,
+    BACKUP_SCRIPT_DIR,
     DOVEADM_BIN,
     GDPR_ARCHIVE_DIR,
     GDPR_TAKEOUT_DIR,
@@ -40,8 +41,11 @@ from constants import (
     PEER_RELATION_NAME,
     REQUIRED_PACKAGES,
     RUN_AFTER_BACKUP_SCRIPT,
+    RUN_AFTER_BACKUP_SCRIPT_SRC,
     RUN_AFTER_RESTORE_SCRIPT,
+    RUN_AFTER_RESTORE_SCRIPT_SRC,
     RUN_BEFORE_BACKUP_SCRIPT,
+    RUN_BEFORE_BACKUP_SCRIPT_SRC,
     SYNC_TO_SECONDARY_TARGET,
     TEMPLATES_DIR,
 )
@@ -67,12 +71,6 @@ class DovecotCharm(CharmBase):
             fileset=[BACKUP_ARCHIVE_PATH, BACKUP_MANIFEST_PATH],
             run_before_backup=RUN_BEFORE_BACKUP_SCRIPT,
             run_after_backup=RUN_AFTER_BACKUP_SCRIPT,
-            # No before-restore work is needed, but this must still be a path that
-            # exists identically on every unit, since restoring a backup taken on one
-            # unit onto a different unit runs this hook on whichever unit Bacula
-            # picks as the restore's effective client.
-            # https://github.com/canonical/backup-operators/issues/76
-            run_before_restore="/bin/true",
             run_after_restore=RUN_AFTER_RESTORE_SCRIPT,
         )
         self._dovecot_setup = DovecotSetup(self)
@@ -222,6 +220,7 @@ class DovecotCharm(CharmBase):
         except ConfigurationError as e:
             self.unit.status = BlockedStatus(str(e))
             return
+        self._install_backup_scripts()
         try:
             self._store_backup_encryption_key(dovecot_config)
         except BackupKeyError as e:
@@ -266,6 +265,21 @@ class DovecotCharm(CharmBase):
         apt.add_package(REQUIRED_PACKAGES)
         shutil.copy(HOSTNAME_FILE, MAILNAME_FILE)
         self.unit.status = MaintenanceStatus("Charm installation done")
+
+    def _install_backup_scripts(self):
+        """Copy backup/restore scripts to a unit-independent path.
+
+        The charm directory path contains the unit name, so scripts are copied to
+        a fixed location that is identical on every unit.
+        """
+        BACKUP_SCRIPT_DIR.mkdir(parents=True, exist_ok=True)
+        for src, dst in (
+            (RUN_BEFORE_BACKUP_SCRIPT_SRC, RUN_BEFORE_BACKUP_SCRIPT),
+            (RUN_AFTER_BACKUP_SCRIPT_SRC, RUN_AFTER_BACKUP_SCRIPT),
+            (RUN_AFTER_RESTORE_SCRIPT_SRC, RUN_AFTER_RESTORE_SCRIPT),
+        ):
+            shutil.copyfile(src, dst)
+            dst.chmod(0o755)
 
     def _open_ports(self):
         """Open mail ports.
