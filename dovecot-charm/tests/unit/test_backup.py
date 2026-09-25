@@ -120,7 +120,6 @@ def test_backup_relation_publishes_spec_and_writes_assets(
         "fileset": f"{paths['BACKUP_ARCHIVE_PATH']},{paths['BACKUP_MANIFEST_PATH']}",
         "run-before-backup": run_before_backup,
         "run-after-backup": run_after_backup,
-        "run-before-restore": "/bin/true",
         "run-after-restore": run_after_restore,
     }
 
