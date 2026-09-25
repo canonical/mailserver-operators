@@ -71,12 +71,6 @@ class DovecotCharm(CharmBase):
             fileset=[BACKUP_ARCHIVE_PATH, BACKUP_MANIFEST_PATH],
             run_before_backup=RUN_BEFORE_BACKUP_SCRIPT,
             run_after_backup=RUN_AFTER_BACKUP_SCRIPT,
-            # No before-restore work is needed, but this must still be a path that
-            # exists identically on every unit (not the bacula-fd charm's own
-            # per-unit default noop script), since restoring a backup taken on one
-            # unit onto a different unit runs this hook on whichever unit Bacula
-            # picks as the restore's effective client.
-            run_before_restore="/bin/true",
             run_after_restore=RUN_AFTER_RESTORE_SCRIPT,
         )
         self._dovecot_setup = DovecotSetup(self)
