@@ -58,9 +58,14 @@ BACKUP_MANIFEST_PATH = f"{BACKUP_ROOT}/manifest.json"
 
 # Backup/restore scripts.
 BACKUP_SCRIPT_SOURCE_DIR = Path(__file__).parent / "backup_scripts"
-RUN_BEFORE_BACKUP_SCRIPT = BACKUP_SCRIPT_SOURCE_DIR / "run-before-backup.sh"
-RUN_AFTER_BACKUP_SCRIPT = BACKUP_SCRIPT_SOURCE_DIR / "run-after-backup.sh"
-RUN_AFTER_RESTORE_SCRIPT = BACKUP_SCRIPT_SOURCE_DIR / "run-after-restore.sh"
+RUN_BEFORE_BACKUP_SCRIPT_SRC = BACKUP_SCRIPT_SOURCE_DIR / "run-before-backup.sh"
+RUN_AFTER_BACKUP_SCRIPT_SRC = BACKUP_SCRIPT_SOURCE_DIR / "run-after-backup.sh"
+RUN_AFTER_RESTORE_SCRIPT_SRC = BACKUP_SCRIPT_SOURCE_DIR / "run-after-restore.sh"
+
+BACKUP_SCRIPT_DIR = Path("/opt/dovecot-charm") / "backup_scripts"
+RUN_BEFORE_BACKUP_SCRIPT = BACKUP_SCRIPT_DIR / "run-before-backup.sh"
+RUN_AFTER_BACKUP_SCRIPT = BACKUP_SCRIPT_DIR / "run-after-backup.sh"
+RUN_AFTER_RESTORE_SCRIPT = BACKUP_SCRIPT_DIR / "run-after-restore.sh"
 
 TLS_CERT_DIR = Path("/etc/dovecot/private")
 

@@ -125,6 +125,9 @@ class DovecotTestCharm(DovecotCharm):
     def _store_backup_encryption_key(self, dovecot_config):
         pass
 
+    def _install_backup_scripts(self):
+        pass
+
     def __init__(self, *args):
         super().__init__(*args)
         # Re-read from the class so patch.object overrides take effect.
@@ -149,6 +152,9 @@ class StorageTestDovecotCharm(DovecotCharm):
     _ha: HAManager = NoOpHAManager()
 
     def _store_backup_encryption_key(self, dovecot_config):
+        pass
+
+    def _install_backup_scripts(self):
         pass
 
     def __init__(self, *args):
@@ -190,6 +196,9 @@ class TLSTestDovecotCharm(DovecotCharm):
     def _store_backup_encryption_key(self, dovecot_config):
         pass
 
+    def _install_backup_scripts(self):
+        pass
+
     def __init__(self, *args):
         super().__init__(*args)
         self._storage = type(self)._storage
@@ -204,6 +213,9 @@ class BackupTestDovecotCharm(DovecotCharm):
     _storage: StorageManager = NoOpStorageManager()
     _dovecot_setup: DovecotSetup = NoOpDovecotSetup()
     _ha: HAManager = NoOpHAManager()
+
+    def _install_backup_scripts(self):
+        pass
 
     def __init__(self, *args):
         super().__init__(*args)

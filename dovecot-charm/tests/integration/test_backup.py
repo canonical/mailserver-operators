@@ -9,6 +9,7 @@ import jubilant
 
 from . import baculum as baculum_client_module
 from .helpers import (
+    find_bacula_job,
     mailbox_has_subject,
     seed_backup_test_message,
     teardown_gdpr_test_user,
@@ -23,11 +24,11 @@ _BACKUP_TEST_SUBJECT = "bacula-roundtrip-test"
 
 def test_bacula_backup_restore_roundtrip(
     juju: jubilant.Juju,
-    dovecot_charm: str,
+    dovecot_charm_backup: str,
     baculum: baculum_client_module.Baculum,
 ):
     """End-to-end: back up the mail store, wipe it, restore, and verify the mail returns."""
-    unit_name = f"{dovecot_charm}/0"
+    unit_name = f"{dovecot_charm_backup}/0"
 
     password = secrets.token_hex(16)
     seed_backup_test_message(juju, unit_name, _BACKUP_TEST_USER, password, _BACKUP_TEST_SUBJECT)
@@ -36,8 +37,8 @@ def test_bacula_backup_restore_roundtrip(
             "seeded message not found before backup"
         )
 
-        backup_job = next(j for j in baculum.list_job_names() if j.endswith("-backup"))
-        restore_job = next(j for j in baculum.list_job_names() if j.endswith("-restore"))
+        backup_job = find_bacula_job(baculum, "-backup")
+        restore_job = find_bacula_job(baculum, "-restore")
 
         logger.info("Running backup job %s", backup_job)
         baculum.run_backup_job(backup_job)

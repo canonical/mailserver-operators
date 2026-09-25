@@ -86,7 +86,7 @@ class Baculum:
         return "\n".join(self._extract_output(f"run backup '{name}'", response))
 
     def run_restore_job(self, name: str, backup_job_id: int) -> str:
-        """Run a restore job.
+        """Run a restore job onto the same client that produced the backup.
 
         Args:
             name: restore job name.
@@ -112,6 +112,41 @@ class Baculum:
             self._extract_output(f"restore '{name}' from backup {backup_job_id}", response)
         )
 
+    def run_cross_client_restore_job(self, name: str, backup_job_id: int, source: str) -> str:
+        """Run a restore job, restoring data backed up by one job onto a different client.
+
+        Args:
+            name: restore job name.
+            backup_job_id: backup job run ID to restore.
+            source: name of the backup job the data was originally backed up with.
+
+        Returns:
+            Baculum API output.
+        """
+        restore_job = self.get_job(job=name)
+        backup_job = self.get_job(job=source)
+        # Baculum's "jobs/restore" REST endpoint has no "restoreclient" parameter, so
+        # it can't target a different client than the backup's own; issue a raw
+        # bconsole "restore" command instead, which does support "restoreclient".
+        command = [
+            "restore",
+            f'client="{backup_job["client"]}"',
+            f'restoreclient="{restore_job["client"]}"',
+            f'jobid="{backup_job_id}"',
+            f'fileset="{backup_job["fileset"]}"',
+            "select",
+            "all",
+            "done",
+            f'restorejob="{name}"',
+            'where="/"',
+            'replace="always"',
+            "yes",
+        ]
+        response = self._session.put(f"{self._base}/console/", json=command, timeout=self._timeout)
+        return "\n".join(
+            self._extract_output(f"restore '{name}' from backup {backup_job_id}", response)
+        )
+
     def list_job_runs(self, name: str) -> list[dict]:
         """List job runs.
 
@@ -121,8 +156,7 @@ class Baculum:
         Returns:
             A list of job run objects.
         """
-        job = self.get_job(job=name)
-        params = {"name": name, "client": job["client"]}
+        params = {"name": name}
         response = self._session.get(f"{self._base}/jobs", params=params, timeout=self._timeout)
         return self._extract_output(f"list jobs '{name}'", response)
 

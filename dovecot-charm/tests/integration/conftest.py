@@ -20,6 +20,19 @@ APP_NAME = "dovecot"
 # construct the correct SMTP recipient addresses (@example.com).
 MAILNAME = "example.com"
 
+DEPLOY_CONSTRAINTS = {"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"}
+BACKUP_SECRET_NAME = "dovecot-backup-key"  # nosec B105  # juju secret label, not a password
+LUKS_SECRET_NAME = "dovecot-luks-key"  # nosec B105  # juju secret label, not a password
+
+DOVECOT_OLD_APP = "dovecot-old"
+DOVECOT_OLD_REVISION = 17  # revision that supports backup/restore
+DOVECOT_OLD_CHANNEL = "latest/edge"
+
+BACULA_FD_CHANNEL = "latest/edge"
+BACULA_FD_REVISION = 24
+BACULA_SERVER_CHANNEL = "latest/edge"
+BACULA_SERVER_REVISION = 50
+
 # GDPR action test constants
 MAIL_ROOT = "/srv/mail"
 GDPR_ARCHIVE_DIR = f"{MAIL_ROOT}/archives"
@@ -56,6 +69,54 @@ def _host_ip() -> typing.Optional[str]:
         return None
 
 
+def _integrate(juju: jubilant.Juju, requirer: str, provider: str) -> None:
+    """Integrate two endpoints, tolerating only an already-exists relation error."""
+    try:
+        juju.integrate(requirer, provider)
+    except jubilant.CLIError as e:
+        if "already exists" not in (e.stderr or ""):
+            raise
+        logging.info("%s:%s relation already present", requirer, provider)
+
+
+def _deploy_dovecot(
+    juju: jubilant.Juju,
+    app: str,
+    charm: str,
+    tls_charm: str,
+    luks_secret: str,
+    *,
+    channel: str | None = None,
+    revision: int | None = None,
+) -> None:
+    """Deploy a Dovecot app and wire up LUKS and TLS."""
+    if not juju.status().apps.get(app):
+        juju.deploy(
+            charm,
+            app=app,
+            channel=channel,
+            revision=revision,
+            config={
+                "mailname": MAILNAME,
+                "postmaster-address": f"postmaster@{MAILNAME}",
+                "primary-unit": f"{app}/0",
+                "luks-auto-provisioning": True,
+            },
+            constraints=DEPLOY_CONSTRAINTS,
+        )
+    juju.grant_secret(LUKS_SECRET_NAME, app)
+    juju.config(app, {"luks-key": luks_secret})
+    _integrate(juju, f"{app}:certificates", f"{tls_charm}:certificates")
+
+
+def _attach_backup(juju: jubilant.Juju, app: str, fd_app: str, backup_secret: str) -> None:
+    """Grant the backup secret and wire up Bacula fd relations for an app."""
+    juju.grant_secret(BACKUP_SECRET_NAME, app)
+    juju.config(app, {"backup-encryption-key": backup_secret})
+    for endpoint in ("juju-info", "backup"):
+        _integrate(juju, f"{app}:{endpoint}", f"{fd_app}:{endpoint}")
+
+
 @pytest.fixture(scope="session", name="juju")
 def juju_fixture(request: pytest.FixtureRequest):
     """Pytest fixture that wraps jubilant.with_model."""
@@ -72,7 +133,15 @@ def juju_fixture(request: pytest.FixtureRequest):
         return
 
     keep_models = typing.cast(bool, request.config.getoption("--keep-models"))
-    with jubilant.temp_model(keep=keep_models, config={"automatically-retry-hooks": True}) as juju:
+    model_config = {
+        "automatically-retry-hooks": True,
+        # bacula-server only picks up a newly related bacula-fd's Job/Client entry on
+        # its next update-status hook. Juju's 5m default made that reconcile race
+        # against test polling timeouts of the same order; shortening the interval
+        # makes the reconcile happen quickly and reliably instead.
+        "update-status-hook-interval": "10s",
+    }
+    with jubilant.temp_model(keep=keep_models, config=model_config) as juju:
         juju.wait_timeout = 10 * 60
         yield juju
         return
@@ -83,44 +152,35 @@ def dovecot_charm(
     juju: jubilant.Juju,
     request: pytest.FixtureRequest,
     tls_charm: str,
+    luks_secret: str,
 ) -> str:
     """Build and deploy the charm."""
-    logging.info(f"Checking for existing application {APP_NAME}...")
-    luks_key = secrets.token_hex(16)
-
-    if not juju.status().apps.get(APP_NAME):
-        logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
-
-        charm = _get_charm_path(request)
-        secret_id = juju.cli("add-secret", "dovecot-luks-key", f"key={luks_key}").strip()
-        logging.info(f"Created LUKS secret: {secret_id}")
-
-        config = {
-            "mailname": MAILNAME,
-            "postmaster-address": f"postmaster@{MAILNAME}",
-            "primary-unit": f"{APP_NAME}/0",
-            "luks-auto-provisioning": True,
-            "luks-key": secret_id,
-        }
-        charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
-        juju.deploy(
-            charm_path,
-            app=APP_NAME,
-            config=config,
-            constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
-        )
-    juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
-    try:
-        logging.info("Adding TLS relation...")
-        juju.integrate(f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
-    except jubilant.CLIError:
-        logging.info("TLS relation already there...")
-    logging.info("Waiting for active status...")
+    charm = _get_charm_path(request)
+    charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
+    _deploy_dovecot(juju, APP_NAME, charm_path, tls_charm, luks_secret)
     juju.wait(
         lambda status: jubilant.all_active(status, APP_NAME, tls_charm),
         timeout=10 * 60,
     )
     return APP_NAME
+
+
+@pytest.fixture(scope="module")
+def dovecot_charm_backup(
+    juju: jubilant.Juju,
+    dovecot_charm: str,
+    bacula_fd: str,
+    backup_secret: str,
+    bacula_server: str,
+) -> str:
+    """Wire up backup-encryption-key and Bacula fd relations for dovecot_charm."""
+    _attach_backup(juju, dovecot_charm, bacula_fd, backup_secret)
+    juju.wait(
+        lambda status: jubilant.all_active(status, dovecot_charm, bacula_fd),
+        error=jubilant.any_error,
+        timeout=10 * 60,
+    )
+    return dovecot_charm
 
 
 @pytest.fixture(scope="module")
@@ -150,11 +210,8 @@ def dovecot_charm_manual_storage(
             config=config,
             constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
         )
-    try:
-        logging.info("Adding TLS relation...")
-        juju.integrate(f"{charm_name}:certificates", f"{tls_charm}:certificates")
-    except jubilant.CLIError:
-        logging.info("TLS relation already there...")
+    logging.info("Adding TLS relation...")
+    _integrate(juju, f"{charm_name}:certificates", f"{tls_charm}:certificates")
 
     logging.info("Waiting for blocked status...")
     juju.wait(
@@ -181,30 +238,54 @@ def tls_charm(juju: jubilant.Juju) -> str:
 
 
 @pytest.fixture(scope="module")
-def bacula_fd(juju: jubilant.Juju, dovecot_charm: str) -> str:
-    bacula_fd_app = "bacula-fd"
-    if bacula_fd_app not in juju.status().apps:
-        logging.info("Deploying bacula-fd...")
-        juju.deploy(bacula_fd_app, channel="latest/edge")
-    else:
-        logging.info(f"{bacula_fd_app} already deployed, skipping deployment.")
-
+def backup_secret(juju: jubilant.Juju) -> str:
+    """Create the backup encryption secret shared by all Dovecot deployments."""
     backup_key = secrets.token_hex(16)
-    backup_secret_id = juju.add_secret("dovecot-backup-key", {"backup-key": backup_key})
-    juju.grant_secret("dovecot-backup-key", dovecot_charm)
-    juju.config(dovecot_charm, {"backup-encryption-key": backup_secret_id})
+    return juju.add_secret(BACKUP_SECRET_NAME, {"backup-key": backup_key})
 
-    try:
-        juju.integrate(f"{dovecot_charm}:juju-info", f"{bacula_fd_app}:juju-info")
-    except jubilant.CLIError:
-        logging.info("juju-info relation already present")
 
-    try:
-        juju.integrate(f"{dovecot_charm}:backup", f"{bacula_fd_app}:backup")
-    except jubilant.CLIError:
-        logging.info("backup relation already present")
+@pytest.fixture(scope="module")
+def luks_secret(juju: jubilant.Juju) -> str:
+    """Create the LUKS key secret shared by all Dovecot deployments."""
+    luks_key = secrets.token_hex(16)
+    return juju.add_secret(LUKS_SECRET_NAME, {"key": luks_key})
 
-    return bacula_fd_app
+
+@pytest.fixture(scope="module")
+def bacula_fd(juju: jubilant.Juju) -> str:
+    fd_app = "bacula-fd"
+    if fd_app not in juju.status().apps:
+        juju.deploy(fd_app, channel=BACULA_FD_CHANNEL, revision=BACULA_FD_REVISION)
+    return fd_app
+
+
+@pytest.fixture(scope="module")
+def dovecot_old(
+    juju: jubilant.Juju,
+    tls_charm: str,
+    bacula_fd_old: str,
+    backup_secret: str,
+    luks_secret: str,
+    bacula_server: str,
+) -> str:
+    """Deploy a published, backup-capable revision of the Dovecot charm."""
+    _deploy_dovecot(
+        juju,
+        DOVECOT_OLD_APP,
+        "dovecot",
+        tls_charm,
+        luks_secret,
+        channel=DOVECOT_OLD_CHANNEL,
+        revision=DOVECOT_OLD_REVISION,
+    )
+    _attach_backup(juju, DOVECOT_OLD_APP, bacula_fd_old, backup_secret)
+
+    juju.wait(
+        lambda status: jubilant.all_active(status, DOVECOT_OLD_APP, tls_charm, bacula_fd_old),
+        error=jubilant.any_error,
+        timeout=20 * 60,
+    )
+    return DOVECOT_OLD_APP
 
 
 @pytest.fixture(scope="session")
@@ -226,21 +307,22 @@ def bacula_server(juju: jubilant.Juju, bacula_fd: str, s3_address: str) -> str:
     """Deploy and integrate the full Bacula server stacks."""
     server_app = "bacula-server"
     database_app = "bacula-database"
+    s3_app = "s3-integrator"
 
     if server_app not in juju.status().apps:
         logging.info("Deploying bacula-server...")
-        juju.deploy(server_app, channel="latest/edge")
+        juju.deploy(server_app, channel=BACULA_SERVER_CHANNEL, revision=BACULA_SERVER_REVISION)
     if database_app not in juju.status().apps:
         logging.info("Deploying bacula-database (postgresql)...")
         juju.deploy("postgresql", database_app, channel="14/stable")
-    if "s3-integrator" not in juju.status().apps:
+    if s3_app not in juju.status().apps:
         logging.info("Deploying s3-integrator...")
-        juju.deploy("s3-integrator")
+        juju.deploy(s3_app)
 
-    juju.wait(lambda status: jubilant.all_agents_idle(status, "s3-integrator"), timeout=600)
+    juju.wait(lambda status: jubilant.all_agents_idle(status, s3_app), timeout=600)
 
     juju.config(
-        "s3-integrator",
+        s3_app,
         {
             "endpoint": f"http://{s3_address}:{S3_RGW_PORT}",
             "bucket": S3_BUCKET,
@@ -248,19 +330,32 @@ def bacula_server(juju: jubilant.Juju, bacula_fd: str, s3_address: str) -> str:
         },
     )
     juju.run(
-        unit="s3-integrator/0",
+        unit=f"{s3_app}/0",
         action="sync-s3-credentials",
         params={"access-key": S3_ACCESS_KEY, "secret-key": S3_SECRET_KEY},
     )
 
-    for endpoint in ("bacula-database", "s3-integrator", bacula_fd):
-        try:
-            juju.integrate(server_app, endpoint)
-        except jubilant.CLIError:
-            logging.info(f"{server_app}:{endpoint} relation already present")
-
-    juju.wait(jubilant.all_active, timeout=20 * 60)
+    for endpoint in (database_app, s3_app, bacula_fd):
+        _integrate(juju, server_app, endpoint)
+    juju.wait(
+        lambda status: jubilant.all_active(status, server_app, database_app, s3_app),
+        error=jubilant.any_error,
+        timeout=20 * 60,
+    )
     return server_app
+
+
+@pytest.fixture(scope="module")
+def bacula_fd_old(juju: jubilant.Juju, bacula_server: str) -> str:
+    """Deploy a second bacula-fd app dedicated to dovecot_old."""
+    fd_app = "bacula-fd-old"
+    if fd_app not in juju.status().apps:
+        logging.info("Deploying %s...", fd_app)
+        juju.deploy(
+            "bacula-fd", app=fd_app, channel=BACULA_FD_CHANNEL, revision=BACULA_FD_REVISION
+        )
+    _integrate(juju, bacula_server, fd_app)
+    return fd_app
 
 
 @pytest.fixture(scope="module", name="baculum")
@@ -314,11 +409,8 @@ def dovecot_charm_dual_unit(
         )
 
     juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
-    try:
-        logging.info("Adding TLS relation...")
-        juju.integrate(f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
-    except jubilant.CLIError:
-        logging.info("TLS relation already there...")
+    logging.info("Adding TLS relation...")
+    _integrate(juju, f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
 
     logging.info("Waiting for primary unit to be active...")
     juju.wait(
