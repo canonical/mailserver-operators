@@ -31,6 +31,7 @@ from constants import (
     BACKUP_KEY_FILE,
     BACKUP_MANIFEST_PATH,
     BACKUP_RELATION_NAME,
+    BACKUP_SCRIPT_DIR,
     DOVEADM_BIN,
     GDPR_ARCHIVE_DIR,
     GDPR_TAKEOUT_DIR,
@@ -40,8 +41,11 @@ from constants import (
     PEER_RELATION_NAME,
     REQUIRED_PACKAGES,
     RUN_AFTER_BACKUP_SCRIPT,
+    RUN_AFTER_BACKUP_SCRIPT_SRC,
     RUN_AFTER_RESTORE_SCRIPT,
+    RUN_AFTER_RESTORE_SCRIPT_SRC,
     RUN_BEFORE_BACKUP_SCRIPT,
+    RUN_BEFORE_BACKUP_SCRIPT_SRC,
     SYNC_TO_SECONDARY_TARGET,
     TEMPLATES_DIR,
 )
@@ -200,6 +204,7 @@ class DovecotCharm(CharmBase):
     def _reconcile(self, event):
         """Reconcile charm state."""
         self.unit.status = MaintenanceStatus("Configuring charm")
+        self._install_backup_scripts()
         if len(self.get_units()) > 2:
             self.unit.status = BlockedStatus(
                 "Only one primary and one secondary unit are supported; remove extra units"
@@ -266,6 +271,21 @@ class DovecotCharm(CharmBase):
         apt.add_package(REQUIRED_PACKAGES)
         shutil.copy(HOSTNAME_FILE, MAILNAME_FILE)
         self.unit.status = MaintenanceStatus("Charm installation done")
+
+    def _install_backup_scripts(self):
+        """Copy backup/restore scripts to a unit-independent path.
+
+        The charm directory path contains the unit name, so scripts are copied to
+        a fixed location that is identical on every unit.
+        """
+        BACKUP_SCRIPT_DIR.mkdir(parents=True, exist_ok=True)
+        for src, dst in (
+            (RUN_BEFORE_BACKUP_SCRIPT_SRC, RUN_BEFORE_BACKUP_SCRIPT),
+            (RUN_AFTER_BACKUP_SCRIPT_SRC, RUN_AFTER_BACKUP_SCRIPT),
+            (RUN_AFTER_RESTORE_SCRIPT_SRC, RUN_AFTER_RESTORE_SCRIPT),
+        ):
+            shutil.copyfile(src, dst)
+            dst.chmod(0o755)
 
     def _open_ports(self):
         """Open mail ports.

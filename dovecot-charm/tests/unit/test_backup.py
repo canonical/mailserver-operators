@@ -127,11 +127,11 @@ def test_backup_relation_publishes_spec_and_writes_assets(
     key_file = Path(paths["BACKUP_KEY_FILE"])
     assert key_file.read_text(encoding="utf-8") == "backup-passphrase"
 
-    pre_backup = Path(run_before_backup).read_text(encoding="utf-8")
+    pre_backup = charm_module.RUN_BEFORE_BACKUP_SCRIPT_SRC.read_text(encoding="utf-8")
     assert "openssl enc -aes-256-cbc" in pre_backup
 
-    post_backup = Path(run_after_backup).read_text(encoding="utf-8")
+    post_backup = charm_module.RUN_AFTER_BACKUP_SCRIPT_SRC.read_text(encoding="utf-8")
     assert "rm -f /var/backups/dovecot/mail-data.tar.gz.enc" in post_backup
 
-    post_restore = Path(run_after_restore).read_text(encoding="utf-8")
+    post_restore = charm_module.RUN_AFTER_RESTORE_SCRIPT_SRC.read_text(encoding="utf-8")
     assert "openssl enc -d -aes-256-cbc" in post_restore
