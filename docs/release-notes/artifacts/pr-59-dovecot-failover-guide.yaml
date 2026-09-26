@@ -1,0 +1,17 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version_schema: 2
+
+changes:
+- title: Added a Dovecot failover guide
+  author: ignavar
+  type: minor
+  description: Documented planned and unplanned Dovecot failover, failback, data synchronization, Terraform-managed routing, and HAProxy considerations.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/59"
+    related_doc: "https://github.com/canonical/mailserver-operators/blob/main/docs/how-to/failover.md"
+    related_issue:
+  visibility: public
+  highlight: false
