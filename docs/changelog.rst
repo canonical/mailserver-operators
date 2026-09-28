@@ -18,6 +18,10 @@ Each revision is versioned by the date of the revision.
 Added
 ~~~~~
 
+- Added an integration test to verify backup portability across charm upgrades:
+  a backup produced by an older published revision can be restored onto a newly
+  deployed revision of the charm, as long as both share the same
+  ``backup-encryption-key`` secret.
 - A how-to guide for manually failing over a replicated Dovecot deployment.
 
 2026-09-16

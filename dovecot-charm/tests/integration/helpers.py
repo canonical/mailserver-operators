@@ -12,7 +12,17 @@ import time
 from email.message import EmailMessage
 
 import jubilant
-from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
+import requests
+from tenacity import (
+    RetryError,
+    Retrying,
+    retry,
+    retry_if_exception_type,
+    retry_if_result,
+    stop_after_attempt,
+    stop_after_delay,
+    wait_fixed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -334,11 +344,68 @@ def seed_backup_test_message(
 
 def mailbox_has_subject(juju: jubilant.Juju, unit_name: str, user: str, subject: str) -> bool:
     """Return True if the user's INBOX contains a message with the given subject."""
-    result = juju.exec(
-        f'doveadm search -u {user} mailbox INBOX HEADER Subject "{subject}"',
-        unit=unit_name,
-    )
+    try:
+        result = juju.exec(
+            f'doveadm search -u {user} mailbox INBOX HEADER Subject "{subject}"',
+            unit=unit_name,
+        )
+    except jubilant.TaskError as exc:
+        # A user that doesn't exist yet (e.g. a freshly deployed charm before restore)
+        # obviously has no matching mail; doveadm exits non-zero in that case instead
+        # of returning an empty result.
+        if "doesn't exist" in exc.task.stderr:
+            return False
+        raise
     return bool(result.stdout.strip())
+
+
+def find_bacula_job(
+    baculum_client, suffix: str, contains: str | None = None, timeout: int = 300
+) -> str:
+    """Poll Bacula's job list until a matching job name appears.
+
+    bacula-server only gains a Job/Client entry for a given bacula-fd once its own
+    relation-changed hook processes that fd's relation data, which can lag briefly
+    behind the fd (and its principal) reporting active in ``juju status``.
+
+    Args:
+        baculum_client: a ``baculum.Baculum`` API client.
+        suffix: required job name suffix, e.g. ``"-backup"`` or ``"-restore"``.
+        contains: optional substring the job name must also contain.
+        timeout: maximum seconds to wait.
+
+    Returns:
+        The matching job name.
+
+    Raises:
+        AssertionError: if no matching job appears within the timeout.
+    """
+
+    def _find() -> str | None:
+        jobs = baculum_client.list_job_names()
+        return next(
+            (
+                job
+                for job in jobs
+                if job.endswith(suffix) and (contains is None or contains in job)
+            ),
+            None,
+        )
+
+    try:
+        job = Retrying(
+            stop=stop_after_delay(timeout),
+            wait=wait_fixed(5),
+            retry=retry_if_exception_type(requests.exceptions.RequestException)
+            | retry_if_result(lambda job: job is None),
+            reraise=True,
+        )(_find)
+    except (RetryError, requests.exceptions.RequestException) as exc:
+        raise AssertionError(
+            f"Timed out waiting for a Bacula job name ending with {suffix!r}"
+            + (f" containing {contains!r}" if contains else "")
+        ) from exc
+    return job
 
 
 def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -> dict:
@@ -358,17 +425,25 @@ def wait_for_bacula_job(baculum_client, job_name: str, timeout: int = 10 * 60) -
     Raises:
         AssertionError: if the job fails or does not complete within the timeout.
     """
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        runs = baculum_client.list_job_runs(job_name)
-        if runs:
-            job_run = runs[0]
-            status = job_run["jobstatus"]
-            logging.info("%s job run status: %s", job_name, status)
-            if status == "T":
-                return job_run
-            if status in ("E", "f", "A"):
-                raise AssertionError(f"Bacula job '{job_name}' failed with status {status}")
-        time.sleep(5)
 
-    raise AssertionError(f"Timed out waiting for Bacula job '{job_name}' to complete")
+    def _poll_job_run() -> dict | None:
+        runs = baculum_client.list_job_runs(job_name)
+        if not runs:
+            return None
+        job_run = runs[0]
+        status = job_run["jobstatus"]
+        logging.info("%s job run status: %s", job_name, status)
+        if status in ("E", "f", "A"):
+            raise AssertionError(f"Bacula job '{job_name}' failed with status {status}")
+        return job_run if status == "T" else None
+
+    try:
+        return Retrying(
+            stop=stop_after_delay(timeout),
+            wait=wait_fixed(5),
+            retry=retry_if_exception_type(requests.exceptions.RequestException)
+            | retry_if_result(lambda job_run: job_run is None),
+            reraise=True,
+        )(_poll_job_run)
+    except (RetryError, requests.exceptions.RequestException) as exc:
+        raise AssertionError(f"Timed out waiting for Bacula job '{job_name}' to complete") from exc
