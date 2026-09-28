@@ -131,4 +131,3 @@ Thinking about using the __charm_name__ Operator for your next project?
     Reference <reference/index>
     Explanation <explanation/index>
     Release notes <release-notes/index>
-

@@ -61,3 +61,11 @@ as Terraform and cryptography.
     Cryptographic overview <cryptographic-overview>
     Terraform <terraform>
 
+Other
+-----
+
+.. toctree::
+    :hidden:
+    :maxdepth: 1
+
+    Changelog <../changelog>
