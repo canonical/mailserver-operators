@@ -113,7 +113,22 @@ config:
         "hourly", "daily"). See systemd.time(7) for full syntax reference.
       default: "daily"
       type: string
-
+    mail-users:
+      description: |
+        YAML list of static mailbox users in username:{CRYPT}$hash format. These entries 
+        take precedence over file supplied entries.
+      type: string
+    credential-sync-interval:
+      description: |
+        Defines the interval in minutes at which charm checks for updates in credentials file
+      type: integer
+      default: 5
+    mail-credentials-path:
+      description: | 
+        Path to list file containing user:password fromatted entries, consumed by the charm
+        to create mail-users every credential-sync-interval. 
+      default: /var/lib/misc/thishost/smtp-relay-users
+      type: string
 actions:
   clear-queue:
     description: Forcibly remove messages from the Postfix mail queue.
@@ -123,22 +138,6 @@ actions:
         description: The queue to clear (deferred or all).
         default: deferred
         enum: [deferred, all]
-  create-mail-user:
-    description: Create or update a local system user for mail access.
-    params:
-      username:
-        type: string
-        description: The Linux system username to create or update.
-      password:
-        type: string
-        description: The password to set for the user.
-      mailbox-user:
-        type: string
-        description: |
-          Optional mailbox-style username (e.g. user@example.com) to also
-          create or update alongside the primary username.
-        default: ""
-    required: [username, password]
   force-sync:
     description: Manually trigger synchronization of mail to the secondary unit.
   gdpr-archive:
