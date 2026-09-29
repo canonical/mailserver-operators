@@ -5,6 +5,7 @@ variable "app_name" {
   description = "Name of the application in the Juju model."
   type        = string
   default     = "dovecot"
+  nullable    = false
 }
 
 variable "base" {
@@ -17,6 +18,7 @@ variable "channel" {
   description = "The channel to use when deploying the charm."
   type        = string
   default     = "2.3/edge"
+  nullable    = false
 }
 
 variable "config" {
@@ -60,6 +62,7 @@ variable "machines" {
 variable "model_uuid" {
   description = "UUID of the Juju model where the application will be deployed."
   type        = string
+  nullable    = false
 }
 
 variable "resources" {
