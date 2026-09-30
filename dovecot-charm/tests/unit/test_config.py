@@ -66,6 +66,73 @@ _VALID_BASE = {
 }
 
 
+class TestMailUsersValidation:
+    """Tests for static mail credential parsing."""
+
+    @pytest.mark.parametrize("identifier", ["1", "5", "6", "y"])
+    def test_accepts_supported_identifiers(self, identifier):
+        cfg = DovecotConfig(
+            **_VALID_BASE,
+            mail_users=f"- alice:{{crypt}}${identifier}$hash-value\n",
+        )
+
+        assert cfg.mail_users == [f"alice:{{crypt}}${identifier}$hash-value"]
+
+    def test_normalizes_email_style_username(self):
+        cfg = DovecotConfig(
+            **_VALID_BASE,
+            mail_users="- alice@example.com:{crypt}$6$hash-value\n",
+        )
+
+        assert cfg.mail_users == ["alice:{crypt}$6$hash-value"]
+
+    def test_accepts_empty_value(self):
+        cfg = DovecotConfig(**_VALID_BASE, mail_users="")
+
+        assert cfg.mail_users == []
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "alice:{crypt}$6$hash-value",
+            "- alice:plaintext",
+            "- alice:{crypt}$2$hash-value",
+            "- alice:{crypt}$6$",
+            "- 123",
+        ],
+    )
+    def test_rejects_invalid_values(self, value):
+        with pytest.raises(ValidationError):
+            DovecotConfig(**_VALID_BASE, mail_users=value)
+
+    def test_rejects_duplicate_normalized_usernames(self):
+        users = "- alice:{crypt}$6$first\n- alice@example.com:{crypt}$6$second\n"
+
+        with pytest.raises(ValidationError, match="duplicate normalized username"):
+            DovecotConfig(**_VALID_BASE, mail_users=users)
+
+
+class TestCredentialSyncConfig:
+    """Tests for credential synchronization configuration."""
+
+    def test_rejects_non_positive_interval(self):
+        with pytest.raises(ValidationError):
+            DovecotConfig(**_VALID_BASE, credential_sync_interval=0)
+
+    def test_accepts_empty_source_path(self):
+        cfg = DovecotConfig(**_VALID_BASE, mail_credentials_path="")
+
+        assert cfg.mail_credentials_path == ""
+
+    def test_rejects_relative_source_path(self):
+        with pytest.raises(ValidationError, match="must be an absolute path"):
+            DovecotConfig(**_VALID_BASE, mail_credentials_path="credentials/users")
+
+    def test_rejects_control_characters_in_source_path(self):
+        with pytest.raises(ValidationError, match="must not contain control characters"):
+            DovecotConfig(**_VALID_BASE, mail_credentials_path="/credentials/\tusers")
+
+
 class TestSyncScheduleValidation:
     """Tests for the sync_schedule OnCalendar validator.
 

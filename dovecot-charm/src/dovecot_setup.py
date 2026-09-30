@@ -5,7 +5,10 @@
 
 from __future__ import annotations
 
+import grp
 import logging
+import os
+import pwd
 import shutil
 import subprocess  # nosec
 import typing
@@ -16,13 +19,31 @@ from charmlibs import systemd
 from ops.model import MaintenanceStatus
 
 from constants import (
+    CREDENTIAL_STATE_DIR,
+    CREDENTIAL_SYNC_MODULE_DIR,
+    CREDENTIAL_SYNC_MODULE_TARGET,
+    CREDENTIAL_SYNC_SCRIPT_TARGET,
+    CREDENTIAL_SYNC_UNIT,
+    DOVECOT_AUTH_CONF_TARGET,
     DOVECOT_CONF_TARGET,
     DOVECOT_CONF_TEMPLATE,
+    DOVECOT_USERS_FILE,
     ENCRYPTED_MOUNTPOINT,
+    EXTERNAL_USERS_CACHE_FILE,
     MAIL_ROOT,
     PROCMAILRC_TARGET,
     PROCMAILRC_TEMPLATE,
     TLS_CERT_DIR,
+    VMAIL_GID,
+    VMAIL_GROUP,
+    VMAIL_UID,
+    VMAIL_USER,
+)
+from credentials import (
+    CredentialError,
+    SyncResult,
+    atomic_write,
+    read_credentials,
 )
 from exceptions import ConfigurationError
 
@@ -100,7 +121,17 @@ class DovecotSetup:
             "mail_root": MAIL_ROOT,
             "mailname": dovecot_config.mailname,
             "postmaster_address": dovecot_config.postmaster_address,
+            "users_file": str(DOVECOT_USERS_FILE),
+            "vmail_group": VMAIL_GROUP,
+            "vmail_user": VMAIL_USER,
         }
+        # Disable the packaged PAM passdb before defining the virtual-user
+        # passdb and userdb in the charm's local configuration.
+        host.write_file(
+            DOVECOT_AUTH_CONF_TARGET,
+            "",
+            perms=0o644,
+        )
         template = self._charm.jinja.get_template(DOVECOT_CONF_TEMPLATE)
         contents = template.render(template_context)
         host.write_file(DOVECOT_CONF_TARGET, contents, perms=0o644)
@@ -108,6 +139,235 @@ class DovecotSetup:
             raise ConfigurationError("Invalid Dovecot configuration, check logs for details")
         systemd.service_reload("dovecot", restart_on_failure=True)
         self._charm.unit.status = MaintenanceStatus("Dovecot configuration updated")
+
+    def setup_credentials(self, dovecot_config: DovecotConfig) -> SyncResult:
+        """Install virtual-user support and synchronize authentication credentials."""
+        self._charm.unit.status = MaintenanceStatus("Synchronizing mail credentials")
+        self._ensure_virtual_mail_identity()
+
+        CREDENTIAL_STATE_DIR.mkdir(parents=True, exist_ok=True)
+        os.chown(
+            CREDENTIAL_STATE_DIR,
+            pwd.getpwnam("root").pw_uid,
+            grp.getgrnam("dovecot").gr_gid,
+        )
+        CREDENTIAL_STATE_DIR.chmod(0o750)
+
+        self._install_credential_sync(dovecot_config)
+        systemd.service_resume(f"{CREDENTIAL_SYNC_UNIT}.timer")
+        subprocess.run(
+            ["/usr/bin/systemctl", "restart", f"{CREDENTIAL_SYNC_UNIT}.service"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        status = subprocess.run(
+            [
+                "/usr/bin/systemctl",
+                "show",
+                "--property=ExecMainStatus",
+                "--value",
+                f"{CREDENTIAL_SYNC_UNIT}.service",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        try:
+            exit_code = int(status.stdout.strip())
+        except ValueError as exc:
+            raise ConfigurationError(
+                "Unable to determine credential synchronization status"
+            ) from exc
+        synchronization_failed = exit_code not in {0, 1}
+        if synchronization_failed:
+            try:
+                effective_users = read_credentials(DOVECOT_USERS_FILE)
+            except CredentialError as exc:
+                raise ConfigurationError(
+                    "Credential synchronization failed and no valid effective credentials exist"
+                ) from exc
+            if not effective_users:
+                raise ConfigurationError(
+                    "Credential synchronization failed and no valid effective credentials exist"
+                )
+
+        try:
+            external_user_count = len(read_credentials(EXTERNAL_USERS_CACHE_FILE))
+        except CredentialError:
+            external_user_count = 0
+        self._log_credential_state(
+            static_user_count=len(dovecot_config.mail_users),
+            external_user_count=external_user_count,
+            source_failed=exit_code == 1,
+            synchronization_failed=synchronization_failed,
+        )
+        return SyncResult(
+            using_cached_external_users=exit_code == 1,
+            external_user_count=external_user_count,
+            synchronization_failed=synchronization_failed,
+        )
+
+    @staticmethod
+    def _log_credential_state(
+        *,
+        static_user_count: int,
+        external_user_count: int,
+        source_failed: bool,
+        synchronization_failed: bool,
+    ) -> None:
+        """Log degraded or partial credential source states."""
+        if synchronization_failed:
+            logger.warning(
+                "Credential synchronization failed; using last valid effective credentials"
+            )
+        elif source_failed and external_user_count:
+            logger.warning(
+                "External credential source is unavailable or invalid; "
+                "using the last valid external credentials"
+            )
+        elif source_failed:
+            logger.warning(
+                "External credential source is unavailable or invalid; "
+                "using static credentials only"
+            )
+        elif static_user_count == 0:
+            logger.warning("No static credentials are configured; using external credentials only")
+        elif external_user_count == 0:
+            logger.warning("No external credentials are available; using static credentials only")
+
+    def _ensure_virtual_mail_identity(self) -> None:
+        """Create the stable virtual mailbox user and group."""
+        self._ensure_virtual_mail_group()
+        self._ensure_virtual_mail_user()
+
+        mail_root = Path(MAIL_ROOT)
+        mail_root.mkdir(parents=True, exist_ok=True)
+        os.chown(mail_root, VMAIL_UID, VMAIL_GID)
+        mail_root.chmod(0o750)
+
+    @staticmethod
+    def _ensure_virtual_mail_group() -> None:
+        """Create the virtual mailbox group with its stable GID."""
+        try:
+            group = grp.getgrnam(VMAIL_GROUP)
+        except KeyError:
+            try:
+                existing_group = grp.getgrgid(VMAIL_GID)
+            except KeyError:
+                existing_group = None
+            if existing_group:
+                raise ConfigurationError(
+                    f"GID {VMAIL_GID} is already used by group {existing_group.gr_name!r}"
+                )
+            try:
+                subprocess.run(
+                    ["/usr/sbin/groupadd", "--system", "--gid", str(VMAIL_GID), VMAIL_GROUP],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                raise ConfigurationError(
+                    f"Failed to create virtual mail group: {exc.stderr}"
+                ) from exc
+        else:
+            if group.gr_gid != VMAIL_GID:
+                raise ConfigurationError(
+                    f"Group {VMAIL_GROUP!r} uses GID {group.gr_gid}, expected {VMAIL_GID}"
+                )
+
+    @staticmethod
+    def _ensure_virtual_mail_user() -> None:
+        """Create the virtual mailbox user with its stable UID."""
+        try:
+            user = pwd.getpwnam(VMAIL_USER)
+        except KeyError:
+            try:
+                existing_user = pwd.getpwuid(VMAIL_UID)
+            except KeyError:
+                existing_user = None
+            if existing_user:
+                raise ConfigurationError(
+                    f"UID {VMAIL_UID} is already used by user {existing_user.pw_name!r}"
+                )
+            try:
+                subprocess.run(
+                    [
+                        "/usr/sbin/useradd",
+                        "--system",
+                        "--uid",
+                        str(VMAIL_UID),
+                        "--gid",
+                        VMAIL_GROUP,
+                        "--home-dir",
+                        MAIL_ROOT,
+                        "--no-create-home",
+                        "--shell",
+                        "/usr/sbin/nologin",
+                        VMAIL_USER,
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                raise ConfigurationError(
+                    f"Failed to create virtual mail user: {exc.stderr}"
+                ) from exc
+        else:
+            if user.pw_uid != VMAIL_UID or user.pw_gid != VMAIL_GID:
+                raise ConfigurationError(
+                    f"User {VMAIL_USER!r} uses UID/GID {user.pw_uid}/{user.pw_gid}, "
+                    f"expected {VMAIL_UID}/{VMAIL_GID}"
+                )
+
+    def _install_credential_sync(self, dovecot_config: DovecotConfig) -> None:
+        """Install the shared module, rendered runner, and systemd units."""
+        CREDENTIAL_SYNC_MODULE_DIR.mkdir(parents=True, exist_ok=True)
+        atomic_write(
+            CREDENTIAL_SYNC_MODULE_TARGET,
+            Path(__file__).with_name("credentials.py").read_text(),
+            user="root",
+            group="root",
+            mode=0o644,
+        )
+
+        runner_contents = self._charm.jinja.get_template("dovecot-credential-sync.py.tmpl").render(
+            {
+                "cache_path": str(EXTERNAL_USERS_CACHE_FILE),
+                "effective_path": str(DOVECOT_USERS_FILE),
+                "module_dir": str(CREDENTIAL_SYNC_MODULE_DIR),
+                "source_path": dovecot_config.mail_credentials_path,
+                "static_users": dovecot_config.mail_users,
+            }
+        )
+        atomic_write(
+            Path(CREDENTIAL_SYNC_SCRIPT_TARGET),
+            runner_contents,
+            user="root",
+            group="root",
+            mode=0o700,
+        )
+
+        service_template = self._charm.jinja.get_template("dovecot-credential-sync.service.tmpl")
+        timer_template = self._charm.jinja.get_template("dovecot-credential-sync.timer.tmpl")
+        service_path = Path(f"/etc/systemd/system/{CREDENTIAL_SYNC_UNIT}.service")
+        timer_path = Path(f"/etc/systemd/system/{CREDENTIAL_SYNC_UNIT}.timer")
+        service_contents = service_template.render()
+        timer_contents = timer_template.render(
+            {"interval": dovecot_config.credential_sync_interval}
+        )
+        units_changed = (
+            not service_path.exists()
+            or service_path.read_text() != service_contents
+            or not timer_path.exists()
+            or timer_path.read_text() != timer_contents
+        )
+        host.write_file(str(service_path), service_contents, perms=0o644)
+        host.write_file(str(timer_path), timer_contents, perms=0o644)
+        if units_changed:
+            systemd.daemon_reload()
 
     def _validate_dovecot_config(self) -> bool:
         """Run doveconf to validate the written configuration.
@@ -117,7 +377,7 @@ class DovecotSetup:
         """
         try:
             subprocess.run(
-                ["/usr/bin/doveconf", "-c", DOVECOT_CONF_TARGET],
+                ["/usr/bin/doveconf"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -138,36 +398,49 @@ class DovecotSetup:
         """
         self._charm.unit.status = MaintenanceStatus("Setting up and configuring procmail")
 
-        mail_root = Path(MAIL_ROOT)
-        mail_root.mkdir(parents=True, exist_ok=True)
-        mail_root.chmod(0o1777)
-
-        template_context = {"mail_root": MAIL_ROOT}
-        template = self._charm.jinja.get_template(PROCMAILRC_TEMPLATE)
-        contents = template.render(template_context)
-        host.write_file(PROCMAILRC_TARGET, contents, perms=0o644)
-
-        postconf_settings = [
-            # mailbox_command applies only to the Postfix *local* delivery agent and is
-            # used here for local system users not covered by virtual_mailbox_domains.
-            'mailbox_command=/usr/bin/procmail -a "$EXTENSION"',
-            # virtual_mailbox_domains + virtual_transport route mail for the charm's
-            # primary domain directly to Dovecot via the LMTP Unix socket, bypassing
-            # the local delivery agent (and therefore mailbox_command) for that domain.
-            f"virtual_mailbox_domains = {mailname}",
-            "virtual_transport = lmtp:unix:private/dovecot-lmtp",
-            "smtpd_reject_unlisted_recipient = no",
-            "inet_interfaces = all",
-        ]
+        procmail_changed = self._update_procmail_config()
         try:
-            for setting in postconf_settings:
-                subprocess.run(
-                    ["/usr/sbin/postconf", "-e", setting],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-            systemd.service_reload("postfix", restart_on_failure=True)
+            postfix_changed = self._update_postfix_config(mailname)
+            if procmail_changed or postfix_changed:
+                systemd.service_reload("postfix", restart_on_failure=True)
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to configure postfix: {e}")
             raise ConfigurationError(f"Failed to configure postfix: {e.stderr}") from e
+
+    def _update_procmail_config(self) -> bool:
+        """Write the procmail configuration if it changed."""
+        template = self._charm.jinja.get_template(PROCMAILRC_TEMPLATE)
+        contents = template.render({"mail_root": MAIL_ROOT})
+        path = Path(PROCMAILRC_TARGET)
+        if path.exists() and path.read_text() == contents:
+            return False
+        host.write_file(PROCMAILRC_TARGET, contents, perms=0o644)
+        return True
+
+    def _update_postfix_config(self, mailname: str) -> bool:
+        """Apply changed charm-owned Postfix settings."""
+        settings = {
+            "mailbox_command": '/usr/bin/procmail -a "$EXTENSION"',
+            "virtual_mailbox_domains": mailname,
+            "virtual_transport": "lmtp:unix:private/dovecot-lmtp",
+            "smtpd_reject_unlisted_recipient": "no",
+            "inet_interfaces": "all",
+        }
+        changed = False
+        for key, desired_value in settings.items():
+            current_value = subprocess.run(
+                ["/usr/sbin/postconf", "-h", key],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            if current_value == desired_value:
+                continue
+            subprocess.run(
+                ["/usr/sbin/postconf", "-e", f"{key} = {desired_value}"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            changed = True
+        return changed

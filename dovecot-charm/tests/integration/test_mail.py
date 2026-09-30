@@ -20,7 +20,7 @@ def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):
     against virtual_mailbox_domains and forwards it to Dovecot via the LMTP Unix
     socket (virtual_transport = lmtp:unix:private/dovecot-lmtp).  Dovecot strips
     the domain from the envelope recipient (auth_username_format = %n) before the
-    userdb lookup, so the system user 'ubuntu' is found for 'ubuntu@<mailname>'.
+    userdb lookup, so the virtual user 'ubuntu' is found for 'ubuntu@<mailname>'.
     The test then verifies the message is retrievable over IMAPS.
     """
     unit_name = f"{dovecot_charm}/0"
@@ -31,12 +31,6 @@ def test_mail_workflow(juju: jubilant.Juju, dovecot_charm: str):
     password = token_hex(8)
     logging.info("Configuring user 'ubuntu'...")
     setup_mail_user(juju, primary=unit_name, secondary=None, user="ubuntu", password=password)
-
-    result = juju.run(
-        unit_name, "create-mail-user", params={"username": "ubuntu", "password": password}
-    )
-    assert result.status == "completed"
-    assert result.results["status"] == "success"
 
     logging.info("Sending test email...")
     subject = "Mail Verification"

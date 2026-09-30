@@ -47,6 +47,12 @@ from constants import (
     RUN_BEFORE_BACKUP_SCRIPT_SRC,
     SYNC_TO_SECONDARY_TARGET,
     TEMPLATES_DIR,
+    VMAIL_GROUP,
+    VMAIL_USER,
+)
+from credentials import (
+    CredentialError,
+    normalize_username,
 )
 from dovecot_config import DovecotConfig, DovecotConfigInvalidError, DovecotConfigSecretError
 from dovecot_setup import DovecotSetup
@@ -78,6 +84,7 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.start, self._reconcile)
         self.framework.observe(self.on.config_changed, self._reconcile)
+        self.framework.observe(self.on.update_status, self._reconcile)
         self.framework.observe(self.on.upgrade_charm, self._on_install)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
         self.framework.observe(self.on.gdpr_archive_action, self._on_gdpr_archive)
@@ -178,10 +185,10 @@ class DovecotCharm(CharmBase):
         try:
             return DovecotConfig.from_charm(self)
         except DovecotConfigInvalidError as exc:
-            logger.exception(f"Configuration validation error: {exc}")
-            msg = ", ".join([str(*err["loc"]) for err in exc.errors()])
+            fields = [".".join(str(part) for part in error["loc"]) for error in exc.errors()]
+            logger.debug("Charm configuration validation failed for: %s", ", ".join(fields))
             raise ConfigurationError(
-                f"Invalid charm configuration, check logs for details: {msg}"
+                f"Invalid charm configuration, check logs for details: {', '.join(fields)}"
             ) from exc
         except DovecotConfigSecretError as exc:
             logger.exception(f"Secret retrieval error: {exc}")
@@ -213,9 +220,9 @@ class DovecotCharm(CharmBase):
             return
         try:
             self._dovecot_setup.setup_tls(dovecot_config)
+            credential_result = self._dovecot_setup.setup_credentials(dovecot_config)
             self._dovecot_setup.setup_dovecot(dovecot_config)
             self._dovecot_setup.setup_procmail(dovecot_config.mailname)
-            self._dovecot_setup.
         except ConfigurationError as e:
             self.unit.status = BlockedStatus(str(e))
             return
@@ -238,6 +245,25 @@ class DovecotCharm(CharmBase):
             self.unit.status = BlockedStatus(str(e))
             return
         self._open_ports()
+        self._set_credential_status(
+            static_user_count=len(dovecot_config.mail_users),
+            external_user_count=credential_result.external_user_count,
+            synchronization_failed=credential_result.synchronization_failed,
+        )
+
+    def _set_credential_status(
+        self,
+        *,
+        static_user_count: int,
+        external_user_count: int,
+        synchronization_failed: bool = False,
+    ) -> None:
+        """Set unit status for the available credential sources."""
+        if not synchronization_failed and static_user_count == 0 and external_user_count == 0:
+            self.unit.status = BlockedStatus(
+                "No mail users are configured for Dovecot authentication"
+            )
+            return
         self.unit.status = ops.ActiveStatus()
 
     def _store_backup_encryption_key(self, dovecot_config: DovecotConfig) -> None:
@@ -297,30 +323,6 @@ class DovecotCharm(CharmBase):
         self.unit.open_port("tcp", 995)
         self.unit.open_port("tcp", 4190)
 
-
-    @staticmethod
-    def _contains_invalid_user_characters(username: str) -> bool:
-        """Return whether username contains disallowed path/control characters."""
-        if username in (".", ".."):
-            return True
-        return "/" in username or any(
-            ord(character) < 32 or ord(character) == 127 for character in username
-        )
-
-    def _validate_mail_user(self, username: str, password: str) -> str | None:
-        """Validate create-mail-user action parameters."""
-        if not username:
-            return "Parameter 'username' is required."
-        if not password:
-            return "Parameter 'password' is required."
-        if any(separator in password for separator in ("\n", "\r", ":")):
-            return "Parameter 'password' contains invalid characters."
-        if self._contains_invalid_user_characters(username):
-            return "Parameter 'username' contains invalid characters."
-        if mailbox_user and self._contains_invalid_user_characters(mailbox_user):
-            return "Parameter 'mailbox-user' contains invalid characters."
-        return None
-
     def _on_clear_queue_action(self, event):
         """Handle the clear-queue action."""
         queue_to_clear = event.params.get("queue", "deferred")
@@ -348,15 +350,15 @@ class DovecotCharm(CharmBase):
         if not self._is_primary:
             event.fail("This action can only be run on the primary unit.")
             return
-        username = event.params["username"]
+        try:
+            username = normalize_username(str(event.params["username"]))
+        except CredentialError:
+            event.fail("Invalid username. Use a bare account name or email address.")
+            return
         compress = event.params.get("compress", True)
         archive_dir = f"{GDPR_ARCHIVE_DIR}/{username}"
 
-        try:
-            prepare_user_dir(archive_dir, username)
-        except KeyError:
-            event.fail(f"System user '{username}' does not exist.")
-            return
+        prepare_user_dir(archive_dir, VMAIL_USER, VMAIL_GROUP)
 
         logger.info(f"GDPR archive: archiving mailbox for user '{username}'")
 
@@ -397,7 +399,11 @@ class DovecotCharm(CharmBase):
         if not self._is_primary:
             event.fail("This action can only be run on the primary unit.")
             return
-        username = event.params["username"]
+        try:
+            username = normalize_username(str(event.params["username"]))
+        except CredentialError:
+            event.fail("Invalid username. Use a bare account name or email address.")
+            return
         confirm = event.params.get("confirm", False)
 
         if not confirm:
@@ -438,7 +444,11 @@ class DovecotCharm(CharmBase):
         if not self._is_primary:
             event.fail("This action can only be run on the primary unit.")
             return
-        username = event.params["username"]
+        try:
+            username = normalize_username(str(event.params["username"]))
+        except CredentialError:
+            event.fail("Invalid username. Use a bare account name or email address.")
+            return
         export_format = event.params.get("format", "maildir")
         export_dir = f"{GDPR_TAKEOUT_DIR}/{username}"
 
@@ -446,11 +456,7 @@ class DovecotCharm(CharmBase):
             event.fail(f"Invalid format parameter '{export_format}', must be 'maildir' or 'mbox'")
             return
 
-        try:
-            prepare_user_dir(export_dir, username)
-        except KeyError:
-            event.fail(f"System user '{username}' does not exist.")
-            return
+        prepare_user_dir(export_dir, VMAIL_USER, VMAIL_GROUP)
 
         logger.info(f"GDPR takeout: exporting mailbox for user '{username}' as {export_format}")
 

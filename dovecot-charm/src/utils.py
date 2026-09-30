@@ -4,8 +4,11 @@
 
 """Helpful tools for the charm."""
 
+import grp
 import logging
 import os
+import pwd
+import shutil
 import tarfile
 
 logger = logging.getLogger(__name__)
@@ -22,6 +25,15 @@ def configure_file(path, entry):
         logger.info(f"Adding entry to {path}")
         f.write(entry)
     logger.info(f"{path} configured")
+
+
+def prepare_user_dir(dirpath: str, username: str, groupname: str | None = None) -> None:
+    """Recreate a directory owned by the specified user and group."""
+    pw = pwd.getpwnam(username)
+    gid = grp.getgrnam(groupname).gr_gid if groupname else pw.pw_gid
+    shutil.rmtree(dirpath, ignore_errors=True)
+    os.makedirs(dirpath, mode=0o700)
+    os.chown(dirpath, pw.pw_uid, gid)
 
 
 def create_tarball(tar_path: str, base_dir: str, arcname: str) -> None:

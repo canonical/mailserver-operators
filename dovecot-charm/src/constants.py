@@ -13,6 +13,22 @@ TEMPLATES_DIR = Path(__file__).parent.parent.joinpath("templates")
 # Dovecot config
 DOVECOT_CONF_TEMPLATE = "dovecot.conf.tmpl"
 DOVECOT_CONF_TARGET = "/etc/dovecot/conf.d/99-local-dovecot.conf"
+DOVECOT_AUTH_CONF_TARGET = "/etc/dovecot/conf.d/10-auth.conf"
+DOVECOT_USERS_FILE = Path("/etc/dovecot/users")
+
+# Virtual mailbox identity
+VMAIL_USER = "vmail"
+VMAIL_GROUP = "vmail"
+VMAIL_UID = 5000
+VMAIL_GID = 5000
+
+# Credential synchronization
+CREDENTIAL_STATE_DIR = Path("/var/lib/dovecot/auth")
+EXTERNAL_USERS_CACHE_FILE = CREDENTIAL_STATE_DIR / "external-users"
+CREDENTIAL_SYNC_MODULE_DIR = Path("/usr/local/lib/dovecot-charm")
+CREDENTIAL_SYNC_MODULE_TARGET = CREDENTIAL_SYNC_MODULE_DIR / "credentials.py"
+CREDENTIAL_SYNC_SCRIPT_TARGET = "/usr/local/bin/dovecot-credential-sync"
+CREDENTIAL_SYNC_UNIT = "dovecot-credential-sync"
 
 # Procmail config
 PROCMAILRC_TEMPLATE = "procmailrc.tmpl"

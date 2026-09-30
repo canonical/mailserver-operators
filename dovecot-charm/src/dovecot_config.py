@@ -5,8 +5,10 @@
 
 import logging
 import subprocess  # nosec
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+import yaml
 from ops import ModelError, SecretNotFoundError
 from pydantic import (
     BaseModel,
@@ -17,6 +19,8 @@ from pydantic import (
     ValidationInfo,
     field_validator,
 )
+
+from credentials import CredentialError, parse_credential_entries
 
 if TYPE_CHECKING:
     from charm import DovecotCharm
@@ -74,6 +78,51 @@ class DovecotConfig(BaseModel):
         "daily",
         description="Systemd OnCalendar expression for syncing mail from primary to secondary units.",
     )
+    mail_users: list[str] = Field(
+        default_factory=list,
+        description="Static mailbox credentials used for Dovecot authentication",
+    )
+    credential_sync_interval: int = Field(
+        5,
+        ge=1,
+        description="External credential source synchronization interval in minutes",
+    )
+    mail_credentials_path: str = Field(
+        "", description="Path to the external credentials file merged with static users"
+    )
+
+    @field_validator("mail_users", mode="before")
+    @classmethod
+    def _validate_mail_users(cls, value: object) -> list[str]:
+        """Parse and validate static credentials supplied as YAML."""
+        if value == "":
+            return []
+
+        if isinstance(value, str):
+            try:
+                value = yaml.safe_load(value)
+            except yaml.YAMLError as exc:
+                raise ValueError("mail-users must contain valid YAML") from exc
+
+        if not isinstance(value, list):
+            raise ValueError("mail-users must be a YAML list")
+
+        try:
+            return list(parse_credential_entries(value).values())
+        except CredentialError as exc:
+            raise ValueError(str(exc)) from exc
+
+    @field_validator("mail_credentials_path", mode="after")
+    @classmethod
+    def _validate_mail_credentials_path(cls, value: str) -> str:
+        """Require an absolute path when the external source is enabled."""
+        if not value:
+            return value
+        if any(ord(character) < 32 or ord(character) == 127 for character in value):
+            raise ValueError("mail-credentials-path must not contain control characters")
+        if not Path(value).is_absolute():
+            raise ValueError("mail-credentials-path must be an absolute path")
+        return value
 
     @field_validator("luks_key", mode="after")
     @classmethod
@@ -142,11 +191,13 @@ class DovecotConfig(BaseModel):
                     "luks_key": luks_key,
                     "backup_encryption_key": backup_encryption_key,
                     "sync_schedule": config.get("sync-schedule", "daily"),
+                    "mail_users": config.get("mail-users", ""),
+                    "credential_sync_interval": config.get("credential-sync-interval", 5),
+                    "mail_credentials_path": config.get("mail-credentials-path", ""),
                 },
                 context={"charm": charm},
             )
         except ValidationError as e:
-            logger.exception(f"Configuration validation error: {e}")
             raise DovecotConfigInvalidError(e) from e
 
     @staticmethod

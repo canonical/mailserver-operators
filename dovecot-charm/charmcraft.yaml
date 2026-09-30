@@ -115,18 +115,21 @@ config:
       type: string
     mail-users:
       description: |
-        YAML list of static mailbox users in username:{CRYPT}$hash format. These entries 
-        take precedence over file supplied entries.
+        YAML list of static credentials in "username:{crypt}$<hash>" format.
+        Supports crypt identifiers 1, 5, 6, and y. Email-style usernames are
+        normalized to bare names. Static users take precedence.
       type: string
     credential-sync-interval:
       description: |
-        Defines the interval in minutes at which charm checks for updates in credentials file
-      type: integer
+        Interval, in minutes, at which the external credentials file is checked
+        for updates. The value must be at least 1.
+      type: int
       default: 5
     mail-credentials-path:
-      description: | 
-        Path to list file containing user:password fromatted entries, consumed by the charm
-        to create mail-users every credential-sync-interval. 
+      description: |
+        Absolute path to a passwd-file with one
+        "username:{crypt}$<hash>" entry per line. The last valid file is kept
+        when the source is unavailable or malformed.
       default: /var/lib/misc/thishost/smtp-relay-users
       type: string
 actions:
