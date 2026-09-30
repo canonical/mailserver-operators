@@ -7,11 +7,14 @@ import contextlib
 import hashlib
 import imaplib
 import logging
+import os
 import smtplib
 import ssl
 import subprocess  # nosec
+import tempfile
 import time
 from email.message import EmailMessage
+from pathlib import Path
 
 import jubilant
 import requests
@@ -37,22 +40,100 @@ DEFAULT_MAIL_USERS = (
 )
 
 
-def configure_mail_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
-    """Update the static users secret and wait for reconciliation."""
-    salt = hashlib.sha256(user.encode()).hexdigest()[:16]
+def crypt_password(password: str, identifier: str = "6", salt: str | None = None) -> str:
+    """Generate a Dovecot ``{crypt}`` password hash."""
+    if identifier not in {"1", "5", "6"}:
+        raise ValueError(f"OpenSSL cannot generate crypt identifier {identifier!r}")
+    salt = salt or hashlib.sha256(password.encode()).hexdigest()[:16]
     password_hash = subprocess.run(
-        ["/usr/bin/openssl", "passwd", "-6", "-salt", salt, password],
+        ["/usr/bin/openssl", "passwd", f"-{identifier}", "-salt", salt, password],
         check=True,
         capture_output=True,
         text=True,
     ).stdout.strip()
+    return f"{{crypt}}{password_hash}"
+
+
+def configure_mail_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
+    """Update the static users secret and wait for reconciliation."""
     app_name = unit_name.rsplit("/", 1)[0]
     mail_users_secret = juju.config(app_name)["mail-users"]
     juju.update_secret(
         mail_users_secret,
-        {"users": yaml.safe_dump([f"{user}:{{crypt}}{password_hash}"])},
+        {"users": yaml.safe_dump([f"{user}:{crypt_password(password, salt=user)}"])},
     )
     _poll(juju, unit_name, f"doveadm user {user}")
+
+
+def write_credential_source(
+    juju: jubilant.Juju,
+    unit_name: str,
+    source_path: str,
+    credentials: list[str],
+) -> None:
+    """Install a credential source on one unit without exposing its contents in commands."""
+    remote_temporary_path = f"/tmp/dovecot-credentials-{os.getpid()}"
+    contents = "\n".join(credentials) + ("\n" if credentials else "")
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as temporary_file:
+            temporary_file.write(contents)
+            temporary_path = Path(temporary_file.name)
+        temporary_path.chmod(0o600)
+        juju.exec(f"sudo install -d -m 0750 {Path(source_path).parent}", unit=unit_name)
+        juju.scp(temporary_path, f"{unit_name}:{remote_temporary_path}")
+        juju.exec(
+            (
+                f"sudo install -o root -g root -m 0600 {remote_temporary_path} {source_path}; "
+                f"rm -f {remote_temporary_path}"
+            ),
+            unit=unit_name,
+        )
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def remove_credential_source(
+    juju: jubilant.Juju,
+    unit_name: str,
+    source_path: str,
+) -> None:
+    """Remove one unit's external credential source."""
+    juju.exec(f"sudo rm -f {source_path}", unit=unit_name)
+
+
+def run_credential_sync(juju: jubilant.Juju, unit_name: str) -> int:
+    """Run the credential synchronization service and return its exit status."""
+    result = juju.exec(
+        (
+            "sudo systemctl reset-failed dovecot-credential-sync.service 2>/dev/null || true; "
+            "sudo systemctl start dovecot-credential-sync.service >/dev/null 2>&1 || true; "
+            "sudo systemctl show --property=ExecMainStatus --value "
+            "dovecot-credential-sync.service"
+        ),
+        unit=unit_name,
+    )
+    return int(result.stdout.strip())
+
+
+def imap_authenticates(host: str, username: str, password: str) -> bool:
+    """Return whether an IMAPS login succeeds."""
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+
+    connection = None
+    try:
+        connection = imaplib.IMAP4_SSL(host, port=993, ssl_context=context)
+        connection.login(username, password)
+        return True
+    except (imaplib.IMAP4.error, OSError):
+        return False
+    finally:
+        if connection is not None:
+            with contextlib.suppress(imaplib.IMAP4.error, OSError):
+                connection.logout()
 
 
 def reset_mail_users(juju: jubilant.Juju, unit_name: str) -> None:
