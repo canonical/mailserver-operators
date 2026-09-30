@@ -9,7 +9,7 @@ import imaplib
 import logging
 import smtplib
 import ssl
-import subprocess
+import subprocess  # nosec
 import time
 from email.message import EmailMessage
 
@@ -41,7 +41,7 @@ def configure_mail_user(juju: jubilant.Juju, unit_name: str, user: str, password
     """Configure one static virtual mail user and wait for reconciliation."""
     salt = hashlib.sha256(user.encode()).hexdigest()[:16]
     password_hash = subprocess.run(
-        ["openssl", "passwd", "-6", "-salt", salt, password],
+        ["/usr/bin/openssl", "passwd", "-6", "-salt", salt, password],
         check=True,
         capture_output=True,
         text=True,

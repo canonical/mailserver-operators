@@ -3,7 +3,7 @@
 
 """Unit tests for Dovecot workload setup."""
 
-import subprocess
+import subprocess  # nosec
 from unittest.mock import MagicMock, call, patch
 
 import pytest
