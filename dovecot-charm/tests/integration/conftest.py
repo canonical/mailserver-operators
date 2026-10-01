@@ -70,6 +70,18 @@ def _integrate(juju: jubilant.Juju, requirer: str, provider: str) -> None:
         logging.info("%s:%s relation already present", requirer, provider)
 
 
+def _mail_users_secret(juju: jubilant.Juju, app: str) -> str:
+    """Return the configured users secret, creating one for a new deployment."""
+    if juju.status().apps.get(app):
+        return str(juju.config(app)["mail-users"])
+    return str(
+        juju.add_secret(
+            f"{app}-mail-users-{secrets.token_hex(4)}",
+            {"users": DEFAULT_MAIL_USERS},
+        )
+    )
+
+
 def _deploy_dovecot(
     juju: jubilant.Juju,
     app: str,
@@ -78,6 +90,7 @@ def _deploy_dovecot(
     luks_secret: str,
 ) -> None:
     """Deploy a Dovecot app and wire up LUKS and TLS."""
+    mail_users_secret = _mail_users_secret(juju, app)
     if not juju.status().apps.get(app):
         juju.deploy(
             charm,
@@ -87,10 +100,11 @@ def _deploy_dovecot(
                 "postmaster-address": f"postmaster@{MAILNAME}",
                 "primary-unit": f"{app}/0",
                 "luks-auto-provisioning": True,
-                "mail-users": DEFAULT_MAIL_USERS,
+                "mail-users": mail_users_secret,
             },
             constraints=DEPLOY_CONSTRAINTS,
         )
+    juju.grant_secret(mail_users_secret, app)
     juju.grant_secret(LUKS_SECRET_NAME, app)
     juju.config(app, {"luks-key": luks_secret})
     _integrate(juju, f"{app}:certificates", f"{tls_charm}:certificates")
@@ -178,6 +192,7 @@ def dovecot_charm_manual_storage(
 ) -> str:
     """Build and deploy the charm."""
     charm_name = f"{APP_NAME}-manual"
+    mail_users_secret = _mail_users_secret(juju, charm_name)
     logging.info(f"Checking for existing application {charm_name}...")
 
     if not juju.status().apps.get(charm_name):
@@ -189,7 +204,7 @@ def dovecot_charm_manual_storage(
             "postmaster-address": f"postmaster@{MAILNAME}",
             "primary-unit": f"{charm_name}/0",
             "luks-auto-provisioning": False,
-            "mail-users": DEFAULT_MAIL_USERS,
+            "mail-users": mail_users_secret,
         }
         charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
         juju.deploy(
@@ -198,6 +213,7 @@ def dovecot_charm_manual_storage(
             config=config,
             constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
         )
+    juju.grant_secret(mail_users_secret, charm_name)
     logging.info("Adding TLS relation...")
     _integrate(juju, f"{charm_name}:certificates", f"{tls_charm}:certificates")
 
@@ -328,6 +344,7 @@ def dovecot_charm_dual_unit(
     """Build and deploy the charm."""
     logging.info(f"Checking for existing application {APP_NAME}...")
     luks_key = secrets.token_hex(16)
+    mail_users_secret = _mail_users_secret(juju, APP_NAME)
 
     if not juju.status().apps.get(APP_NAME):
         logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
@@ -342,7 +359,7 @@ def dovecot_charm_dual_unit(
             "primary-unit": f"{APP_NAME}/0",
             "luks-auto-provisioning": True,
             "luks-key": secret_id,
-            "mail-users": DEFAULT_MAIL_USERS,
+            "mail-users": mail_users_secret,
         }
         charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
         # Deploy the primary unit only; the second unit is added after the primary
@@ -355,6 +372,7 @@ def dovecot_charm_dual_unit(
             trust=True,
         )
 
+    juju.grant_secret(mail_users_secret, APP_NAME)
     juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
     logging.info("Adding TLS relation...")
     _integrate(juju, f"{APP_NAME}:certificates", f"{tls_charm}:certificates")

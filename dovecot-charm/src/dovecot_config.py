@@ -94,7 +94,7 @@ class DovecotConfig(BaseModel):
     @field_validator("mail_users", mode="before")
     @classmethod
     def _validate_mail_users(cls, value: object) -> list[str]:
-        """Parse and validate static credentials supplied as YAML."""
+        """Parse and validate static credentials from the mail-users secret."""
         if value == "":
             return []
 
@@ -170,16 +170,26 @@ class DovecotConfig(BaseModel):
         if luks_auto_provisioning:
             secret_id = config.get("luks-key", "")
             if secret_id:
-                luks_key = cls._read_secret_key(charm, secret_id, "luks-key")
+                luks_key = cls._read_secret_field(charm, secret_id, "luks-key", "key")
 
         backup_encryption_key = ""
         backup_secret_id = config.get("backup-encryption-key", "")
         if backup_secret_id:
-            backup_encryption_key = cls._read_secret_key(
+            backup_encryption_key = cls._read_secret_field(
                 charm,
                 backup_secret_id,
                 "backup-encryption-key",
                 "backup-key",
+            )
+
+        mail_users = ""
+        mail_users_secret_id = config.get("mail-users", "")
+        if mail_users_secret_id:
+            mail_users = cls._read_secret_field(
+                charm,
+                mail_users_secret_id,
+                "mail-users",
+                "users",
             )
         try:
             return cls.model_validate(
@@ -191,7 +201,7 @@ class DovecotConfig(BaseModel):
                     "luks_key": luks_key,
                     "backup_encryption_key": backup_encryption_key,
                     "sync_schedule": config.get("sync-schedule", "daily"),
-                    "mail_users": config.get("mail-users", ""),
+                    "mail_users": mail_users,
                     "credential_sync_interval": config.get("credential-sync-interval", 5),
                     "mail_credentials_path": config.get("mail-credentials-path", ""),
                 },
@@ -201,10 +211,10 @@ class DovecotConfig(BaseModel):
             raise DovecotConfigInvalidError(e) from e
 
     @staticmethod
-    def _read_secret_key(
-        charm: "DovecotCharm", secret_id: str, config_name: str, field_name: str = "key"
+    def _read_secret_field(
+        charm: "DovecotCharm", secret_id: str, config_name: str, field_name: str
     ) -> str:
-        """Fetch a charm secret and return the requested field.
+        """Fetch a Juju secret and return the requested field.
 
         Args:
             charm: The charm instance used to fetch the Juju secret.
@@ -225,13 +235,13 @@ class DovecotConfig(BaseModel):
             logger.error(msg)
             raise DovecotConfigSecretError(msg) from e
 
-        key = content.get(field_name, "")
-        if key:
-            return key
+        value = content.get(field_name, "")
+        if value:
+            return value
 
         msg = (
             f"Secret (id={secret_id}) exists but does not contain a '{field_name}' field. "
-            f"Ensure the secret was created with: juju add-secret ... {field_name}=<passphrase>"
+            f"Ensure the secret was created with: juju add-secret ... {field_name}=<value>"
         )
         logger.error(msg)
         raise DovecotConfigSecretError(msg)

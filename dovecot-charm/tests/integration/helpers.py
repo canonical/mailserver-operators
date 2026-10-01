@@ -38,7 +38,7 @@ DEFAULT_MAIL_USERS = (
 
 
 def configure_mail_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
-    """Configure one static virtual mail user and wait for reconciliation."""
+    """Update the static users secret and wait for reconciliation."""
     salt = hashlib.sha256(user.encode()).hexdigest()[:16]
     password_hash = subprocess.run(
         ["/usr/bin/openssl", "passwd", "-6", "-salt", salt, password],
@@ -47,26 +47,23 @@ def configure_mail_user(juju: jubilant.Juju, unit_name: str, user: str, password
         text=True,
     ).stdout.strip()
     app_name = unit_name.rsplit("/", 1)[0]
-    juju.config(
-        app_name,
-        {"mail-users": yaml.safe_dump([f"{user}:{{crypt}}{password_hash}"])},
+    mail_users_secret = juju.config(app_name)["mail-users"]
+    juju.update_secret(
+        mail_users_secret,
+        {"users": yaml.safe_dump([f"{user}:{{crypt}}{password_hash}"])},
     )
-    juju.wait(
-        lambda status: status.apps[app_name].is_active,
-        error=jubilant.any_error,
-        timeout=5 * 60,
-    )
+    _poll(juju, unit_name, f"doveadm user {user}")
 
 
 def reset_mail_users(juju: jubilant.Juju, unit_name: str) -> None:
     """Restore the default integration-test virtual user."""
     app_name = unit_name.rsplit("/", 1)[0]
-    juju.config(app_name, {"mail-users": DEFAULT_MAIL_USERS})
-    juju.wait(
-        lambda status: status.apps[app_name].is_active,
-        error=jubilant.any_error,
-        timeout=5 * 60,
+    mail_users_secret = juju.config(app_name)["mail-users"]
+    juju.update_secret(
+        mail_users_secret,
+        {"users": DEFAULT_MAIL_USERS},
     )
+    _poll(juju, unit_name, "doveadm user integration-test")
 
 
 def setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:

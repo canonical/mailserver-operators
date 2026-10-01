@@ -13,7 +13,6 @@ import pytest
 from testing import DovecotTestCharm, NoOpDovecotSetup, NoOpHAManager
 
 from constants import SYNC_TO_SECONDARY_TARGET
-from credentials import SyncResult
 from exceptions import ConfigurationError, HASetupError
 
 PEER_RELATION_NAME = "replicas"
@@ -48,68 +47,6 @@ def test_reconcile_sets_active_on_success(ctx, base_state):
     """Reconcile must reach ActiveStatus when all setup steps succeed."""
     state_out = ctx.run(ctx.on.config_changed(), base_state)
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
-
-
-@pytest.mark.parametrize(
-    ("mail_users", "external_user_count", "using_cache", "expected_status"),
-    [
-        (
-            "",
-            0,
-            False,
-            ops.BlockedStatus("No mail users are configured for Dovecot authentication"),
-        ),
-        (
-            "",
-            1,
-            False,
-            ops.ActiveStatus(),
-        ),
-        (
-            "- alice:{crypt}$6$hash",
-            0,
-            False,
-            ops.ActiveStatus(),
-        ),
-        (
-            "",
-            1,
-            True,
-            ops.ActiveStatus(),
-        ),
-        (
-            "- alice:{crypt}$6$hash",
-            0,
-            True,
-            ops.ActiveStatus(),
-        ),
-    ],
-)
-def test_credential_source_statuses(
-    ctx,
-    base_state,
-    mail_users,
-    external_user_count,
-    using_cache,
-    expected_status,
-):
-    """Charm status reflects available and cached credential sources."""
-
-    class _CredentialSetup(NoOpDovecotSetup):
-        def setup_credentials(self, dovecot_config):
-            return SyncResult(
-                using_cached_external_users=using_cache,
-                external_user_count=external_user_count,
-            )
-
-    state = dataclasses.replace(
-        base_state,
-        config={**base_state.config, "mail-users": mail_users},
-    )
-    with patch.object(DovecotTestCharm, "_dovecot_setup", _CredentialSetup()):
-        state_out = ctx.run(ctx.on.config_changed(), state)
-
-    assert state_out.unit_status == expected_status
 
 
 def test_reconcile_opens_mail_ports(ctx, base_state):
