@@ -35,7 +35,7 @@ import pytest
 import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from helpers import integrate_once, sha512_dovecot_password
+from helpers import crypt_dovecot_password, integrate_once, sha512_dovecot_password
 from opcli.models.artifacts_build import ArtifactsGenerated
 from opcli.pytest_plugin import CharmPathList, artifacts_root_from_yaml_path
 
@@ -313,6 +313,9 @@ def deploy_dovecot_fixture(
             app=DOVECOT_APP,
             config={
                 "mailname": TEST_DOMAIN,
+                "mail-users": yaml.dump(
+                    [f"{TEST_SMTP_USER}:{crypt_dovecot_password(TEST_SMTP_PASSWORD)}"]
+                ),
                 "postmaster-address": f"postmaster@{TEST_DOMAIN}",
                 "primary-unit": f"{DOVECOT_APP}/0",
                 "luks-auto-provisioning": True,
