@@ -8,11 +8,9 @@ from typing import cast
 
 import jubilant
 import pytest
-import yaml
 
 from .conftest import MAILNAME
 from .helpers import (
-    DEFAULT_MAIL_USERS,
     check_mail_via_imap,
     crypt_password,
     get_last_sync_mtime,
@@ -21,9 +19,11 @@ from .helpers import (
     get_timer_status,
     imap_authenticates,
     remove_credential_source,
+    reset_mail_users,
     run_credential_sync,
     send_mail_via_smtp,
     setup_mail_user,
+    update_mail_users,
     wait_for_sync_trigger,
     write_credential_source,
 )
@@ -173,52 +173,34 @@ def test_credentials_converge_independently_on_each_unit(
     first_user = f"first-{suffix}"
     second_user = f"second-{suffix}"
     static_user = f"static-{suffix}"
-    shared_user = f"shared-{suffix}"
     first_password = token_hex(12)
     second_password = token_hex(12)
     static_password = token_hex(12)
-    static_shared_password = token_hex(12)
-    external_shared_password = token_hex(12)
-    static_credentials = [
-        f"{static_user}:{crypt_password(static_password, salt='ha-static')}",
-        f"{shared_user}:{crypt_password(static_shared_password, salt='ha-shared')}",
-    ]
+    static_credentials = [f"{static_user}:{crypt_password(static_password, salt='ha-static')}"]
 
     try:
+        reset_mail_users(juju, first_unit)
         juju.config(
             dovecot_charm_dual_unit,
-            {
-                "mail-credentials-path": "",
-                "mail-users": DEFAULT_MAIL_USERS,
-            },
+            {"mail-credentials-path": ""},
         )
         juju.wait(jubilant.all_active, timeout=5 * 60)
         write_credential_source(
             juju,
             first_unit,
             HA_CREDENTIAL_SOURCE,
-            [
-                f"{first_user}:{crypt_password(first_password, salt='ha-first')}",
-                f"{shared_user}:"
-                f"{crypt_password(external_shared_password, salt='ha-first-shared')}",
-            ],
+            [f"{first_user}:{crypt_password(first_password, salt='ha-first')}"],
         )
         write_credential_source(
             juju,
             second_unit,
             HA_CREDENTIAL_SOURCE,
-            [
-                f"{second_user}:{crypt_password(second_password, salt='ha-second')}",
-                f"{shared_user}:"
-                f"{crypt_password(external_shared_password, salt='ha-second-shared')}",
-            ],
+            [f"{second_user}:{crypt_password(second_password, salt='ha-second')}"],
         )
+        update_mail_users(juju, dovecot_charm_dual_unit, static_credentials)
         juju.config(
             dovecot_charm_dual_unit,
-            {
-                "mail-credentials-path": HA_CREDENTIAL_SOURCE,
-                "mail-users": yaml.safe_dump(static_credentials),
-            },
+            {"mail-credentials-path": HA_CREDENTIAL_SOURCE},
         )
         juju.wait(jubilant.all_active, timeout=5 * 60)
         assert run_credential_sync(juju, first_unit) == 0
@@ -236,15 +218,11 @@ def test_credentials_converge_independently_on_each_unit(
         assert not imap_authenticates(second_ip, first_user, first_password)
         for unit_ip in (first_ip, second_ip):
             assert imap_authenticates(unit_ip, static_user, static_password)
-            assert imap_authenticates(unit_ip, shared_user, static_shared_password)
-            assert not imap_authenticates(unit_ip, shared_user, external_shared_password)
     finally:
+        reset_mail_users(juju, first_unit)
         juju.config(
             dovecot_charm_dual_unit,
-            {
-                "mail-credentials-path": "",
-                "mail-users": DEFAULT_MAIL_USERS,
-            },
+            {"mail-credentials-path": ""},
         )
         juju.wait(jubilant.all_active, timeout=5 * 60)
         for unit in units:

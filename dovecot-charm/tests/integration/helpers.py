@@ -7,7 +7,7 @@ import contextlib
 import hashlib
 import imaplib
 import logging
-import os
+import shlex
 import smtplib
 import ssl
 import subprocess  # nosec
@@ -57,12 +57,25 @@ def crypt_password(password: str, identifier: str = "6", salt: str | None = None
 def configure_mail_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
     """Update the static users secret and wait for reconciliation."""
     app_name = unit_name.rsplit("/", 1)[0]
+    update_mail_users(
+        juju,
+        app_name,
+        [f"{user}:{crypt_password(password, salt=user)}"],
+    )
+    _poll(juju, unit_name, f"doveadm user {user}")
+
+
+def update_mail_users(
+    juju: jubilant.Juju,
+    app_name: str,
+    credentials: list[str],
+) -> None:
+    """Update the application's static users secret."""
     mail_users_secret = juju.config(app_name)["mail-users"]
     juju.update_secret(
         mail_users_secret,
-        {"users": yaml.safe_dump([f"{user}:{crypt_password(password, salt=user)}"])},
+        {"users": yaml.safe_dump(credentials)},
     )
-    _poll(juju, unit_name, f"doveadm user {user}")
 
 
 def write_credential_source(
@@ -72,7 +85,7 @@ def write_credential_source(
     credentials: list[str],
 ) -> None:
     """Install a credential source on one unit without exposing its contents in commands."""
-    remote_temporary_path = f"/tmp/dovecot-credentials-{os.getpid()}"
+    remote_temporary_path = juju.exec("mktemp", unit=unit_name).stdout.strip()
     contents = "\n".join(credentials) + ("\n" if credentials else "")
     temporary_path: Path | None = None
     try:
@@ -80,16 +93,20 @@ def write_credential_source(
             temporary_file.write(contents)
             temporary_path = Path(temporary_file.name)
         temporary_path.chmod(0o600)
-        juju.exec(f"sudo install -d -m 0750 {Path(source_path).parent}", unit=unit_name)
+        juju.exec(
+            f"sudo install -d -m 0750 {shlex.quote(str(Path(source_path).parent))}",
+            unit=unit_name,
+        )
         juju.scp(temporary_path, f"{unit_name}:{remote_temporary_path}")
         juju.exec(
             (
-                f"sudo install -o root -g root -m 0600 {remote_temporary_path} {source_path}; "
-                f"rm -f {remote_temporary_path}"
+                f"sudo install -o root -g root -m 0600 "
+                f"{shlex.quote(remote_temporary_path)} {shlex.quote(source_path)}"
             ),
             unit=unit_name,
         )
     finally:
+        juju.exec(f"rm -f {shlex.quote(remote_temporary_path)}", unit=unit_name)
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
 
@@ -139,11 +156,7 @@ def imap_authenticates(host: str, username: str, password: str) -> bool:
 def reset_mail_users(juju: jubilant.Juju, unit_name: str) -> None:
     """Restore the default integration-test virtual user."""
     app_name = unit_name.rsplit("/", 1)[0]
-    mail_users_secret = juju.config(app_name)["mail-users"]
-    juju.update_secret(
-        mail_users_secret,
-        {"users": DEFAULT_MAIL_USERS},
-    )
+    update_mail_users(juju, app_name, yaml.safe_load(DEFAULT_MAIL_USERS))
     _poll(juju, unit_name, "doveadm user integration-test")
 
 

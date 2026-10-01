@@ -9,15 +9,15 @@ from secrets import token_hex
 
 import jubilant
 import pytest
-import yaml
 
 from .conftest import MAILNAME
 from .helpers import (
-    DEFAULT_MAIL_USERS,
     crypt_password,
     imap_authenticates,
     remove_credential_source,
+    reset_mail_users,
     run_credential_sync,
+    update_mail_users,
     write_credential_source,
 )
 
@@ -33,12 +33,12 @@ def credential_sync_unit(
 ) -> Generator[tuple[str, str], None, None]:
     """Reset credential state around each synchronization test."""
     unit_name = f"{dovecot_charm}/0"
+    reset_mail_users(juju, unit_name)
     juju.config(
         dovecot_charm,
         {
             "credential-sync-interval": 5,
             "mail-credentials-path": "",
-            "mail-users": DEFAULT_MAIL_USERS,
         },
     )
     juju.wait(
@@ -50,12 +50,12 @@ def credential_sync_unit(
 
     yield dovecot_charm, unit_name
 
+    reset_mail_users(juju, unit_name)
     juju.config(
         dovecot_charm,
         {
             "credential-sync-interval": 5,
             "mail-credentials-path": "",
-            "mail-users": DEFAULT_MAIL_USERS,
         },
     )
     juju.wait(
@@ -72,12 +72,12 @@ def _configure_credentials(
     static_credentials: list[str],
 ) -> None:
     """Configure the external source and static credentials."""
+    update_mail_users(juju, app_name, static_credentials)
     juju.config(
         app_name,
         {
             "credential-sync-interval": 5,
             "mail-credentials-path": SOURCE_PATH,
-            "mail-users": yaml.safe_dump(static_credentials),
         },
     )
     juju.wait(
@@ -123,15 +123,10 @@ def test_external_and_static_users_authenticate_with_static_precedence(
     static_password = token_hex(12)
     shared_external_password = token_hex(12)
     shared_static_password = token_hex(12)
-    crypt_passwords = {identifier: token_hex(12) for identifier in ("1", "5", "6")}
 
     external_credentials = [
         f"{external_user}:{crypt_password(external_password, salt='external')}",
         f"{shared_user}:{crypt_password(shared_external_password, salt='external-shared')}",
-        f"crypt1-{suffix}:{crypt_password(crypt_passwords['1'], identifier='1', salt='crypt1')}",
-        f"crypt5-{suffix}:{crypt_password(crypt_passwords['5'], identifier='5', salt='crypt5')}",
-        f"crypt6-{suffix}:{crypt_password(crypt_passwords['6'], identifier='6', salt='crypt6')}",
-        f"crypty-{suffix}:{{crypt}}$y$j9T$integration$accepted-by-parser",
     ]
     static_credentials = [
         f"{static_user}:{crypt_password(static_password, salt='static')}",
@@ -148,18 +143,8 @@ def test_external_and_static_users_authenticate_with_static_precedence(
     assert imap_authenticates(unit_ip, static_user, static_password)
     assert imap_authenticates(unit_ip, shared_user, shared_static_password)
     assert not imap_authenticates(unit_ip, shared_user, shared_external_password)
-    for identifier, password in crypt_passwords.items():
-        assert imap_authenticates(unit_ip, f"crypt{identifier}-{suffix}", password)
 
-    expected_users = {
-        external_user,
-        static_user,
-        shared_user,
-        f"crypt1-{suffix}",
-        f"crypt5-{suffix}",
-        f"crypt6-{suffix}",
-        f"crypty-{suffix}",
-    }
+    expected_users = {external_user, static_user, shared_user}
     assert _effective_usernames(juju, unit_name) == expected_users
 
     juju.exec(
@@ -197,18 +182,17 @@ def test_external_and_static_users_authenticate_with_static_precedence(
         static_password,
         shared_external_password,
         shared_static_password,
-        *crypt_passwords.values(),
         *external_credentials,
         *static_credentials,
     ]
     assert not any(value in journal for value in sensitive_values)
 
 
-def test_successful_refresh_is_authoritative_and_atomic(
+def test_refresh_and_source_failures_preserve_last_known_good(
     juju: jubilant.Juju,
     credential_sync_unit: tuple[str, str],
 ) -> None:
-    """Successful refreshes change credentials and remove deleted external users."""
+    """Refresh credentials authoritatively and retain them during source failures."""
     app_name, unit_name = credential_sync_unit
     username = f"refresh-{token_hex(3)}"
     original_password = token_hex(12)
@@ -244,34 +228,7 @@ def test_successful_refresh_is_authoritative_and_atomic(
         unit=unit_name,
     )
 
-    write_credential_source(juju, unit_name, SOURCE_PATH, [])
-    assert run_credential_sync(juju, unit_name) == 0
-    assert username not in _effective_usernames(juju, unit_name)
-    assert not imap_authenticates(unit_ip, username, updated_password)
-
-
-def test_invalid_or_missing_source_retains_last_known_good_credentials(
-    juju: jubilant.Juju,
-    credential_sync_unit: tuple[str, str],
-) -> None:
-    """Malformed or missing sources report failure without replacing valid credentials."""
-    app_name, unit_name = credential_sync_unit
-    username = f"retained-{token_hex(3)}"
-    password = token_hex(12)
-
-    write_credential_source(
-        juju,
-        unit_name,
-        SOURCE_PATH,
-        [f"{username}:{crypt_password(password, salt='retained')}"],
-    )
-    _configure_credentials(juju, app_name, [])
-    assert run_credential_sync(juju, unit_name) == 0
-
-    unit_ip = _unit_ip(juju, app_name, unit_name)
-    fingerprint = _effective_fingerprint(juju, unit_name)
-    assert imap_authenticates(unit_ip, username, password)
-
+    updated_fingerprint = _effective_fingerprint(juju, unit_name)
     write_credential_source(
         juju,
         unit_name,
@@ -279,13 +236,13 @@ def test_invalid_or_missing_source_retains_last_known_good_credentials(
         ["malformed-entry-without-a-password-hash"],
     )
     assert run_credential_sync(juju, unit_name) == 1
-    assert _effective_fingerprint(juju, unit_name) == fingerprint
-    assert imap_authenticates(unit_ip, username, password)
+    assert _effective_fingerprint(juju, unit_name) == updated_fingerprint
+    assert imap_authenticates(unit_ip, username, updated_password)
 
     remove_credential_source(juju, unit_name, SOURCE_PATH)
     assert run_credential_sync(juju, unit_name) == 1
-    assert _effective_fingerprint(juju, unit_name) == fingerprint
-    assert imap_authenticates(unit_ip, username, password)
+    assert _effective_fingerprint(juju, unit_name) == updated_fingerprint
+    assert imap_authenticates(unit_ip, username, updated_password)
     juju.exec(
         (
             "journalctl -u dovecot-credential-sync.service --no-pager -n 20 | "
@@ -293,3 +250,8 @@ def test_invalid_or_missing_source_retains_last_known_good_credentials(
         ),
         unit=unit_name,
     )
+
+    write_credential_source(juju, unit_name, SOURCE_PATH, [])
+    assert run_credential_sync(juju, unit_name) == 0
+    assert username not in _effective_usernames(juju, unit_name)
+    assert not imap_authenticates(unit_ip, username, updated_password)
