@@ -1,0 +1,20 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version_schema: 2
+
+changes:
+- title: Expanded Dovecot virtual-user test coverage
+  author: Ignavar
+  type: minor
+  description: |
+    Added focused unit and integration coverage for virtual-user authentication, static-user
+    precedence, external credential refreshes, last-known-good fallback, atomic file updates,
+    and independent multi-unit convergence.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/66"
+    related_doc:
+    related_issue:
+  visibility: internal
+  highlight: false
