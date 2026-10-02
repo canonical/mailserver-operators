@@ -18,7 +18,6 @@ from .helpers import (
     assert_queue_empty,
     assert_queue_non_empty,
     cleanup_header_checks,
-    configure_mail_user,
     configure_mail_users,
     reset_mail_users,
     seed_deferred_queue_with_test_mail,
@@ -42,7 +41,7 @@ def test_mail_users_secret_adds_new_user(juju: jubilant.Juju, mail_users_unit: s
     password = token_hex(16)
     unknown_user = f"unknown-user-{token_hex(4)}"
 
-    configure_mail_user(juju, mail_users_unit, user, password)
+    configure_mail_users(juju, mail_users_unit, {user: password})
 
     juju.exec(f"doveadm auth test {user} '{password}'", unit=mail_users_unit)
     with pytest.raises(jubilant.TaskError):
@@ -55,8 +54,8 @@ def test_mail_users_secret_updates_existing_user(juju: jubilant.Juju, mail_users
     old_password = token_hex(16)
     new_password = token_hex(16)
 
-    configure_mail_user(juju, mail_users_unit, user, old_password)
-    configure_mail_user(juju, mail_users_unit, user, new_password)
+    configure_mail_users(juju, mail_users_unit, {user: old_password})
+    configure_mail_users(juju, mail_users_unit, {user: new_password})
 
     juju.exec(f"doveadm auth test {user} '{new_password}'", unit=mail_users_unit)
     with pytest.raises(jubilant.TaskError):
@@ -75,7 +74,7 @@ def test_mail_users_secret_replaces_user_with_multiple_users(
     email_user = f"{new_user}@example.com"
     new_password = token_hex(16)
 
-    configure_mail_user(juju, mail_users_unit, old_user, old_password)
+    configure_mail_users(juju, mail_users_unit, {old_user: old_password})
     configure_mail_users(
         juju,
         mail_users_unit,

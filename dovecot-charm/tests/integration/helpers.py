@@ -37,11 +37,6 @@ DEFAULT_MAIL_USERS = (
 )
 
 
-def configure_mail_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
-    """Replace the mail-users secret with one user."""
-    configure_mail_users(juju, unit_name, {user: password})
-
-
 def configure_mail_users(juju: jubilant.Juju, unit_name: str, users: dict[str, str]) -> None:
     """Replace the mail-users secret and wait for each user to authenticate."""
     entries = []
@@ -66,7 +61,6 @@ def configure_mail_users(juju: jubilant.Juju, unit_name: str, users: dict[str, s
             juju,
             unit_name,
             f"doveadm auth test {user} '{password}' >/dev/null 2>&1",
-            description=f"mail user {user} authentication",
         )
 
 
@@ -83,7 +77,7 @@ def reset_mail_users(juju: jubilant.Juju, unit_name: str) -> None:
 
 def setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
     """Create a virtual user with a Dovecot mailbox containing one test message."""
-    configure_mail_user(juju, unit_name, user, password)
+    configure_mail_users(juju, unit_name, {user: password})
     juju.exec(f"doveadm mailbox create -u {user} INBOX 2>/dev/null || true", unit=unit_name)
     juju.exec(
         (
@@ -100,14 +94,7 @@ def teardown_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str) -> N
     juju.exec(f"rm -rf {MAIL_ROOT}/{user}", unit=unit_name)
 
 
-def _poll(
-    juju: jubilant.Juju,
-    unit_name: str,
-    cmd: str,
-    timeout: int = 60,
-    *,
-    description: str | None = None,
-) -> None:
+def _poll(juju: jubilant.Juju, unit_name: str, cmd: str, timeout: int = 60) -> None:
     """Poll a shell command on the unit until it exits 0, or raise after timeout."""
     deadline = time.monotonic() + timeout
     while True:
@@ -116,7 +103,7 @@ def _poll(
             return
         except (jubilant.CLIError, jubilant.TaskError):
             if time.monotonic() >= deadline:
-                logger.error("Timed out waiting for: %s", description or cmd)
+                logger.error("Timed out waiting for command on %s", unit_name)
                 _log_queue_state(juju, unit_name)
                 raise
             time.sleep(2)
@@ -279,7 +266,7 @@ def setup_mail_user(
     Args:
         secondary: Secondary unit name, or None for single-unit deployments.
     """
-    configure_mail_user(juju, primary, user, password)
+    configure_mail_users(juju, primary, {user: password})
 
 
 def get_last_sync_mtime(juju: jubilant.Juju, unit: str) -> int | None:
