@@ -9,9 +9,8 @@ changes:
   type: breaking
   description: |
     Replaced Linux system-user authentication with a managed Dovecot passwd-file and a stable
-    `vmail:vmail` mailbox identity. Credentials can be supplied through a Juju secret referenced
-    by the `mail-users` configuration or synchronized from an external passwd-file with
-    last-known-good fallback. The `create-mail-user` action was removed.
+    `vmail:vmail` mailbox identity. Credentials are supplied through a Juju secret referenced by
+    the `mail-users` configuration. The `create-mail-user` action was removed.
   urls:
     pr:
       - "https://github.com/canonical/mailserver-operators/pull/65"

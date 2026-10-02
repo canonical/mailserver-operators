@@ -115,28 +115,15 @@ config:
       type: string
     mail-users:
       description: |
-        Juju secret ID containing a YAML list of static credentials in the
+        Juju secret ID containing a YAML list of credentials in the
         "username:{crypt}$<hash>" format under the "users" field. Supports
         crypt identifiers 1, 5, 6, and y. Email-style usernames are normalized
-        to bare names. Static users take precedence.
+        to bare names.
         Example: juju add-secret dovecot-mail-users users='["alice:{crypt}$6$..."]'
         Then run: juju grant-secret dovecot-mail-users dovecot
         And configure: juju config dovecot mail-users=secret:<id>
       default: ""
       type: secret
-    credential-sync-interval:
-      description: |
-        Interval, in minutes, at which the external credentials file is checked
-        for updates. The value must be at least 1.
-      type: int
-      default: 5
-    mail-credentials-path:
-      description: |
-        Absolute path to a passwd-file with one
-        "username:{crypt}$<hash>" entry per line. The last valid file is kept
-        when the source is unavailable or malformed.
-      default: /var/lib/misc/thishost/smtp-relay-users
-      type: string
 actions:
   clear-queue:
     description: Forcibly remove messages from the Postfix mail queue.

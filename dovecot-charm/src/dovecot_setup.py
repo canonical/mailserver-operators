@@ -19,17 +19,11 @@ from charmlibs import systemd
 from ops.model import MaintenanceStatus
 
 from constants import (
-    CREDENTIAL_STATE_DIR,
-    CREDENTIAL_SYNC_MODULE_DIR,
-    CREDENTIAL_SYNC_MODULE_TARGET,
-    CREDENTIAL_SYNC_SCRIPT_TARGET,
-    CREDENTIAL_SYNC_UNIT,
     DOVECOT_AUTH_CONF_TARGET,
     DOVECOT_CONF_TARGET,
     DOVECOT_CONF_TEMPLATE,
     DOVECOT_USERS_FILE,
     ENCRYPTED_MOUNTPOINT,
-    EXTERNAL_USERS_CACHE_FILE,
     MAIL_ROOT,
     PROCMAILRC_TARGET,
     PROCMAILRC_TEMPLATE,
@@ -40,11 +34,9 @@ from constants import (
     VMAIL_USER,
 )
 from credentials import (
-    CACHED_SOURCE_EXIT_CODE,
-    CredentialError,
-    SyncResult,
     atomic_write,
-    read_credentials,
+    parse_credential_entries,
+    render_dovecot_credentials,
 )
 from exceptions import ConfigurationError
 
@@ -141,101 +133,18 @@ class DovecotSetup:
         systemd.service_reload("dovecot", restart_on_failure=True)
         self._charm.unit.status = MaintenanceStatus("Dovecot configuration updated")
 
-    def setup_credentials(self, dovecot_config: DovecotConfig) -> SyncResult:
-        """Install virtual-user support and synchronize authentication credentials."""
-        self._charm.unit.status = MaintenanceStatus("Synchronizing mail credentials")
+    def setup_credentials(self, dovecot_config: DovecotConfig) -> None:
+        """Install virtual-user support and configure authentication credentials."""
+        self._charm.unit.status = MaintenanceStatus("Configuring mail credentials")
         self._ensure_virtual_mail_identity()
-
-        CREDENTIAL_STATE_DIR.mkdir(parents=True, exist_ok=True)
-        os.chown(
-            CREDENTIAL_STATE_DIR,
-            pwd.getpwnam("root").pw_uid,
-            grp.getgrnam("dovecot").gr_gid,
+        credentials = parse_credential_entries(dovecot_config.mail_users)
+        atomic_write(
+            DOVECOT_USERS_FILE,
+            render_dovecot_credentials(credentials),
+            user="root",
+            group="dovecot",
+            mode=0o640,
         )
-        CREDENTIAL_STATE_DIR.chmod(0o750)
-
-        self._install_credential_sync(dovecot_config)
-        systemd.service_resume(f"{CREDENTIAL_SYNC_UNIT}.timer")
-        subprocess.run(
-            ["/usr/bin/systemctl", "restart", f"{CREDENTIAL_SYNC_UNIT}.service"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        status = subprocess.run(
-            [
-                "/usr/bin/systemctl",
-                "show",
-                "--property=ExecMainStatus",
-                "--value",
-                f"{CREDENTIAL_SYNC_UNIT}.service",
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        try:
-            exit_code = int(status.stdout.strip())
-        except ValueError as exc:
-            raise ConfigurationError(
-                "Unable to determine credential synchronization status"
-            ) from exc
-        synchronization_failed = exit_code not in {0, CACHED_SOURCE_EXIT_CODE}
-        if synchronization_failed:
-            try:
-                effective_users = read_credentials(DOVECOT_USERS_FILE)
-            except CredentialError as exc:
-                raise ConfigurationError(
-                    "Credential synchronization failed and no valid effective credentials exist"
-                ) from exc
-            if not effective_users:
-                raise ConfigurationError(
-                    "Credential synchronization failed and no valid effective credentials exist"
-                )
-
-        try:
-            external_user_count = len(read_credentials(EXTERNAL_USERS_CACHE_FILE))
-        except CredentialError:
-            external_user_count = 0
-        self._log_credential_state(
-            static_user_count=len(dovecot_config.mail_users),
-            external_user_count=external_user_count,
-            source_failed=exit_code == CACHED_SOURCE_EXIT_CODE,
-            synchronization_failed=synchronization_failed,
-        )
-        return SyncResult(
-            using_cached_external_users=exit_code == CACHED_SOURCE_EXIT_CODE,
-            external_user_count=external_user_count,
-            synchronization_failed=synchronization_failed,
-        )
-
-    @staticmethod
-    def _log_credential_state(
-        *,
-        static_user_count: int,
-        external_user_count: int,
-        source_failed: bool,
-        synchronization_failed: bool,
-    ) -> None:
-        """Log degraded or partial credential source states."""
-        if synchronization_failed:
-            logger.warning(
-                "Credential synchronization failed; using last valid effective credentials"
-            )
-        elif source_failed and external_user_count:
-            logger.warning(
-                "External credential source is unavailable or invalid; "
-                "using the last valid external credentials"
-            )
-        elif source_failed:
-            logger.warning(
-                "External credential source is unavailable or invalid; "
-                "using static credentials only"
-            )
-        elif static_user_count == 0:
-            logger.warning("No static credentials are configured; using external credentials only")
-        elif external_user_count == 0:
-            logger.warning("No external credentials are available; using static credentials only")
 
     def _ensure_virtual_mail_identity(self) -> None:
         """Create the stable virtual mailbox user and group."""
@@ -322,53 +231,6 @@ class DovecotSetup:
                     f"User {VMAIL_USER!r} uses UID/GID {user.pw_uid}/{user.pw_gid}, "
                     f"expected {VMAIL_UID}/{VMAIL_GID}"
                 )
-
-    def _install_credential_sync(self, dovecot_config: DovecotConfig) -> None:
-        """Install the shared module, rendered runner, and systemd units."""
-        CREDENTIAL_SYNC_MODULE_DIR.mkdir(parents=True, exist_ok=True)
-        atomic_write(
-            CREDENTIAL_SYNC_MODULE_TARGET,
-            Path(__file__).with_name("credentials.py").read_text(),
-            user="root",
-            group="root",
-            mode=0o644,
-        )
-
-        runner_contents = self._charm.jinja.get_template("dovecot-credential-sync.py.tmpl").render(
-            {
-                "cache_path": str(EXTERNAL_USERS_CACHE_FILE),
-                "effective_path": str(DOVECOT_USERS_FILE),
-                "module_dir": str(CREDENTIAL_SYNC_MODULE_DIR),
-                "source_path": dovecot_config.mail_credentials_path,
-                "static_users": dovecot_config.mail_users,
-            }
-        )
-        atomic_write(
-            Path(CREDENTIAL_SYNC_SCRIPT_TARGET),
-            runner_contents,
-            user="root",
-            group="root",
-            mode=0o700,
-        )
-
-        service_template = self._charm.jinja.get_template("dovecot-credential-sync.service.tmpl")
-        timer_template = self._charm.jinja.get_template("dovecot-credential-sync.timer.tmpl")
-        service_path = Path(f"/etc/systemd/system/{CREDENTIAL_SYNC_UNIT}.service")
-        timer_path = Path(f"/etc/systemd/system/{CREDENTIAL_SYNC_UNIT}.timer")
-        service_contents = service_template.render()
-        timer_contents = timer_template.render(
-            {"interval": dovecot_config.credential_sync_interval}
-        )
-        units_changed = (
-            not service_path.exists()
-            or service_path.read_text() != service_contents
-            or not timer_path.exists()
-            or timer_path.read_text() != timer_contents
-        )
-        host.write_file(str(service_path), service_contents, perms=0o644)
-        host.write_file(str(timer_path), timer_contents, perms=0o644)
-        if units_changed:
-            systemd.daemon_reload()
 
     def _validate_dovecot_config(self) -> bool:
         """Run doveconf to validate the written configuration.

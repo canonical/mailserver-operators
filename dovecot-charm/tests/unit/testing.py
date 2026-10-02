@@ -10,7 +10,6 @@ root from the class's __module__ file path, which would be wrong here.
 """
 
 from charm import DovecotCharm
-from credentials import SyncResult
 from dovecot_setup import DovecotSetup
 from ha import HAManager
 from storage import StorageManager
@@ -82,10 +81,7 @@ class NoOpDovecotSetup(DovecotSetup):
         pass
 
     def setup_credentials(self, dovecot_config):
-        return SyncResult(
-            using_cached_external_users=False,
-            external_user_count=1,
-        )
+        pass
 
     def setup_dovecot(self, dovecot_config):
         pass
@@ -182,10 +178,7 @@ class TLSDovecotSetup(DovecotSetup):
         return True
 
     def setup_credentials(self, dovecot_config):
-        return SyncResult(
-            using_cached_external_users=False,
-            external_user_count=1,
-        )
+        pass
 
     def setup_dovecot(self, dovecot_config):
         pass

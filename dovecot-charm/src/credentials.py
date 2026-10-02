@@ -2,33 +2,21 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Validate, merge, and atomically install Dovecot credentials."""
+"""Validate and atomically install Dovecot credentials."""
 
 from __future__ import annotations
 
 import grp
 import os
 import pwd
-import subprocess  # nosec
 import tempfile
-from dataclasses import dataclass
 from pathlib import Path
 
 SUPPORTED_CRYPT_IDENTIFIERS = frozenset({"1", "5", "6", "y"})
-CACHED_SOURCE_EXIT_CODE = 10
 
 
 class CredentialError(Exception):
-    """Base credential synchronization error."""
-
-
-@dataclass(frozen=True)
-class SyncResult:
-    """Result of a credential synchronization."""
-
-    using_cached_external_users: bool
-    external_user_count: int
-    synchronization_failed: bool = False
+    """Base credential validation error."""
 
 
 def is_valid_username(username: str) -> bool:
@@ -86,11 +74,6 @@ def validate_credential(entry: object) -> tuple[str, str]:
     return bare_username, f"{bare_username}:{password_hash}"
 
 
-def parse_credentials(contents: str) -> dict[str, str]:
-    """Parse and validate a complete Dovecot passwd-file."""
-    return parse_credential_entries(contents.splitlines())
-
-
 def parse_credential_entries(entries: list[object]) -> dict[str, str]:
     """Parse and validate complete credential entries."""
     credentials: dict[str, str] = {}
@@ -104,9 +87,9 @@ def parse_credential_entries(entries: list[object]) -> dict[str, str]:
     return credentials
 
 
-def render_credentials(credentials: dict[str, str]) -> str:
-    """Render credentials deterministically with one entry per line."""
-    lines = [credentials[username] for username in sorted(credentials)]
+def render_dovecot_credentials(credentials: dict[str, str]) -> str:
+    """Render credentials with empty userdb columns for Dovecot defaults."""
+    lines = [f"{credentials[username]}::::::" for username in sorted(credentials)]
     return "\n".join(lines) + ("\n" if lines else "")
 
 
@@ -136,73 +119,3 @@ def atomic_write(path: Path, contents: str, *, user: str, group: str, mode: int)
     finally:
         temporary_path.unlink(missing_ok=True)
     return True
-
-
-def read_credentials(path: Path) -> dict[str, str]:
-    """Read and validate a credential file."""
-    try:
-        contents = path.read_text()
-    except OSError as exc:
-        raise CredentialError(f"unable to read credential source: {exc.strerror}") from exc
-    return parse_credentials(contents)
-
-
-def sync_credentials(
-    *,
-    source_path: Path | None,
-    static_users: list[str],
-    cache_path: Path,
-    effective_path: Path,
-) -> SyncResult:
-    """Merge static users over the latest valid external credentials."""
-    static_credentials = parse_credential_entries(static_users)
-    using_cache = False
-
-    if source_path is None:
-        external_users: dict[str, str] = {}
-        atomic_write(cache_path, "", user="root", group="dovecot", mode=0o640)
-    else:
-        try:
-            external_users = read_credentials(source_path)
-        except CredentialError as source_error:
-            try:
-                external_users = read_credentials(cache_path)
-            except CredentialError:
-                if effective_path.exists():
-                    existing_users = read_credentials(effective_path)
-                    if existing_users:
-                        raise CredentialError(
-                            "external credentials are unavailable and no valid cache exists"
-                        ) from source_error
-                external_users = {}
-                atomic_write(cache_path, "", user="root", group="dovecot", mode=0o640)
-            using_cache = True
-        else:
-            atomic_write(
-                cache_path,
-                render_credentials(external_users),
-                user="root",
-                group="dovecot",
-                mode=0o640,
-            )
-
-    effective_users = {**external_users, **static_credentials}
-    changed = atomic_write(
-        effective_path,
-        render_credentials(effective_users),
-        user="root",
-        group="dovecot",
-        mode=0o640,
-    )
-    if changed:
-        subprocess.run(
-            ["/usr/bin/systemctl", "reload", "dovecot"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-
-    return SyncResult(
-        using_cached_external_users=using_cache,
-        external_user_count=len(external_users),
-    )

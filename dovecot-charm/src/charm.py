@@ -221,7 +221,7 @@ class DovecotCharm(CharmBase):
             return
         try:
             self._dovecot_setup.setup_tls(dovecot_config)
-            credential_result = self._dovecot_setup.setup_credentials(dovecot_config)
+            self._dovecot_setup.setup_credentials(dovecot_config)
             self._dovecot_setup.setup_dovecot(dovecot_config)
             self._dovecot_setup.setup_procmail(dovecot_config.mailname)
         except ConfigurationError as e:
@@ -246,21 +246,15 @@ class DovecotCharm(CharmBase):
             self.unit.status = BlockedStatus(str(e))
             return
         self._open_ports()
-        self._set_credential_status(
-            static_user_count=len(dovecot_config.mail_users),
-            external_user_count=credential_result.external_user_count,
-            synchronization_failed=credential_result.synchronization_failed,
-        )
+        self._set_credential_status(user_count=len(dovecot_config.mail_users))
 
     def _set_credential_status(
         self,
         *,
-        static_user_count: int,
-        external_user_count: int,
-        synchronization_failed: bool = False,
+        user_count: int,
     ) -> None:
-        """Set unit status for the available credential sources."""
-        if not synchronization_failed and static_user_count == 0 and external_user_count == 0:
+        """Set unit status based on the configured mail users."""
+        if user_count == 0:
             self.unit.status = BlockedStatus(
                 "No mail users are configured for Dovecot authentication"
             )

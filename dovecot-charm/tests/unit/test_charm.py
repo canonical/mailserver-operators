@@ -49,6 +49,21 @@ def test_reconcile_sets_active_on_success(ctx, base_state):
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
 
 
+def test_reconcile_blocks_without_mail_users(ctx, base_state):
+    """Reconcile must block when the mail-users secret is not configured."""
+    config = {key: value for key, value in base_state.config.items() if key != "mail-users"}
+    state_in = dataclasses.replace(
+        base_state,
+        config=config,
+    )
+
+    state_out = ctx.run(ctx.on.config_changed(), state_in)
+
+    assert state_out.unit_status == ops.BlockedStatus(
+        "No mail users are configured for Dovecot authentication"
+    )
+
+
 def test_reconcile_opens_mail_ports(ctx, base_state):
     """All required SMTP/IMAP/POP3/Sieve/metrics ports must be opened."""
     state_out = ctx.run(ctx.on.config_changed(), base_state)
