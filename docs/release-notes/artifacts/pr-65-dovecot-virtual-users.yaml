@@ -1,0 +1,20 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version_schema: 2
+
+changes:
+- title: Migrated Dovecot authentication to virtual users
+  author: Ignavar
+  type: breaking
+  description: |
+    Replaced Linux system-user authentication with a managed Dovecot passwd-file and a stable
+    `vmail:vmail` mailbox identity. Credentials are supplied through a Juju secret referenced by
+    the `mail-users` configuration. The `create-mail-user` action was removed.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/65"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: true

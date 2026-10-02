@@ -13,6 +13,14 @@ TEMPLATES_DIR = Path(__file__).parent.parent.joinpath("templates")
 # Dovecot config
 DOVECOT_CONF_TEMPLATE = "dovecot.conf.tmpl"
 DOVECOT_CONF_TARGET = "/etc/dovecot/conf.d/99-local-dovecot.conf"
+DOVECOT_AUTH_CONF_TARGET = "/etc/dovecot/conf.d/10-auth.conf"
+DOVECOT_USERS_FILE = Path("/etc/dovecot/users")
+
+# Virtual mailbox identity
+VMAIL_USER = "vmail"
+VMAIL_GROUP = "vmail"
+VMAIL_UID = 5000
+VMAIL_GID = 5000
 
 # Procmail config
 PROCMAILRC_TEMPLATE = "procmailrc.tmpl"

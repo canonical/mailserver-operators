@@ -80,6 +80,9 @@ class NoOpDovecotSetup(DovecotSetup):
     def setup_tls(self, dovecot_config):
         pass
 
+    def setup_credentials(self, dovecot_config):
+        pass
+
     def setup_dovecot(self, dovecot_config):
         pass
 
@@ -173,6 +176,9 @@ class TLSDovecotSetup(DovecotSetup):
 
     def is_installed(self) -> bool:
         return True
+
+    def setup_credentials(self, dovecot_config):
+        pass
 
     def setup_dovecot(self, dovecot_config):
         pass

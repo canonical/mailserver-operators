@@ -4,15 +4,18 @@
 """Shared helper functions for Dovecot integration tests."""
 
 import contextlib
+import hashlib
 import imaplib
 import logging
 import smtplib
 import ssl
+import subprocess  # nosec
 import time
 from email.message import EmailMessage
 
 import jubilant
 import requests
+import yaml
 from tenacity import (
     RetryError,
     Retrying,
@@ -27,17 +30,54 @@ from tenacity import (
 logger = logging.getLogger(__name__)
 
 MAIL_ROOT = "/srv/mail"
+DEFAULT_MAIL_USERS = (
+    "- integration-test:{crypt}$6$mailtest$"
+    ".Ttd195Mryua.fD3ti8Ww4Ff9HyBPRPd83N9dEQeOiGn8BQTokt0DXQp/"
+    "4XCBqLrpUCvw5uZwxNrNSr6Kmq0s0\n"
+)
+
+
+def configure_mail_users(juju: jubilant.Juju, unit_name: str, users: dict[str, str]) -> None:
+    """Replace the mail-users secret and wait for each user to authenticate."""
+    entries = []
+    for user, password in users.items():
+        salt = hashlib.sha256(user.encode()).hexdigest()[:16]
+        password_hash = subprocess.run(
+            ["/usr/bin/openssl", "passwd", "-6", "-salt", salt, password],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        entries.append(f"{user}:{{crypt}}{password_hash}")
+
+    app_name = unit_name.rsplit("/", 1)[0]
+    mail_users_secret = juju.config(app_name)["mail-users"]
+    juju.update_secret(
+        mail_users_secret,
+        {"users": yaml.safe_dump(entries)},
+    )
+    for user, password in users.items():
+        _poll(
+            juju,
+            unit_name,
+            f"doveadm auth test {user} '{password}' >/dev/null 2>&1",
+        )
+
+
+def reset_mail_users(juju: jubilant.Juju, unit_name: str) -> None:
+    """Restore the default integration-test virtual user."""
+    app_name = unit_name.rsplit("/", 1)[0]
+    mail_users_secret = juju.config(app_name)["mail-users"]
+    juju.update_secret(
+        mail_users_secret,
+        {"users": DEFAULT_MAIL_USERS},
+    )
+    _poll(juju, unit_name, "doveadm user integration-test")
 
 
 def setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
-    """Create a system user with a Dovecot mailbox containing one test message."""
-    action_result = juju.run(
-        unit_name, "create-mail-user", params={"username": user, "password": password}
-    )
-    assert action_result.status == "completed", (
-        f"create-mail-user action failed for {user}: status={action_result.status}"
-    )
-    juju.exec(f"install -d -m 0700 -o {user} -g mail {MAIL_ROOT}/{user}", unit=unit_name)
+    """Create a virtual user with a Dovecot mailbox containing one test message."""
+    configure_mail_users(juju, unit_name, {user: password})
     juju.exec(f"doveadm mailbox create -u {user} INBOX 2>/dev/null || true", unit=unit_name)
     juju.exec(
         (
@@ -50,7 +90,7 @@ def setup_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str, passwor
 
 def teardown_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str) -> None:
     """Remove the test user and mail directory created by setup_gdpr_test_user."""
-    juju.exec(f"userdel -r {user} 2>/dev/null || true", unit=unit_name)
+    reset_mail_users(juju, unit_name)
     juju.exec(f"rm -rf {MAIL_ROOT}/{user}", unit=unit_name)
 
 
@@ -63,7 +103,7 @@ def _poll(juju: jubilant.Juju, unit_name: str, cmd: str, timeout: int = 60) -> N
             return
         except (jubilant.CLIError, jubilant.TaskError):
             if time.monotonic() >= deadline:
-                logger.error("Timed out waiting for: %s", cmd)
+                logger.error("Timed out waiting for command on %s", unit_name)
                 _log_queue_state(juju, unit_name)
                 raise
             time.sleep(2)
@@ -221,37 +261,12 @@ def setup_mail_user(
     user: str,
     password: str,
 ):
-    """Create a mail user on primary and optionally secondary unit.
-
-    The system account and password are created on both units so PAM auth works
-    on the secondary after sync.  The Maildir is only initialised on the primary
-    so that dsync can replicate it to the secondary without GUID conflicts.
+    """Configure a virtual user.
 
     Args:
         secondary: Secondary unit name, or None for single-unit deployments.
     """
-    for unit in (u for u in (primary, secondary) if u is not None):
-        juju.exec(
-            (
-                f"id -u {user} >/dev/null 2>&1 || "
-                f"useradd -M -d /srv/mail/{user} -s /usr/sbin/nologin {user}"
-            ),
-            unit=unit,
-        )
-        juju.exec(f"echo '{user}:{password}' | chpasswd", unit=unit)
-        juju.exec(f"usermod -aG mail {user}", unit=unit)
-
-    # Maildir only on primary — dsync creates it on the secondary during the
-    # first sync.  Pre-initialising it on the secondary would give INBOX a
-    # different GUID and cause doveadm backup to fail with
-    # "mailbox_delete failed: INBOX can't be deleted".
-    juju.exec(
-        (
-            f"install -d -m 0700 -o {user} -g mail /srv/mail/{user} && "
-            f"doveadm mailbox create -u {user} INBOX 2>/dev/null || true"
-        ),
-        unit=primary,
-    )
+    configure_mail_users(juju, primary, {user: password})
 
 
 def get_last_sync_mtime(juju: jubilant.Juju, unit: str) -> int | None:

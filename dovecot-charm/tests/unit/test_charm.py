@@ -3,7 +3,6 @@
 
 import dataclasses
 import json
-import secrets
 from pathlib import Path
 from subprocess import CalledProcessError  # nosec
 from unittest.mock import MagicMock, patch
@@ -13,7 +12,8 @@ import ops.testing
 import pytest
 from testing import DovecotTestCharm, NoOpDovecotSetup, NoOpHAManager
 
-from constants import SYNC_TO_SECONDARY_TARGET
+from constants import DOVECOT_USERS_FILE, SYNC_TO_SECONDARY_TARGET
+from dovecot_setup import DovecotSetup
 from exceptions import ConfigurationError, HASetupError
 
 PEER_RELATION_NAME = "replicas"
@@ -48,6 +48,40 @@ def test_reconcile_sets_active_on_success(ctx, base_state):
     """Reconcile must reach ActiveStatus when all setup steps succeed."""
     state_out = ctx.run(ctx.on.config_changed(), base_state)
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
+
+
+def test_reconcile_blocks_without_mail_users(ctx, base_state):
+    """Reconcile must block when the mail-users secret is not configured."""
+    config = {key: value for key, value in base_state.config.items() if key != "mail-users"}
+    state_in = dataclasses.replace(
+        base_state,
+        config=config,
+    )
+
+    state_out = ctx.run(ctx.on.config_changed(), state_in)
+
+    assert state_out.unit_status == ops.BlockedStatus(
+        "No mail users are configured for Dovecot authentication"
+    )
+
+
+def test_setup_credentials_writes_validated_users_to_dovecot_passwd_file():
+    setup = DovecotSetup(MagicMock())
+    config = MagicMock(mail_users=["bob:{crypt}$6$bob-hash", "alice:{crypt}$6$alice-hash"])
+
+    with (
+        patch.object(setup, "_ensure_virtual_mail_identity"),
+        patch("dovecot_setup.atomic_write") as atomic_write,
+    ):
+        setup.setup_credentials(config)
+
+    atomic_write.assert_called_once_with(
+        DOVECOT_USERS_FILE,
+        "alice:{crypt}$6$alice-hash::::::\nbob:{crypt}$6$bob-hash::::::\n",
+        user="root",
+        group="dovecot",
+        mode=0o640,
+    )
 
 
 def test_reconcile_opens_mail_ports(ctx, base_state):
@@ -332,167 +366,6 @@ def test_gdpr_archive_failure(ctx, base_state, tmp_path):
             base_state,
         )
     assert "Failed to archive" in exc_info.value.message
-
-
-def test_create_mail_user_action_creates_primary_and_mailbox_user(ctx, base_state):
-    """create-mail-user creates missing users, groups and passwords."""
-    with (
-        patch(
-            "charm.getpwnam",
-            side_effect=[KeyError("e2euser"), KeyError("e2euser@example.com")],
-        ),
-        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
-        patch("charm.prepare_user_dir") as mock_prepare,
-    ):
-        ctx.run(
-            ctx.on.action(
-                "create-mail-user",
-                params={
-                    "username": "e2euser",
-                    "password": secrets.token_hex(8),
-                    "mailbox-user": "e2euser@example.com",
-                },
-            ),
-            base_state,
-        )
-
-    assert ctx.action_results["status"] == "success"
-    assert ctx.action_results["created"] == "e2euser,e2euser@example.com"
-    assert ctx.action_results["updated"] == ""
-    assert mock_prepare.call_count == 2
-    mock_prepare.assert_any_call("/srv/mail/e2euser", "e2euser")
-    mock_prepare.assert_any_call("/srv/mail/e2euser@example.com", "e2euser@example.com")
-
-
-def test_create_system_user_useradd_flags(ctx, base_state):
-    """create-mail-user calls useradd with nologin shell and no home directory."""
-    with (
-        patch("charm.getpwnam", side_effect=KeyError("e2euser")),
-        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
-        patch("charm.prepare_user_dir"),
-    ):
-        ctx.run(
-            ctx.on.action(
-                "create-mail-user",
-                params={"username": "e2euser", "password": secrets.token_hex(8)},
-            ),
-            base_state,
-        )
-
-    useradd_call = next(c for c in mock_run.call_args_list if "useradd" in c.args[0][0])
-    cmd = useradd_call.args[0]
-    assert "-m" not in cmd
-    assert "--no-create-home" in cmd
-    assert "-s" in cmd
-    assert "/usr/sbin/nologin" in cmd
-    assert "-d" in cmd
-    assert "/srv/mail/e2euser" in cmd
-
-
-def test_create_mail_user_action_updates_existing_user(ctx, base_state):
-    """create-mail-user updates password/group for existing users."""
-    existing_user = object()
-    with (
-        patch("charm.getpwnam", return_value=existing_user),
-        patch("charm.subprocess.run", return_value=MagicMock(returncode=0)),
-        patch("charm.prepare_user_dir") as mock_prepare,
-    ):
-        ctx.run(
-            ctx.on.action(
-                "create-mail-user",
-                params={
-                    "username": "e2euser",
-                    "password": secrets.token_hex(8),
-                },
-            ),
-            base_state,
-        )
-
-    assert ctx.action_results["status"] == "success"
-    assert ctx.action_results["created"] == ""
-    assert ctx.action_results["updated"] == "e2euser"
-    mock_prepare.assert_not_called()
-
-
-def test_create_mail_user_action_requires_username(ctx, base_state):
-    """create-mail-user fails fast when username is missing."""
-    with pytest.raises(ops.testing.ActionFailed) as exc_info:
-        ctx.run(
-            ctx.on.action(
-                "create-mail-user",
-                params={
-                    "username": "",
-                    "password": secrets.token_hex(8),
-                },
-            ),
-            base_state,
-        )
-    assert "username" in exc_info.value.message
-
-
-def test_create_mail_user_action_requires_password(ctx, base_state):
-    """create-mail-user fails fast when password is missing."""
-    with pytest.raises(ops.testing.ActionFailed) as exc_info:
-        ctx.run(
-            ctx.on.action(
-                "create-mail-user",
-                params={
-                    "username": "e2euser",
-                    "password": "",  # nosec B105
-                },
-            ),
-            base_state,
-        )
-    assert "password" in exc_info.value.message
-    assert "required" in exc_info.value.message
-
-
-@pytest.mark.parametrize("password", ["abc:def", "abc\ndef"])
-def test_create_mail_user_action_rejects_unsafe_password(ctx, base_state, password):
-    """create-mail-user fails when password can inject extra chpasswd entries."""
-    with pytest.raises(ops.testing.ActionFailed) as exc_info:
-        ctx.run(
-            ctx.on.action(
-                "create-mail-user",
-                params={"username": "e2euser", "password": password},
-            ),
-            base_state,
-        )
-    assert "password" in exc_info.value.message
-    assert "invalid characters" in exc_info.value.message
-
-
-@pytest.mark.parametrize("username", ["bad/user", "bad\tuser", ".", ".."])
-def test_create_mail_user_action_rejects_unsafe_username(ctx, base_state, username):
-    """create-mail-user fails when username could escape MAIL_ROOT."""
-    with pytest.raises(ops.testing.ActionFailed) as exc_info:
-        ctx.run(
-            ctx.on.action(
-                "create-mail-user",
-                params={"username": username, "password": secrets.token_hex(8)},
-            ),
-            base_state,
-        )
-    assert "username" in exc_info.value.message
-    assert "invalid characters" in exc_info.value.message
-
-
-def test_create_mail_user_action_rejects_unsafe_mailbox_user(ctx, base_state):
-    """create-mail-user fails when mailbox-user contains unsafe characters."""
-    with pytest.raises(ops.testing.ActionFailed) as exc_info:
-        ctx.run(
-            ctx.on.action(
-                "create-mail-user",
-                params={
-                    "username": "e2euser",
-                    "password": secrets.token_hex(8),
-                    "mailbox-user": "bad/user@example.com",
-                },
-            ),
-            base_state,
-        )
-    assert "mailbox-user" in exc_info.value.message
-    assert "invalid characters" in exc_info.value.message
 
 
 def test_gdpr_delete_no_confirm(ctx, base_state):

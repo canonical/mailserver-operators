@@ -5,7 +5,10 @@
 
 from __future__ import annotations
 
+import grp
 import logging
+import os
+import pwd
 import shutil
 import subprocess  # nosec
 import typing
@@ -16,13 +19,24 @@ from charmlibs import systemd
 from ops.model import MaintenanceStatus
 
 from constants import (
+    DOVECOT_AUTH_CONF_TARGET,
     DOVECOT_CONF_TARGET,
     DOVECOT_CONF_TEMPLATE,
+    DOVECOT_USERS_FILE,
     ENCRYPTED_MOUNTPOINT,
     MAIL_ROOT,
     PROCMAILRC_TARGET,
     PROCMAILRC_TEMPLATE,
     TLS_CERT_DIR,
+    VMAIL_GID,
+    VMAIL_GROUP,
+    VMAIL_UID,
+    VMAIL_USER,
+)
+from credentials import (
+    atomic_write,
+    parse_credential_entries,
+    render_dovecot_credentials,
 )
 from exceptions import ConfigurationError
 
@@ -100,7 +114,17 @@ class DovecotSetup:
             "mail_root": MAIL_ROOT,
             "mailname": dovecot_config.mailname,
             "postmaster_address": dovecot_config.postmaster_address,
+            "users_file": str(DOVECOT_USERS_FILE),
+            "vmail_group": VMAIL_GROUP,
+            "vmail_user": VMAIL_USER,
         }
+        # Disable the packaged PAM passdb before defining the virtual-user
+        # passdb and userdb in the charm's local configuration.
+        host.write_file(
+            DOVECOT_AUTH_CONF_TARGET,
+            "",
+            perms=0o644,
+        )
         template = self._charm.jinja.get_template(DOVECOT_CONF_TEMPLATE)
         contents = template.render(template_context)
         host.write_file(DOVECOT_CONF_TARGET, contents, perms=0o644)
@@ -108,6 +132,105 @@ class DovecotSetup:
             raise ConfigurationError("Invalid Dovecot configuration, check logs for details")
         systemd.service_reload("dovecot", restart_on_failure=True)
         self._charm.unit.status = MaintenanceStatus("Dovecot configuration updated")
+
+    def setup_credentials(self, dovecot_config: DovecotConfig) -> None:
+        """Install virtual-user support and configure authentication credentials."""
+        self._charm.unit.status = MaintenanceStatus("Configuring mail credentials")
+        self._ensure_virtual_mail_identity()
+        credentials = parse_credential_entries(dovecot_config.mail_users)
+        atomic_write(
+            DOVECOT_USERS_FILE,
+            render_dovecot_credentials(credentials),
+            user="root",
+            group="dovecot",
+            mode=0o640,
+        )
+
+    def _ensure_virtual_mail_identity(self) -> None:
+        """Create the stable virtual mailbox user and group."""
+        self._ensure_virtual_mail_group()
+        self._ensure_virtual_mail_user()
+
+        mail_root = Path(MAIL_ROOT)
+        mail_root.mkdir(parents=True, exist_ok=True)
+        os.chown(mail_root, VMAIL_UID, VMAIL_GID)
+        mail_root.chmod(0o750)
+
+    @staticmethod
+    def _ensure_virtual_mail_group() -> None:
+        """Create the virtual mailbox group with its stable GID."""
+        try:
+            group = grp.getgrnam(VMAIL_GROUP)
+        except KeyError:
+            try:
+                existing_group = grp.getgrgid(VMAIL_GID)
+            except KeyError:
+                existing_group = None
+            if existing_group:
+                raise ConfigurationError(
+                    f"GID {VMAIL_GID} is already used by group {existing_group.gr_name!r}"
+                )
+            try:
+                subprocess.run(
+                    ["/usr/sbin/groupadd", "--system", "--gid", str(VMAIL_GID), VMAIL_GROUP],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                raise ConfigurationError(
+                    f"Failed to create virtual mail group: {exc.stderr}"
+                ) from exc
+        else:
+            if group.gr_gid != VMAIL_GID:
+                raise ConfigurationError(
+                    f"Group {VMAIL_GROUP!r} uses GID {group.gr_gid}, expected {VMAIL_GID}"
+                )
+
+    @staticmethod
+    def _ensure_virtual_mail_user() -> None:
+        """Create the virtual mailbox user with its stable UID."""
+        try:
+            user = pwd.getpwnam(VMAIL_USER)
+        except KeyError:
+            try:
+                existing_user = pwd.getpwuid(VMAIL_UID)
+            except KeyError:
+                existing_user = None
+            if existing_user:
+                raise ConfigurationError(
+                    f"UID {VMAIL_UID} is already used by user {existing_user.pw_name!r}"
+                )
+            try:
+                subprocess.run(
+                    [
+                        "/usr/sbin/useradd",
+                        "--system",
+                        "--uid",
+                        str(VMAIL_UID),
+                        "--gid",
+                        VMAIL_GROUP,
+                        "--home-dir",
+                        MAIL_ROOT,
+                        "--no-create-home",
+                        "--shell",
+                        "/usr/sbin/nologin",
+                        VMAIL_USER,
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                raise ConfigurationError(
+                    f"Failed to create virtual mail user: {exc.stderr}"
+                ) from exc
+        else:
+            if user.pw_uid != VMAIL_UID or user.pw_gid != VMAIL_GID:
+                raise ConfigurationError(
+                    f"User {VMAIL_USER!r} uses UID/GID {user.pw_uid}/{user.pw_gid}, "
+                    f"expected {VMAIL_UID}/{VMAIL_GID}"
+                )
 
     def _validate_dovecot_config(self) -> bool:
         """Run doveconf to validate the written configuration.
@@ -117,7 +240,7 @@ class DovecotSetup:
         """
         try:
             subprocess.run(
-                ["/usr/bin/doveconf", "-c", DOVECOT_CONF_TARGET],
+                ["/usr/bin/doveconf"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -138,13 +261,8 @@ class DovecotSetup:
         """
         self._charm.unit.status = MaintenanceStatus("Setting up and configuring procmail")
 
-        mail_root = Path(MAIL_ROOT)
-        mail_root.mkdir(parents=True, exist_ok=True)
-        mail_root.chmod(0o1777)
-
-        template_context = {"mail_root": MAIL_ROOT}
         template = self._charm.jinja.get_template(PROCMAILRC_TEMPLATE)
-        contents = template.render(template_context)
+        contents = template.render({"mail_root": MAIL_ROOT})
         host.write_file(PROCMAILRC_TARGET, contents, perms=0o644)
 
         postconf_settings = [
