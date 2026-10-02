@@ -66,6 +66,36 @@ _VALID_BASE = {
 }
 
 
+def test_mail_users_normalizes_email_usernames():
+    config = DovecotConfig(
+        **_VALID_BASE,
+        mail_users="- alice@example.com:{crypt}$6$hash\n- bob:{crypt}$y$hash\n",
+    )
+
+    assert config.mail_users == ["alice:{crypt}$6$hash", "bob:{crypt}$y$hash"]
+
+
+@pytest.mark.parametrize(
+    "entries, error",
+    [
+        pytest.param("not: [valid", "valid YAML", id="malformed-yaml"),
+        pytest.param("alice:{crypt}$6$hash", "YAML list", id="not-a-list"),
+        pytest.param(
+            "- alice:{crypt}$6$hash\n- alice@example.com:{crypt}$6$other",
+            "duplicate normalized username",
+            id="duplicate-normalized-user",
+        ),
+        pytest.param("- bad/user:{crypt}$6$hash", "invalid account name", id="unsafe-username"),
+        pytest.param("- alice", "separator", id="missing-hash"),
+        pytest.param("- alice:{crypt}$2$hash", "unsupported identifier", id="unsupported-crypt"),
+        pytest.param("- alice:plaintext", "unsupported format", id="plaintext-password"),
+    ],
+)
+def test_mail_users_rejects_invalid_secret_entries(entries, error):
+    with pytest.raises(ValidationError, match=error):
+        DovecotConfig(**_VALID_BASE, mail_users=entries)
+
+
 class TestSyncScheduleValidation:
     """Tests for the sync_schedule OnCalendar validator.
 

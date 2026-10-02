@@ -344,11 +344,7 @@ def wait_for_sync_trigger(
 
 
 def seed_backup_test_message(
-    juju: jubilant.Juju,
-    unit_name: str,
-    user: str,
-    password: str,
-    subject: str,
+    juju: jubilant.Juju, unit_name: str, user: str, password: str, subject: str
 ) -> None:
     """Create a mail user with a single message carrying the given subject."""
     setup_gdpr_test_user(juju, unit_name, user, password)

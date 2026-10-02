@@ -12,7 +12,8 @@ import ops.testing
 import pytest
 from testing import DovecotTestCharm, NoOpDovecotSetup, NoOpHAManager
 
-from constants import SYNC_TO_SECONDARY_TARGET
+from constants import DOVECOT_USERS_FILE, SYNC_TO_SECONDARY_TARGET
+from dovecot_setup import DovecotSetup
 from exceptions import ConfigurationError, HASetupError
 
 PEER_RELATION_NAME = "replicas"
@@ -61,6 +62,25 @@ def test_reconcile_blocks_without_mail_users(ctx, base_state):
 
     assert state_out.unit_status == ops.BlockedStatus(
         "No mail users are configured for Dovecot authentication"
+    )
+
+
+def test_setup_credentials_writes_validated_users_to_dovecot_passwd_file():
+    setup = DovecotSetup(MagicMock())
+    config = MagicMock(mail_users=["bob:{crypt}$6$bob-hash", "alice:{crypt}$6$alice-hash"])
+
+    with (
+        patch.object(setup, "_ensure_virtual_mail_identity"),
+        patch("dovecot_setup.atomic_write") as atomic_write,
+    ):
+        setup.setup_credentials(config)
+
+    atomic_write.assert_called_once_with(
+        DOVECOT_USERS_FILE,
+        "alice:{crypt}$6$alice-hash::::::\nbob:{crypt}$6$bob-hash::::::\n",
+        user="root",
+        group="dovecot",
+        mode=0o640,
     )
 
 
