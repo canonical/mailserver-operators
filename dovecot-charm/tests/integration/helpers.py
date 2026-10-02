@@ -38,21 +38,36 @@ DEFAULT_MAIL_USERS = (
 
 
 def configure_mail_user(juju: jubilant.Juju, unit_name: str, user: str, password: str) -> None:
-    """Update the static users secret and wait for reconciliation."""
-    salt = hashlib.sha256(user.encode()).hexdigest()[:16]
-    password_hash = subprocess.run(
-        ["/usr/bin/openssl", "passwd", "-6", "-salt", salt, password],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    """Replace the mail-users secret with one user."""
+    configure_mail_users(juju, unit_name, {user: password})
+
+
+def configure_mail_users(juju: jubilant.Juju, unit_name: str, users: dict[str, str]) -> None:
+    """Replace the mail-users secret and wait for each user to authenticate."""
+    entries = []
+    for user, password in users.items():
+        salt = hashlib.sha256(user.encode()).hexdigest()[:16]
+        password_hash = subprocess.run(
+            ["/usr/bin/openssl", "passwd", "-6", "-salt", salt, password],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        entries.append(f"{user}:{{crypt}}{password_hash}")
+
     app_name = unit_name.rsplit("/", 1)[0]
     mail_users_secret = juju.config(app_name)["mail-users"]
     juju.update_secret(
         mail_users_secret,
-        {"users": yaml.safe_dump([f"{user}:{{crypt}}{password_hash}"])},
+        {"users": yaml.safe_dump(entries)},
     )
-    _poll(juju, unit_name, f"doveadm user {user}")
+    for user, password in users.items():
+        _poll(
+            juju,
+            unit_name,
+            f"doveadm auth test {user} '{password}' >/dev/null 2>&1",
+            description=f"mail user {user} authentication",
+        )
 
 
 def reset_mail_users(juju: jubilant.Juju, unit_name: str) -> None:
@@ -85,7 +100,14 @@ def teardown_gdpr_test_user(juju: jubilant.Juju, unit_name: str, user: str) -> N
     juju.exec(f"rm -rf {MAIL_ROOT}/{user}", unit=unit_name)
 
 
-def _poll(juju: jubilant.Juju, unit_name: str, cmd: str, timeout: int = 60) -> None:
+def _poll(
+    juju: jubilant.Juju,
+    unit_name: str,
+    cmd: str,
+    timeout: int = 60,
+    *,
+    description: str | None = None,
+) -> None:
     """Poll a shell command on the unit until it exits 0, or raise after timeout."""
     deadline = time.monotonic() + timeout
     while True:
@@ -94,7 +116,7 @@ def _poll(juju: jubilant.Juju, unit_name: str, cmd: str, timeout: int = 60) -> N
             return
         except (jubilant.CLIError, jubilant.TaskError):
             if time.monotonic() >= deadline:
-                logger.error("Timed out waiting for: %s", cmd)
+                logger.error("Timed out waiting for: %s", description or cmd)
                 _log_queue_state(juju, unit_name)
                 raise
             time.sleep(2)
