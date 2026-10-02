@@ -26,8 +26,9 @@ passdb {
 }
 
 userdb {
-  driver = static
-  args = uid={{ vmail_user }} gid={{ vmail_group }} home={{ mail_root }}/%n
+  driver = passwd-file
+  args = username_format=%n {{ users_file }}
+  default_fields = uid={{ vmail_user }} gid={{ vmail_group }} home={{ mail_root }}/%n
 }
 
 ssl = required

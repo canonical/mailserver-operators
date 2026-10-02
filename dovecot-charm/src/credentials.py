@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SUPPORTED_CRYPT_IDENTIFIERS = frozenset({"1", "5", "6", "y"})
+CACHED_SOURCE_EXIT_CODE = 10
 
 
 class CredentialError(Exception):
@@ -111,15 +112,17 @@ def render_credentials(credentials: dict[str, str]) -> str:
 
 def atomic_write(path: Path, contents: str, *, user: str, group: str, mode: int) -> bool:
     """Atomically replace a file if its contents changed."""
+    uid = pwd.getpwnam(user).pw_uid
+    gid = grp.getgrnam(group).gr_gid
     try:
         if path.read_text() == contents:
+            os.chown(path, uid, gid)
+            os.chmod(path, mode)
             return False
     except FileNotFoundError:
         pass
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    uid = pwd.getpwnam(user).pw_uid
-    gid = grp.getgrnam(group).gr_gid
     fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary_path = Path(temporary_name)
     try:

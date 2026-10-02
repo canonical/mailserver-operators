@@ -40,6 +40,7 @@ from constants import (
     VMAIL_USER,
 )
 from credentials import (
+    CACHED_SOURCE_EXIT_CODE,
     CredentialError,
     SyncResult,
     atomic_write,
@@ -179,7 +180,7 @@ class DovecotSetup:
             raise ConfigurationError(
                 "Unable to determine credential synchronization status"
             ) from exc
-        synchronization_failed = exit_code not in {0, 1}
+        synchronization_failed = exit_code not in {0, CACHED_SOURCE_EXIT_CODE}
         if synchronization_failed:
             try:
                 effective_users = read_credentials(DOVECOT_USERS_FILE)
@@ -199,11 +200,11 @@ class DovecotSetup:
         self._log_credential_state(
             static_user_count=len(dovecot_config.mail_users),
             external_user_count=external_user_count,
-            source_failed=exit_code == 1,
+            source_failed=exit_code == CACHED_SOURCE_EXIT_CODE,
             synchronization_failed=synchronization_failed,
         )
         return SyncResult(
-            using_cached_external_users=exit_code == 1,
+            using_cached_external_users=exit_code == CACHED_SOURCE_EXIT_CODE,
             external_user_count=external_user_count,
             synchronization_failed=synchronization_failed,
         )
