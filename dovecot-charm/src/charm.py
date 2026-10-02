@@ -85,7 +85,6 @@ class DovecotCharm(CharmBase):
         self.framework.observe(self.on.start, self._reconcile)
         self.framework.observe(self.on.config_changed, self._reconcile)
         self.framework.observe(self.on.secret_changed, self._reconcile)
-        self.framework.observe(self.on.update_status, self._reconcile)
         self.framework.observe(self.on.upgrade_charm, self._on_install)
         self.framework.observe(self.on.clear_queue_action, self._on_clear_queue_action)
         self.framework.observe(self.on.gdpr_archive_action, self._on_gdpr_archive)
