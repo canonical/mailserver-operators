@@ -261,49 +261,26 @@ class DovecotSetup:
         """
         self._charm.unit.status = MaintenanceStatus("Setting up and configuring procmail")
 
-        procmail_changed = self._update_procmail_config()
+        template = self._charm.jinja.get_template(PROCMAILRC_TEMPLATE)
+        contents = template.render({"mail_root": MAIL_ROOT})
+        host.write_file(PROCMAILRC_TARGET, contents, perms=0o644)
+
+        postconf_settings = [
+            'mailbox_command=/usr/bin/procmail -a "$EXTENSION"',
+            f"virtual_mailbox_domains = {mailname}",
+            "virtual_transport = lmtp:unix:private/dovecot-lmtp",
+            "smtpd_reject_unlisted_recipient = no",
+            "inet_interfaces = all",
+        ]
         try:
-            postfix_changed = self._update_postfix_config(mailname)
-            if procmail_changed or postfix_changed:
-                systemd.service_reload("postfix", restart_on_failure=True)
+            for setting in postconf_settings:
+                subprocess.run(
+                    ["/usr/sbin/postconf", "-e", setting],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            systemd.service_reload("postfix", restart_on_failure=True)
         except subprocess.CalledProcessError as e:
             logger.exception(f"Failed to configure postfix: {e}")
             raise ConfigurationError(f"Failed to configure postfix: {e.stderr}") from e
-
-    def _update_procmail_config(self) -> bool:
-        """Write the procmail configuration if it changed."""
-        template = self._charm.jinja.get_template(PROCMAILRC_TEMPLATE)
-        contents = template.render({"mail_root": MAIL_ROOT})
-        path = Path(PROCMAILRC_TARGET)
-        if path.exists() and path.read_text() == contents:
-            return False
-        host.write_file(PROCMAILRC_TARGET, contents, perms=0o644)
-        return True
-
-    def _update_postfix_config(self, mailname: str) -> bool:
-        """Apply changed charm-owned Postfix settings."""
-        settings = {
-            "mailbox_command": '/usr/bin/procmail -a "$EXTENSION"',
-            "virtual_mailbox_domains": mailname,
-            "virtual_transport": "lmtp:unix:private/dovecot-lmtp",
-            "smtpd_reject_unlisted_recipient": "no",
-            "inet_interfaces": "all",
-        }
-        changed = False
-        for key, desired_value in settings.items():
-            current_value = subprocess.run(
-                ["/usr/sbin/postconf", "-h", key],
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout.strip()
-            if current_value == desired_value:
-                continue
-            subprocess.run(
-                ["/usr/sbin/postconf", "-e", f"{key} = {desired_value}"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            changed = True
-        return changed

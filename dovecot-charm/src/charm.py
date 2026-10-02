@@ -185,10 +185,12 @@ class DovecotCharm(CharmBase):
         try:
             return DovecotConfig.from_charm(self)
         except DovecotConfigInvalidError as exc:
-            fields = [".".join(str(part) for part in error["loc"]) for error in exc.errors()]
-            logger.debug("Charm configuration validation failed for: %s", ", ".join(fields))
+            fields = ", ".join(
+                ".".join(str(part) for part in error["loc"]) for error in exc.errors()
+            )
+            logger.error("Configuration validation error in: %s", fields)
             raise ConfigurationError(
-                f"Invalid charm configuration, check logs for details: {', '.join(fields)}"
+                f"Invalid charm configuration, check logs for details: {fields}"
             ) from exc
         except DovecotConfigSecretError as exc:
             logger.exception(f"Secret retrieval error: {exc}")
