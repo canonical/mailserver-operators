@@ -88,6 +88,9 @@ def _deploy_dovecot(
     charm: str,
     tls_charm: str,
     luks_secret: str,
+    *,
+    channel: str | None = None,
+    revision: int | None = None,
 ) -> None:
     """Deploy a Dovecot app and wire up LUKS and TLS."""
     mail_users_secret = _mail_users_secret(juju, app)
@@ -95,6 +98,8 @@ def _deploy_dovecot(
         juju.deploy(
             charm,
             app=app,
+            channel=channel,
+            revision=revision,
             config={
                 "mailname": MAILNAME,
                 "postmaster-address": f"postmaster@{MAILNAME}",
