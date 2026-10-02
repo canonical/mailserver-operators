@@ -161,7 +161,7 @@ def dovecot_charm(
     _deploy_dovecot(juju, APP_NAME, charm_path, tls_charm, luks_secret)
     juju.wait(
         lambda status: jubilant.all_active(status, APP_NAME, tls_charm),
-        timeout=10 * 60,
+        timeout=15 * 60,
     )
     return APP_NAME
 

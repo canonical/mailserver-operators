@@ -15,6 +15,7 @@ import tempfile
 import time
 from email.message import EmailMessage
 from pathlib import Path
+from secrets import token_hex
 
 import jubilant
 import requests
@@ -85,7 +86,7 @@ def write_credential_source(
     credentials: list[str],
 ) -> None:
     """Install a credential source on one unit without exposing its contents in commands."""
-    remote_temporary_path = juju.exec("mktemp", unit=unit_name).stdout.strip()
+    remote_temporary_path = f"/home/ubuntu/.dovecot-credentials-{token_hex(8)}"
     contents = "\n".join(credentials) + ("\n" if credentials else "")
     temporary_path: Path | None = None
     try:
