@@ -17,9 +17,9 @@ dependencies = [
   "charmlibs-apt==1.0.0.post1",
   "charmlibs-snap==1.0.1.post0",
   "charmlibs-systemd==1.0.0.post0",
-  "cosl==1.10.3",
+  "cosl==1.11.2",
   "jinja2==3.1.6",
-  "ops==3.8.2",
+  "ops==3.8.3",
   "pydantic==2.13.5",
 ]
 
@@ -29,7 +29,7 @@ fmt = [
 ]
 lint = [
   "codespell",
-  "jubilant==1.13.0",
+  "jubilant==1.14.0",
   "mypy",
   "pep8-naming",
   "pytest",
