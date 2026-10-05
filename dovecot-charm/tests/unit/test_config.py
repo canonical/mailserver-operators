@@ -69,26 +69,35 @@ _VALID_BASE = {
 def test_mail_users_normalizes_email_usernames():
     config = DovecotConfig(
         **_VALID_BASE,
-        mail_users="- alice@example.com:{crypt}$6$hash\n- bob:{crypt}$y$hash\n",
+        mail_users="- alice@example.com:$6$hash\n- bob:$y$hash\n",
     )
 
-    assert config.mail_users == ["alice:{crypt}$6$hash", "bob:{crypt}$y$hash"]
+    assert config.mail_users == ["alice:$6$hash", "bob:$y$hash"]
+
+
+@pytest.mark.parametrize("identifier", ["1", "5", "6", "y"])
+def test_mail_users_accepts_supported_crypt_identifiers(identifier):
+    entry = f"alice:${identifier}$salt$hash"
+    config = DovecotConfig(**_VALID_BASE, mail_users=[entry])
+
+    assert config.mail_users == [entry]
 
 
 @pytest.mark.parametrize(
     "entries, error",
     [
         pytest.param("not: [valid", "valid YAML", id="malformed-yaml"),
-        pytest.param("alice:{crypt}$6$hash", "YAML list", id="not-a-list"),
+        pytest.param("alice:$6$hash", "YAML list", id="not-a-list"),
         pytest.param(
-            "- alice:{crypt}$6$hash\n- alice@example.com:{crypt}$6$other",
+            "- alice:$6$hash\n- alice@example.com:$6$other",
             "duplicate normalized username",
             id="duplicate-normalized-user",
         ),
-        pytest.param("- bad/user:{crypt}$6$hash", "invalid account name", id="unsafe-username"),
+        pytest.param("- bad/user:$6$hash", "invalid account name", id="unsafe-username"),
         pytest.param("- alice", "separator", id="missing-hash"),
-        pytest.param("- alice:{crypt}$2$hash", "unsupported identifier", id="unsupported-crypt"),
-        pytest.param("- alice:plaintext", "unsupported format", id="plaintext-password"),
+        pytest.param("- alice:$2$hash", "unsupported identifier", id="unsupported-crypt"),
+        pytest.param("- alice:$6$", "unsupported identifier", id="empty-hash"),
+        pytest.param("- alice:$6$hash value", "whitespace", id="hash-whitespace"),
     ],
 )
 def test_mail_users_rejects_invalid_secret_entries(entries, error):

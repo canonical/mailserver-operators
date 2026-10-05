@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 MAIL_ROOT = "/srv/mail"
 DEFAULT_MAIL_USERS = (
-    "- integration-test:{crypt}$6$mailtest$"
+    "- integration-test:$6$mailtest$"
     ".Ttd195Mryua.fD3ti8Ww4Ff9HyBPRPd83N9dEQeOiGn8BQTokt0DXQp/"
     "4XCBqLrpUCvw5uZwxNrNSr6Kmq0s0\n"
 )
@@ -48,7 +48,7 @@ def configure_mail_users(juju: jubilant.Juju, unit_name: str, users: dict[str, s
             capture_output=True,
             text=True,
         ).stdout.strip()
-        entries.append(f"{user}:{{crypt}}{password_hash}")
+        entries.append(f"{user}:{password_hash}")
 
     app_name = unit_name.rsplit("/", 1)[0]
     mail_users_secret = juju.config(app_name)["mail-users"]

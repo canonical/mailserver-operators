@@ -116,10 +116,10 @@ config:
     mail-users:
       description: |
         Juju secret ID containing a YAML list of credentials in the
-        "username:{crypt}$<hash>" format under the "users" field. Supports
+        "username:$<identifier>$<hash>" format under the "users" field. Supports
         crypt identifiers 1, 5, 6, and y. Email-style usernames are normalized
         to bare names.
-        Example: juju add-secret dovecot-mail-users users='["alice:{crypt}$6$..."]'
+        Example: juju add-secret dovecot-mail-users users='["alice:$6$..."]'
         Then run: juju grant-secret dovecot-mail-users dovecot
         And configure: juju config dovecot mail-users=secret:<id>
       default: ""

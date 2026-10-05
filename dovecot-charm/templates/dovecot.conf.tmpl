@@ -22,7 +22,7 @@ auth_username_format = %n
 
 passdb {
   driver = passwd-file
-  args = username_format=%n {{ users_file }}
+  args = scheme=CRYPT username_format=%n {{ users_file }}
 }
 
 userdb {

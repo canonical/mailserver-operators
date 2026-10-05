@@ -54,7 +54,7 @@ def backup_ctx():
 @pytest.fixture
 def base_state():
     luks_secret = ops.testing.Secret({"key": "deadbeef"})
-    mail_users_secret = ops.testing.Secret({"users": "- integration-test:{crypt}$6$hash-value\n"})
+    mail_users_secret = ops.testing.Secret({"users": "- integration-test:$6$hash-value\n"})
     storage = ops.testing.Storage("mail-data")
     return ops.testing.State(
         config={

@@ -67,7 +67,7 @@ def test_reconcile_blocks_without_mail_users(ctx, base_state):
 
 def test_setup_credentials_writes_validated_users_to_dovecot_passwd_file():
     setup = DovecotSetup(MagicMock())
-    config = MagicMock(mail_users=["bob:{crypt}$6$bob-hash", "alice:{crypt}$6$alice-hash"])
+    config = MagicMock(mail_users=["bob:$6$bob-hash", "alice:$6$alice-hash"])
 
     with (
         patch.object(setup, "_ensure_virtual_mail_identity"),
@@ -77,7 +77,7 @@ def test_setup_credentials_writes_validated_users_to_dovecot_passwd_file():
 
     atomic_write.assert_called_once_with(
         DOVECOT_USERS_FILE,
-        "alice:{crypt}$6$alice-hash::::::\nbob:{crypt}$6$bob-hash::::::\n",
+        "alice:$6$alice-hash::::::\nbob:$6$bob-hash::::::\n",
         user="root",
         group="dovecot",
         mode=0o640,

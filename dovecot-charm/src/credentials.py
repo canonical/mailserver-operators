@@ -58,7 +58,7 @@ def validate_credential(entry: object) -> tuple[str, str]:
 
     bare_username = normalize_username(username)
 
-    if not password_hash.lower().startswith("{crypt}$"):
+    if not password_hash.startswith("$"):
         raise CredentialError("credential hash has an unsupported format")
 
     hash_parts = password_hash.split("$", 2)

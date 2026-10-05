@@ -35,7 +35,7 @@ def crypt_dovecot_password(password: str) -> str:
         capture_output=True,
         text=True,
     ).stdout.strip()
-    return f"{{crypt}}{password_hash}"
+    return password_hash
 
 
 def integrate_once(juju: jubilant.Juju, endpoint_a: str, endpoint_b: str) -> None:
