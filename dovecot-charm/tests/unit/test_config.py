@@ -10,7 +10,7 @@ from conftest import MAILNAME
 from ops.model import BlockedStatus
 from pydantic import ValidationError
 
-from dovecot_config import DovecotConfig, DovecotConfigInvalidError
+from dovecot_config import DovecotConfig, DovecotConfigInvalidError, DovecotConfigSecretError
 
 
 @pytest.mark.parametrize(
@@ -47,6 +47,15 @@ def test_config_missing_multiple_blocks(ctx, base_state, config_change, expected
     with patch("charm.DovecotCharm._install"):
         state_out = ctx.run(ctx.on.config_changed(), state_in)
     assert state_out.unit_status == expected_status
+
+
+@pytest.mark.parametrize("content, reason", [({}, "missing"), ({"users": ""}, "empty")])
+def test_read_secret_field_rejects_missing_or_empty_value(content, reason):
+    charm = MagicMock()
+    charm.model.get_secret.return_value.get_content.return_value = content
+
+    with pytest.raises(DovecotConfigSecretError, match=f"'users' field is {reason}"):
+        DovecotConfig._read_secret_field(charm, "secret:test", "mail-users", "users")
 
 
 def test_from_charm_primary_unit_does_not_exist_raises_value_error(base_state):

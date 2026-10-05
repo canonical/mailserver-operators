@@ -212,12 +212,16 @@ class DovecotConfig(BaseModel):
             logger.error(msg)
             raise DovecotConfigSecretError(msg) from e
 
-        value = content.get(field_name, "")
-        if value:
+        value = content.get(field_name)
+        if value is None:
+            reason = "missing"
+        elif not value:
+            reason = "empty"
+        else:
             return value
 
         msg = (
-            f"Secret (id={secret_id}) exists but does not contain a '{field_name}' field. "
+            f"Secret (id={secret_id}): '{field_name}' field is {reason}. "
             f"Ensure the secret was created with: juju add-secret ... {field_name}=<value>"
         )
         logger.error(msg)
