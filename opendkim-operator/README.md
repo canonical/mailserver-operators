@@ -14,7 +14,7 @@ Ubuntu machines, and provides:
 * Signing and key table management
 * Private key storage through Juju secrets
 * Configurable trusted hosts and networks
-* Integration with mail transfer agents through the milter protocol
+* A `milter` relation with mail transfer agents
 * Metrics and alert rules for Canonical Observability Stack
 
 For information about how to deploy, integrate, and manage this charm,
@@ -53,7 +53,7 @@ juju config opendkim mode=sv
 
 ## Integrations
 
-The charm provides these integrations:
+The charm provides these relations:
 
 * `milter` connects OpenDKIM to a mail transfer agent such as the
   Postfix relay charm.
@@ -76,7 +76,6 @@ for endpoint details and supported charms.
 * [Issues](https://github.com/canonical/mailserver-operators/issues)
 * [Contributing](../CONTRIBUTING.md)
 * [Matrix](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
-* [Launchpad](https://launchpad.net/~canonical-is-devops)
 
 ## Licensing and trademark
 

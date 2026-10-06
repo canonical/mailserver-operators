@@ -7,14 +7,14 @@ agent. This charm installs Postfix and configures it as an SMTP relay,
 allowing specific users, hosts, or networks to send mail through it.
 
 This [Juju](https://juju.is/) charm handles one-line deployment,
-configuration, integration, and scaling for Postfix relay, including:
+configuration, relations, and scaling for Postfix relay, including:
 
 * Relaying mail for configured domains, hosts, and networks
 * SMTP authentication and sender restrictions
 * Virtual aliases, transport maps, and header checks
 * Configurable TLS policies, protocols, and cipher suites
 * Connection, message size, and rate limits
-* Integration with mail filters and Canonical Observability Stack
+* Relations with mail filters and Canonical Observability Stack
 
 For information about how to deploy, integrate, and manage this charm,
 see the official
@@ -51,7 +51,7 @@ other available options.
 
 ## Integrations
 
-The charm supports the following integrations:
+The charm supports the following relations:
 
 * `milter` connects mail filters such as the OpenDKIM charm.
 * `certificates` supplies TLS certificates.
@@ -75,7 +75,6 @@ for endpoint details and supported charms.
 * [Issues](https://github.com/canonical/mailserver-operators/issues)
 * [Contributing](../CONTRIBUTING.md)
 * [Matrix](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
-* [Launchpad](https://launchpad.net/~canonical-is-devops)
 
 ## Licensing and trademark
 

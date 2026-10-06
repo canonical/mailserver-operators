@@ -67,7 +67,6 @@ for endpoint details.
 * [Issues](https://github.com/canonical/mailserver-operators/issues)
 * [Contributing](../CONTRIBUTING.md)
 * [Matrix](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
-* [Launchpad](https://launchpad.net/~canonical-is-devops)
 
 ## Licensing and trademark
 
