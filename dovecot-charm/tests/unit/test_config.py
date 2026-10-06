@@ -10,7 +10,7 @@ from conftest import MAILNAME
 from ops.model import BlockedStatus
 from pydantic import ValidationError
 
-from dovecot_config import DovecotConfig, DovecotConfigInvalidError
+from dovecot_config import DovecotConfig, DovecotConfigInvalidError, DovecotConfigSecretError
 
 
 @pytest.mark.parametrize(
@@ -49,9 +49,18 @@ def test_config_missing_multiple_blocks(ctx, base_state, config_change, expected
     assert state_out.unit_status == expected_status
 
 
+@pytest.mark.parametrize("content, reason", [({}, "missing"), ({"users": ""}, "empty")])
+def test_read_secret_field_rejects_missing_or_empty_value(content, reason):
+    charm = MagicMock()
+    charm.model.get_secret.return_value.get_content.return_value = content
+
+    with pytest.raises(DovecotConfigSecretError, match=f"'users' field is {reason}"):
+        DovecotConfig._read_secret_field(charm, "secret:test", "mail-users", "users")
+
+
 def test_from_charm_primary_unit_does_not_exist_raises_value_error(base_state):
     charm = MagicMock()
-    charm.model.config = base_state.config
+    charm.model.config = {**base_state.config, "mail-users": ""}
     charm.model.get_unit.return_value = None
 
     with pytest.raises(DovecotConfigInvalidError, match="Primary unit does not exist"):
@@ -64,6 +73,45 @@ _VALID_BASE = {
     "postmaster_address": f"postmaster@{MAILNAME}",
     "primary_unit": "dovecot/0",
 }
+
+
+def test_mail_users_normalizes_email_usernames():
+    config = DovecotConfig(
+        **_VALID_BASE,
+        mail_users="- alice@example.com:$6$hash\n- bob:$y$hash\n",
+    )
+
+    assert config.mail_users == ["alice:$6$hash", "bob:$y$hash"]
+
+
+@pytest.mark.parametrize("identifier", ["1", "5", "6", "y"])
+def test_mail_users_accepts_supported_crypt_identifiers(identifier):
+    entry = f"alice:${identifier}$salt$hash"
+    config = DovecotConfig(**_VALID_BASE, mail_users=[entry])
+
+    assert config.mail_users == [entry]
+
+
+@pytest.mark.parametrize(
+    "entries, error",
+    [
+        pytest.param("not: [valid", "valid YAML", id="malformed-yaml"),
+        pytest.param("alice:$6$hash", "YAML list", id="not-a-list"),
+        pytest.param(
+            "- alice:$6$hash\n- alice@example.com:$6$other",
+            "duplicate normalized username",
+            id="duplicate-normalized-user",
+        ),
+        pytest.param("- bad/user:$6$hash", "invalid account name", id="unsafe-username"),
+        pytest.param("- alice", "separator", id="missing-hash"),
+        pytest.param("- alice:$2$hash", "unsupported identifier", id="unsupported-crypt"),
+        pytest.param("- alice:$6$", "unsupported identifier", id="empty-hash"),
+        pytest.param("- alice:$6$hash value", "whitespace", id="hash-whitespace"),
+    ],
+)
+def test_mail_users_rejects_invalid_secret_entries(entries, error):
+    with pytest.raises(ValidationError, match=error):
+        DovecotConfig(**_VALID_BASE, mail_users=entries)
 
 
 class TestSyncScheduleValidation:

@@ -113,7 +113,17 @@ config:
         "hourly", "daily"). See systemd.time(7) for full syntax reference.
       default: "daily"
       type: string
-
+    mail-users:
+      description: |
+        Juju secret ID containing a YAML list of credentials in the
+        "username:$<identifier>$<hash>" format under the "users" field. Supports
+        crypt identifiers 1, 5, 6, and y. Email-style usernames are normalized
+        to bare names.
+        Example: juju add-secret dovecot-mail-users users='["alice:$6$..."]'
+        Then run: juju grant-secret dovecot-mail-users dovecot
+        And configure: juju config dovecot mail-users=secret:<id>
+      default: ""
+      type: secret
 actions:
   clear-queue:
     description: Forcibly remove messages from the Postfix mail queue.
@@ -123,22 +133,6 @@ actions:
         description: The queue to clear (deferred or all).
         default: deferred
         enum: [deferred, all]
-  create-mail-user:
-    description: Create or update a local system user for mail access.
-    params:
-      username:
-        type: string
-        description: The Linux system username to create or update.
-      password:
-        type: string
-        description: The password to set for the user.
-      mailbox-user:
-        type: string
-        description: |
-          Optional mailbox-style username (e.g. user@example.com) to also
-          create or update alongside the primary username.
-        default: ""
-    required: [username, password]
   force-sync:
     description: Manually trigger synchronization of mail to the secondary unit.
   gdpr-archive:

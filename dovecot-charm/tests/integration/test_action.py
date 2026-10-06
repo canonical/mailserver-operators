@@ -1,6 +1,7 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import base64
 import logging
 import mailbox
 import os
@@ -10,12 +11,7 @@ import tempfile
 import jubilant
 import pytest
 
-from .conftest import (
-    CREATE_MAIL_USER_TEST_MAILBOX,
-    CREATE_MAIL_USER_TEST_PASSWORD,
-    CREATE_MAIL_USER_TEST_USER,
-    MAIL_ROOT,
-)
+from .conftest import MAIL_ROOT
 from .helpers import (
     assert_deferred_queue_empty,
     assert_queue_empty,
@@ -118,82 +114,14 @@ def test_gdpr_takeout(juju: jubilant.Juju, gdpr_test_user: tuple, export_format:
     if export_format == "mbox":
         with tempfile.TemporaryDirectory() as tmp:
             local_tarball = os.path.join(tmp, "takeout.tar.gz")
-            juju.scp(f"{unit_name}:{takeout_path}", local_tarball)
+            encoded_tarball = juju.exec(
+                f"base64 -w0 {takeout_path}",
+                unit=unit_name,
+            ).stdout
+            with open(local_tarball, "wb") as tarball:
+                tarball.write(base64.b64decode(encoded_tarball))
             with tarfile.open(local_tarball, "r:gz") as tar:
                 tar.extractall(path=tmp, filter="data")
             mbox_path = os.path.join(tmp, username, "INBOX")
             mbox_file = mailbox.mbox(mbox_path)
             assert len(mbox_file) >= 1, f"Expected at least 1 message, got {len(mbox_file)}"
-
-
-def test_create_mail_user_creates_new_user(juju: jubilant.Juju, create_mail_user_cleanup: str):
-    """create-mail-user action creates a new system user in the mail group."""
-    unit_name = create_mail_user_cleanup
-    result = juju.run(
-        unit_name,
-        "create-mail-user",
-        params={
-            "username": CREATE_MAIL_USER_TEST_USER,
-            "password": CREATE_MAIL_USER_TEST_PASSWORD,
-        },
-    )
-    assert result.status == "completed"
-    assert result.results.get("status") == "success"
-    assert CREATE_MAIL_USER_TEST_USER in result.results.get("created", "")
-    assert result.results.get("updated") == ""
-
-    juju.exec(f"id {CREATE_MAIL_USER_TEST_USER}", unit=unit_name)
-    groups_output = juju.exec(f"groups {CREATE_MAIL_USER_TEST_USER}", unit=unit_name)
-    assert "mail" in groups_output.stdout
-
-
-def test_create_mail_user_updates_existing_user(
-    juju: jubilant.Juju, create_mail_user_cleanup: str
-):
-    """create-mail-user action reports updated when the user already exists."""
-    unit_name = create_mail_user_cleanup
-    # Create first
-    juju.run(
-        unit_name,
-        "create-mail-user",
-        params={
-            "username": CREATE_MAIL_USER_TEST_USER,
-            "password": CREATE_MAIL_USER_TEST_PASSWORD,
-        },
-    )
-    # Run again — should report updated, not created
-    result = juju.run(
-        unit_name,
-        "create-mail-user",
-        params={
-            "username": CREATE_MAIL_USER_TEST_USER,
-            "password": CREATE_MAIL_USER_TEST_PASSWORD,
-        },
-    )
-    assert result.status == "completed"
-    assert result.results.get("status") == "success"
-    assert result.results.get("created") == ""
-    assert CREATE_MAIL_USER_TEST_USER in result.results.get("updated", "")
-
-
-def test_create_mail_user_with_mailbox_user(juju: jubilant.Juju, create_mail_user_cleanup: str):
-    """create-mail-user action creates both primary and mailbox-style users."""
-    unit_name = create_mail_user_cleanup
-    result = juju.run(
-        unit_name,
-        "create-mail-user",
-        params={
-            "username": CREATE_MAIL_USER_TEST_USER,
-            "password": CREATE_MAIL_USER_TEST_PASSWORD,
-            "mailbox-user": CREATE_MAIL_USER_TEST_MAILBOX,
-        },
-    )
-    assert result.status == "completed"
-    assert result.results.get("status") == "success"
-    created = result.results.get("created", "")
-    assert CREATE_MAIL_USER_TEST_USER in created
-    assert CREATE_MAIL_USER_TEST_MAILBOX in created
-
-    for user in (CREATE_MAIL_USER_TEST_USER, CREATE_MAIL_USER_TEST_MAILBOX):
-        groups_output = juju.exec(f"groups {user}", unit=unit_name)
-        assert "mail" in groups_output.stdout

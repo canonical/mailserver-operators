@@ -9,6 +9,11 @@ a same-revision round-trip cannot, such as a changed mail mountpoint or a change
 in how the backup encryption key is stored, and confirms a backup is portable
 across independent deployments.
 
+TODO: Both deployments currently use the same built charm artifact. Pin
+DOVECOT_OLD_REVISION to a compatible published virtual-user revision once one is
+available to restore cross-revision coverage without testing migration from
+Linux system users.
+
 Both deployments share the same ``backup-encryption-key`` secret (see the
 ``backup_secret`` fixture) so the newer charm can decrypt the archive produced by
 the older one.
@@ -22,6 +27,7 @@ import jubilant
 
 from . import baculum as baculum_client_module
 from .helpers import (
+    configure_mail_users,
     find_bacula_job,
     mailbox_has_subject,
     seed_backup_test_message,
@@ -71,25 +77,11 @@ def test_backup_restore_across_charm_upgrade(
         )
         assert "manifest.json" in backed_up_files, "manifest was not stored in Bacula"
 
+        # Provision authentication separately; backups restore mail data, not secrets.
+        configure_mail_users(juju, new_unit, {_BACKUP_TEST_USER: password})
         # The charm under test is a fresh deployment; confirm before restoring onto it.
         assert not mailbox_has_subject(juju, new_unit, _BACKUP_TEST_USER, _BACKUP_TEST_SUBJECT), (
             "message unexpectedly present on the freshly deployed charm"
-        )
-
-        # Bacula's restore only restores mail data files under /srv/mail; it does not
-        # (and should not) recreate system user accounts. In a real disaster-recovery
-        # scenario, account provisioning is a separate step from data restore, so
-        # provision the destination account here before restoring onto it. This does
-        # not seed any mail (create-mail-user only creates the system user and mail
-        # directory), so the "message not yet present" assertion above stays valid.
-        action_result = juju.run(
-            new_unit,
-            "create-mail-user",
-            params={"username": _BACKUP_TEST_USER, "password": password},
-        )
-        assert action_result.status == "completed", (
-            f"create-mail-user action failed for {_BACKUP_TEST_USER} on {new_unit}: "
-            f"status={action_result.status}"
         )
 
         logger.info(

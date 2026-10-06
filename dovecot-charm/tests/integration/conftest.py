@@ -11,7 +11,7 @@ import pytest
 from opcli.pytest_plugin import CharmPathList
 
 from . import baculum
-from .helpers import setup_gdpr_test_user, teardown_gdpr_test_user
+from .helpers import DEFAULT_MAIL_USERS, setup_gdpr_test_user, teardown_gdpr_test_user
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,8 @@ BACKUP_SECRET_NAME = "dovecot-backup-key"  # nosec B105  # juju secret label, no
 LUKS_SECRET_NAME = "dovecot-luks-key"  # nosec B105  # juju secret label, not a password
 
 DOVECOT_OLD_APP = "dovecot-old"
-DOVECOT_OLD_REVISION = 17  # revision that supports backup/restore
+# TODO: Pin a published virtual-user revision once one is available.
+DOVECOT_OLD_REVISION: int | None = None
 DOVECOT_OLD_CHANNEL = "latest/edge"
 
 BACULA_FD_CHANNEL = "latest/edge"
@@ -39,11 +40,6 @@ GDPR_ARCHIVE_DIR = f"{MAIL_ROOT}/archives"
 GDPR_TAKEOUT_DIR = f"{MAIL_ROOT}/takeout"
 GDPR_TEST_USER = "gdpr-testuser"
 GDPR_TEST_PASSWORD = secrets.token_hex(16)
-
-# create-mail-user action test constants
-CREATE_MAIL_USER_TEST_USER = "cmu-testuser"
-CREATE_MAIL_USER_TEST_MAILBOX = "cmu-testuser@example.com"
-CREATE_MAIL_USER_TEST_PASSWORD = secrets.token_hex(16)
 
 # S3 backend (microceph radosgw) is provisioned on the runner host by the spread
 # prepare script tests/integration/s3-installation.sh.
@@ -79,6 +75,18 @@ def _integrate(juju: jubilant.Juju, requirer: str, provider: str) -> None:
         logging.info("%s:%s relation already present", requirer, provider)
 
 
+def _mail_users_secret(juju: jubilant.Juju, app: str) -> str:
+    """Return the configured users secret, creating one for a new deployment."""
+    if juju.status().apps.get(app):
+        return str(juju.config(app)["mail-users"])
+    return str(
+        juju.add_secret(
+            f"{app}-mail-users-{secrets.token_hex(4)}",
+            {"users": DEFAULT_MAIL_USERS},
+        )
+    )
+
+
 def _deploy_dovecot(
     juju: jubilant.Juju,
     app: str,
@@ -90,6 +98,7 @@ def _deploy_dovecot(
     revision: int | None = None,
 ) -> None:
     """Deploy a Dovecot app and wire up LUKS and TLS."""
+    mail_users_secret = _mail_users_secret(juju, app)
     if not juju.status().apps.get(app):
         juju.deploy(
             charm,
@@ -101,9 +110,11 @@ def _deploy_dovecot(
                 "postmaster-address": f"postmaster@{MAILNAME}",
                 "primary-unit": f"{app}/0",
                 "luks-auto-provisioning": True,
+                "mail-users": mail_users_secret,
             },
             constraints=DEPLOY_CONSTRAINTS,
         )
+    juju.grant_secret(mail_users_secret, app)
     juju.grant_secret(LUKS_SECRET_NAME, app)
     juju.config(app, {"luks-key": luks_secret})
     _integrate(juju, f"{app}:certificates", f"{tls_charm}:certificates")
@@ -191,6 +202,7 @@ def dovecot_charm_manual_storage(
 ) -> str:
     """Build and deploy the charm."""
     charm_name = f"{APP_NAME}-manual"
+    mail_users_secret = _mail_users_secret(juju, charm_name)
     logging.info(f"Checking for existing application {charm_name}...")
 
     if not juju.status().apps.get(charm_name):
@@ -202,6 +214,7 @@ def dovecot_charm_manual_storage(
             "postmaster-address": f"postmaster@{MAILNAME}",
             "primary-unit": f"{charm_name}/0",
             "luks-auto-provisioning": False,
+            "mail-users": mail_users_secret,
         }
         charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
         juju.deploy(
@@ -210,6 +223,7 @@ def dovecot_charm_manual_storage(
             config=config,
             constraints={"virt-type": "virtual-machine", "mem": "2048M", "cores": "2"},
         )
+    juju.grant_secret(mail_users_secret, charm_name)
     logging.info("Adding TLS relation...")
     _integrate(juju, f"{charm_name}:certificates", f"{tls_charm}:certificates")
 
@@ -262,6 +276,7 @@ def bacula_fd(juju: jubilant.Juju) -> str:
 @pytest.fixture(scope="module")
 def dovecot_old(
     juju: jubilant.Juju,
+    request: pytest.FixtureRequest,
     tls_charm: str,
     bacula_fd_old: str,
     backup_secret: str,
@@ -269,17 +284,19 @@ def dovecot_old(
     bacula_server: str,
 ) -> str:
     """Deploy a published, backup-capable revision of the Dovecot charm."""
+    charm = _get_charm_path(request) if DOVECOT_OLD_REVISION is None else "dovecot"
+    if DOVECOT_OLD_REVISION is None and not charm.startswith(("./", "/")):
+        charm = f"./{charm}"
     _deploy_dovecot(
         juju,
         DOVECOT_OLD_APP,
-        "dovecot",
+        charm,
         tls_charm,
         luks_secret,
         channel=DOVECOT_OLD_CHANNEL,
         revision=DOVECOT_OLD_REVISION,
     )
     _attach_backup(juju, DOVECOT_OLD_APP, bacula_fd_old, backup_secret)
-
     juju.wait(
         lambda status: jubilant.all_active(status, DOVECOT_OLD_APP, tls_charm, bacula_fd_old),
         error=jubilant.any_error,
@@ -382,6 +399,7 @@ def dovecot_charm_dual_unit(
     """Build and deploy the charm."""
     logging.info(f"Checking for existing application {APP_NAME}...")
     luks_key = secrets.token_hex(16)
+    mail_users_secret = _mail_users_secret(juju, APP_NAME)
 
     if not juju.status().apps.get(APP_NAME):
         logging.info(f"Application {APP_NAME} not found, proceeding with deployment.")
@@ -396,6 +414,7 @@ def dovecot_charm_dual_unit(
             "primary-unit": f"{APP_NAME}/0",
             "luks-auto-provisioning": True,
             "luks-key": secret_id,
+            "mail-users": mail_users_secret,
         }
         charm_path = charm if charm.startswith(("./", "/")) else f"./{charm}"
         # Deploy the primary unit only; the second unit is added after the primary
@@ -408,6 +427,7 @@ def dovecot_charm_dual_unit(
             trust=True,
         )
 
+    juju.grant_secret(mail_users_secret, APP_NAME)
     juju.cli("grant-secret", "dovecot-luks-key", APP_NAME)
     logging.info("Adding TLS relation...")
     _integrate(juju, f"{APP_NAME}:certificates", f"{tls_charm}:certificates")
@@ -443,12 +463,3 @@ def gdpr_test_user(juju: jubilant.Juju, dovecot_charm: str):
     juju.exec(f"rm -f {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}.tar.gz", unit=unit_name)
     juju.exec(f"rm -rf {GDPR_ARCHIVE_DIR}/{GDPR_TEST_USER}", unit=unit_name)
     juju.exec(f"rm -f {GDPR_TAKEOUT_DIR}/{GDPR_TEST_USER}-takeout.tar.gz", unit=unit_name)
-
-
-@pytest.fixture()
-def create_mail_user_cleanup(juju: jubilant.Juju, dovecot_charm: str):
-    """Tear down users created by create-mail-user tests."""
-    unit_name = f"{dovecot_charm}/0"
-    yield unit_name
-    for user in (CREATE_MAIL_USER_TEST_USER, CREATE_MAIL_USER_TEST_MAILBOX):
-        juju.exec(f"userdel -r {user} 2>/dev/null || true", unit=unit_name)
