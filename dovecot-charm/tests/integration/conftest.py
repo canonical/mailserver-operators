@@ -293,7 +293,7 @@ def dovecot_old(
         charm,
         tls_charm,
         luks_secret,
-        channel=DOVECOT_OLD_CHANNEL if DOVECOT_OLD_REVISION is not None else None,
+        channel=DOVECOT_OLD_CHANNEL,
         revision=DOVECOT_OLD_REVISION,
     )
     _attach_backup(juju, DOVECOT_OLD_APP, bacula_fd_old, backup_secret)
