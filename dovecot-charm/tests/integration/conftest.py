@@ -25,7 +25,7 @@ BACKUP_SECRET_NAME = "dovecot-backup-key"  # nosec B105  # juju secret label, no
 LUKS_SECRET_NAME = "dovecot-luks-key"  # nosec B105  # juju secret label, not a password
 
 DOVECOT_OLD_APP = "dovecot-old"
-# Pin a published virtual-user revision here once one is available.
+# TODO: Pin a published virtual-user revision once one is available.
 DOVECOT_OLD_REVISION: int | None = None
 DOVECOT_OLD_CHANNEL = "latest/edge"
 
@@ -283,7 +283,7 @@ def dovecot_old(
     luks_secret: str,
     bacula_server: str,
 ) -> str:
-    """Deploy the built charm, or a pinned compatible published revision."""
+    """Deploy a published, backup-capable revision of the Dovecot charm."""
     charm = _get_charm_path(request) if DOVECOT_OLD_REVISION is None else "dovecot"
     if DOVECOT_OLD_REVISION is None and not charm.startswith(("./", "/")):
         charm = f"./{charm}"
