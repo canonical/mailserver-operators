@@ -1,78 +1,69 @@
-# Dovecot charm
+# Mail server operators
 
-A [Juju](https://juju.is/) charm that deploys and manages [Dovecot](https://www.dovecot.org/) as an IMAP/POP3 mail server on Ubuntu VMs. Intended for Canonical IS team use.
+This repository contains a collection of operators for deploying and
+managing mail services in the Juju ecosystem. Its goal is to provide
+building blocks for operating mail servers with Juju.
 
-Like any Juju charm, this charm supports one-line deployment, configuration, integration, scaling, and more. For the Dovecot charm, this includes:
+This repository contains the source code for the following mail related
+charms:
 
-* Multi-protocol mail server: IMAP, IMAPS, POP3, POP3S, Sieve, and LMTP
-* TLS/SSL encryption with configurable cipher suites
-* Mail filtering with Sieve and Procmail
-* Multi-unit deployments with peer-relation-based mail synchronisation
-* Scheduled mail syncing between primary and secondary units using cron
-* Postfix mail queue management using the `clear-queue` action
+1. `dovecot`: A machine charm that deploys and manages Dovecot as an
+   IMAP and POP3 mail server. See the
+   [Dovecot README](dovecot-charm/README.md) for more information.
+2. `opendkim`: A machine charm that deploys and manages OpenDKIM for
+   signing and verifying email with DomainKeys Identified Mail (DKIM).
+   See the [OpenDKIM README](opendkim-operator/README.md) for more
+   information.
+3. `postfix-relay`: A machine charm that deploys and manages a Postfix
+   SMTP relay server. See the
+   [Postfix relay README](postfix-relay-operator/README.md) for more
+   information.
+4. `postfix-relay-configurator`: A subordinate charm that manages
+   configuration for the Postfix relay charm. See the
+   [Postfix relay configuration README](postfix-relay-configurator-operator/README.md)
+   for more information.
 
-For information about how to deploy, integrate, and manage this charm, see the [Dovecot charm documentation](https://github.com/canonical/mailserver-operators/tree/main/docs).
+The repository also holds the snapped workload used by the OpenDKIM
+charm:
 
-## Get started
-
-See the [basic deployment tutorial](https://github.com/canonical/mailserver-operators/blob/main/docs/tutorial/basic-deployment.rst) for a step-by-step walkthrough.
-
-### Deploy
-
-```bash
-juju deploy dovecot \
-  --config mailname=mail.example.com \
-  --config postmaster-address=postmaster@example.com \
-  --config primary-unit=dovecot/0
-```
-
-### Basic operations
-
-**Clear stuck mail from the Postfix queue:**
-
-```bash
-# Clear only deferred messages (default)
-juju run dovecot/0 clear-queue
-
-# Clear all queued messages
-juju run dovecot/0 clear-queue queue=all
-```
-
-**Adjust the mail sync schedule** (default: every 30 minutes):
-
-```bash
-juju config dovecot sync-schedule="*/15 * * * *"
-```
-
-See [`charmcraft.yaml`](dovecot-charm/charmcraft.yaml) for all available configuration options.
-
-## Integrations
-
-The charm uses a **`replicas`** peer relation to synchronise mail between units in a multi-unit deployment. The primary unit is designated with the `primary-unit` configuration option.
-
-## Learn more
-
-* [Dovecot charm documentation](https://github.com/canonical/mailserver-operators/tree/main/docs)
-* [Dovecot upstream documentation](https://doc.dovecot.org/)
-* [Dovecot official webpage](https://www.dovecot.org/)
-* [Troubleshooting](https://github.com/canonical/mailserver-operators/blob/main/docs/how-to/troubleshoot.rst)
+1. `opendkim`: A snap containing the OpenDKIM email signing and
+   verification milter.
 
 ## Charmhub and Snapcraft
 
-| Name | Listing |
-|------|---------|
-| `dovecot` | https://charmhub.io/dovecot |
-| `opendkim` | https://charmhub.io/opendkim |
-| `postfix-relay` | https://charmhub.io/postfix-relay |
+| Name                         | Listing                                        |
+| ---------------------------- | ---------------------------------------------- |
+| `dovecot`                    | https://charmhub.io/dovecot                    |
+| `opendkim`                   | https://charmhub.io/opendkim                   |
+| `postfix-relay`              | https://charmhub.io/postfix-relay              |
 | `postfix-relay-configurator` | https://charmhub.io/postfix-relay-configurator |
-| `opendkim` | https://snapcraft.io/opendkim |
+| `opendkim`                   | https://snapcraft.io/opendkim                  |
+
+## Documentation
+
+Our documentation is stored in the [`docs`](docs) directory. It uses
+the [Diátaxis](https://diataxis.fr/) approach to organise tutorials,
+how-to guides, reference material, and explanations.
+
+You may open a pull request with your documentation changes, or you can
+[file a bug](https://github.com/canonical/mailserver-operators/issues)
+to provide constructive feedback or suggestions.
+
+GitHub runs automatic checks on the documentation to verify spelling,
+links, and style guide compliance. You can run the same checks locally:
+
+```bash
+make docs-check
+```
 
 ## Project and community
 
-* [Issues](https://github.com/canonical/mailserver-operators/issues)
-* [Contributing](CONTRIBUTING.md)
-* [Matrix](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
+The mail server operators project is a member of the Ubuntu family. It
+is an open source project that warmly welcomes community projects,
+contributions, suggestions, fixes, and constructive feedback.
 
-## License
-
-The Dovecot charm is free software, distributed under the Apache Software License, version 2.0. See [LICENSE](LICENSE) for more details.
+- [Code of conduct](https://ubuntu.com/community/code-of-conduct)
+- [Get support](https://discourse.charmhub.io/)
+- [Issues](https://github.com/canonical/mailserver-operators/issues)
+- [Matrix](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
+- [Contribute](https://github.com/canonical/mailserver-operators/blob/main/CONTRIBUTING.md)
