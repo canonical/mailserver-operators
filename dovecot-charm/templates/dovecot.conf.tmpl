@@ -20,6 +20,17 @@ auth_verbose_passwords = no
 # over LMTP, but logins entered as user@domain will also be treated as user.
 auth_username_format = %n
 
+passdb {
+  driver = passwd-file
+  args = scheme=CRYPT username_format=%n {{ users_file }}
+}
+
+userdb {
+  driver = passwd-file
+  args = username_format=%n {{ users_file }}
+  default_fields = uid={{ vmail_user }} gid={{ vmail_group }} home={{ mail_root }}/%n
+}
+
 ssl = required
 ssl_cert = </etc/dovecot/private/{{ mailname }}.pem
 ssl_key = </etc/dovecot/private/{{ mailname }}.key

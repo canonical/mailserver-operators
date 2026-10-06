@@ -6,6 +6,7 @@
 import base64
 import hashlib
 import logging
+import subprocess  # nosec
 
 import jubilant
 
@@ -24,6 +25,17 @@ def sha512_dovecot_password(password: str) -> str:
     salt = b"mailtest"
     digest = hashlib.sha512(password.encode() + salt).digest()
     return "{SSHA512}" + base64.b64encode(digest + salt).decode()
+
+
+def crypt_dovecot_password(password: str) -> str:
+    """Generate a SHA-512 crypt hash for Dovecot's passwd-file."""
+    password_hash = subprocess.run(
+        ["/usr/bin/openssl", "passwd", "-6", "-salt", "mailstack", password],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return password_hash
 
 
 def integrate_once(juju: jubilant.Juju, endpoint_a: str, endpoint_b: str) -> None:

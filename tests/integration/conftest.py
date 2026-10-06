@@ -35,7 +35,7 @@ import pytest
 import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from helpers import integrate_once, sha512_dovecot_password
+from helpers import crypt_dovecot_password, integrate_once, sha512_dovecot_password
 from opcli.models.artifacts_build import ArtifactsGenerated
 from opcli.pytest_plugin import CharmPathList, artifacts_root_from_yaml_path
 
@@ -305,14 +305,20 @@ def deploy_dovecot_fixture(
 ) -> str:
     """Deploy dovecot and wire up TLS."""
     luks_key = token_hex(16)
+    mail_users = yaml.dump([f"{TEST_SMTP_USER}:{crypt_dovecot_password(TEST_SMTP_PASSWORD)}"])
 
     if not juju.status().apps.get(DOVECOT_APP):
         secret_id = juju.cli("add-secret", "dovecot-luks-key", f"key={luks_key}").strip()
+        mail_users_secret = juju.add_secret(
+            f"dovecot-mail-users-{token_hex(4)}",
+            {"users": mail_users},
+        )
         juju.deploy(
             _get_charm_path(request, "dovecot"),
             app=DOVECOT_APP,
             config={
                 "mailname": TEST_DOMAIN,
+                "mail-users": mail_users_secret,
                 "postmaster-address": f"postmaster@{TEST_DOMAIN}",
                 "primary-unit": f"{DOVECOT_APP}/0",
                 "luks-auto-provisioning": True,
@@ -321,6 +327,9 @@ def deploy_dovecot_fixture(
             constraints={"virt-type": "virtual-machine"},
             trust=True,
         )
+    else:
+        mail_users_secret = juju.config(DOVECOT_APP)["mail-users"]
+    juju.grant_secret(mail_users_secret, DOVECOT_APP)
     juju.cli("grant-secret", "dovecot-luks-key", DOVECOT_APP)
 
     # Relate to TLS provider if not already related.

@@ -29,18 +29,6 @@ def test_e2e(juju: jubilant.Juju, mail_stack: Dict[str, str]) -> None:
     relay_ip = mail_stack["postfix_relay_ip"]
     dovecot_ip = mail_stack["dovecot_ip"]
 
-    dovecot_unit = f"{mail_stack['dovecot_app']}/0"
-    action_result = juju.run(
-        dovecot_unit,
-        "create-mail-user",
-        params={
-            "username": TEST_SMTP_USER,
-            "password": TEST_SMTP_PASSWORD,
-            "mailbox-user": MAILBOX_USER,
-        },
-    )
-    assert action_result.status == "completed"
-
     smtp_auth_users = yaml.dump(
         [
             f"{TEST_SMTP_USER}:{_sha512_dovecot(TEST_SMTP_PASSWORD)}",
@@ -83,7 +71,7 @@ def test_e2e(juju: jubilant.Juju, mail_stack: Dict[str, str]) -> None:
         server.sendmail(from_addr, [to_addr], message)
 
     raw_message = _wait_for_subject(dovecot_ip, MAILBOX_USER, TEST_SMTP_PASSWORD, subject)
-    # Dovecot's auth_username_format=%n strips the domain before system-user lookup.
+    # Dovecot's auth_username_format=%n maps the address to the bare virtual user.
     parsed = email.message_from_bytes(raw_message)
 
     assert parsed["Subject"] == subject

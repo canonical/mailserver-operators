@@ -4,6 +4,7 @@
 
 """Helpful tools for the charm."""
 
+import grp
 import logging
 import os
 import pwd
@@ -26,20 +27,13 @@ def configure_file(path, entry):
     logger.info(f"{path} configured")
 
 
-def prepare_user_dir(dirpath: str, username: str) -> None:
-    """Recreate dirpath as a fresh, empty directory owned by the given system user.
-
-    Args:
-        dirpath: path to create (any existing content is removed first).
-        username: system user that should own the directory.
-
-    Raises:
-        KeyError: if username does not exist on the system.
-    """
+def prepare_user_dir(dirpath: str, username: str, groupname: str | None = None) -> None:
+    """Recreate a directory owned by the specified user and group."""
     pw = pwd.getpwnam(username)
+    gid = grp.getgrnam(groupname).gr_gid if groupname else pw.pw_gid
     shutil.rmtree(dirpath, ignore_errors=True)
     os.makedirs(dirpath, mode=0o700)
-    os.chown(dirpath, pw.pw_uid, pw.pw_gid)
+    os.chown(dirpath, pw.pw_uid, gid)
 
 
 def create_tarball(tar_path: str, base_dir: str, arcname: str) -> None:

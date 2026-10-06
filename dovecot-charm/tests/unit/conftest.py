@@ -54,6 +54,7 @@ def backup_ctx():
 @pytest.fixture
 def base_state():
     luks_secret = ops.testing.Secret({"key": "deadbeef"})
+    mail_users_secret = ops.testing.Secret({"users": "- integration-test:$6$hash-value\n"})
     storage = ops.testing.Storage("mail-data")
     return ops.testing.State(
         config={
@@ -62,7 +63,8 @@ def base_state():
             "primary-unit": "dovecot/0",
             "luks-auto-provisioning": True,
             "luks-key": luks_secret.id,
+            "mail-users": mail_users_secret.id,
         },
-        secrets={luks_secret},
+        secrets={luks_secret, mail_users_secret},
         storages={storage},
     )
