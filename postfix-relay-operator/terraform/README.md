@@ -3,8 +3,7 @@
 This module deploys the `postfix-relay` principal machine charm on Juju.
 
 It inherits the Juju provider from its caller and requires Terraform `>= 1.12, < 2.0` and Juju
-provider `> 1.0.0, < 2.0.0`. The target model must provide 64-bit (AMD64) Ubuntu 24.04 LTS
-machine capacity.
+provider `> 1.0.0, < 2.0.0`. The target model must provide Ubuntu 24.04 AMD64 machine capacity.
 
 ## Files
 
@@ -23,7 +22,7 @@ machine capacity.
 | `config` | `map(string)` | `{}` | Charm configuration. |
 | `constraints` | `string` | `null` | Juju constraints. |
 | `endpoint_bindings` | `set(object({ endpoint = optional(string), space = string }))` | `[]` | Endpoint bindings. |
-| `expose` | `object({ cidrs = optional(string), endpoints = optional(string), spaces = optional(string) })` | `{}` | Juju exposure restricted by CIDR ranges, endpoints, or spaces; `{}` exposes with no restrictions. Pass `null` to not expose. |
+| `expose` | `object({ cidrs = optional(string), endpoints = optional(string), spaces = optional(string) })` | `{}` | Juju exposure restricted by CIDRs, endpoints, or spaces; `{}` exposes with no restrictions. Pass `null` to not expose. |
 | `machines` | `set(string)` | `[]` | Target machine IDs for units. |
 | `model_uuid` | `string` | required | Juju model UUID. |
 | `resources` | `map(string)` | `{}` | Charm resources. |

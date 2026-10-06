@@ -45,7 +45,7 @@ For storage:
 - `config` - charm config map
 - `constraints` - Juju constraints, defaults to `null`
 - `endpoint_bindings` - optional endpoint bindings
-- `expose` - optional Juju exposure restricted by CIDR ranges, endpoints, or spaces; defaults to `{}` (exposed with no restrictions)
+- `expose` - optional Juju exposure restricted by CIDRs, endpoints, or spaces; defaults to `{}` (exposed with no restrictions)
 - `machines` - optional machine IDs for placement, defaults to `[]`
 - `model_uuid` - required Juju model UUID
 - `resources` - charm resources

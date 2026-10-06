@@ -10,7 +10,7 @@ provider `> 1.0.0, < 2.0.0`.
 
 ## Prerequisites
 
-- A machine-backed Juju model with 64-bit (AMD64) Ubuntu 24.04 LTS capacity.
+- A machine-backed Juju model with Ubuntu 24.04 AMD64 capacity.
 - A `milter` relation.
 - Valid `signingtable` and `keytable` configuration.
 - A granted Juju secret referenced by `private-keys`. Keep the private key in an encrypted,
