@@ -247,15 +247,7 @@ class DovecotCharm(CharmBase):
             self.unit.status = BlockedStatus(str(e))
             return
         self._open_ports()
-        self._set_credential_status(user_count=len(dovecot_config.mail_users))
-
-    def _set_credential_status(
-        self,
-        *,
-        user_count: int,
-    ) -> None:
-        """Set unit status based on the configured mail users."""
-        if user_count == 0:
+        if not dovecot_config.mail_users:
             self.unit.status = BlockedStatus(
                 "No mail users are configured for Dovecot authentication"
             )

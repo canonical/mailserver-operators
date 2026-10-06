@@ -24,6 +24,11 @@ DEPLOY_CONSTRAINTS = {"virt-type": "virtual-machine", "mem": "2048M", "cores": "
 BACKUP_SECRET_NAME = "dovecot-backup-key"  # nosec B105  # juju secret label, not a password
 LUKS_SECRET_NAME = "dovecot-luks-key"  # nosec B105  # juju secret label, not a password
 
+DOVECOT_OLD_APP = "dovecot-old"
+# Pin a published virtual-user revision here once one is available.
+DOVECOT_OLD_REVISION: int | None = None
+DOVECOT_OLD_CHANNEL = "latest/edge"
+
 BACULA_FD_CHANNEL = "latest/edge"
 BACULA_FD_REVISION = 24
 BACULA_SERVER_CHANNEL = "latest/edge"
@@ -268,6 +273,38 @@ def bacula_fd(juju: jubilant.Juju) -> str:
     return fd_app
 
 
+@pytest.fixture(scope="module")
+def dovecot_old(
+    juju: jubilant.Juju,
+    request: pytest.FixtureRequest,
+    tls_charm: str,
+    bacula_fd_old: str,
+    backup_secret: str,
+    luks_secret: str,
+    bacula_server: str,
+) -> str:
+    """Deploy the built charm, or a pinned compatible published revision."""
+    charm = _get_charm_path(request) if DOVECOT_OLD_REVISION is None else "dovecot"
+    if DOVECOT_OLD_REVISION is None and not charm.startswith(("./", "/")):
+        charm = f"./{charm}"
+    _deploy_dovecot(
+        juju,
+        DOVECOT_OLD_APP,
+        charm,
+        tls_charm,
+        luks_secret,
+        channel=DOVECOT_OLD_CHANNEL if DOVECOT_OLD_REVISION is not None else None,
+        revision=DOVECOT_OLD_REVISION,
+    )
+    _attach_backup(juju, DOVECOT_OLD_APP, bacula_fd_old, backup_secret)
+    juju.wait(
+        lambda status: jubilant.all_active(status, DOVECOT_OLD_APP, tls_charm, bacula_fd_old),
+        error=jubilant.any_error,
+        timeout=20 * 60,
+    )
+    return DOVECOT_OLD_APP
+
+
 @pytest.fixture(scope="session")
 def s3_address(pytestconfig: pytest.Config) -> str:
     """Provide the S3 service IP address used in integration tests.
@@ -323,6 +360,19 @@ def bacula_server(juju: jubilant.Juju, bacula_fd: str, s3_address: str) -> str:
         timeout=20 * 60,
     )
     return server_app
+
+
+@pytest.fixture(scope="module")
+def bacula_fd_old(juju: jubilant.Juju, bacula_server: str) -> str:
+    """Deploy a second bacula-fd app dedicated to dovecot_old."""
+    fd_app = "bacula-fd-old"
+    if fd_app not in juju.status().apps:
+        logging.info("Deploying %s...", fd_app)
+        juju.deploy(
+            "bacula-fd", app=fd_app, channel=BACULA_FD_CHANNEL, revision=BACULA_FD_REVISION
+        )
+    _integrate(juju, bacula_server, fd_app)
+    return fd_app
 
 
 @pytest.fixture(scope="module", name="baculum")
