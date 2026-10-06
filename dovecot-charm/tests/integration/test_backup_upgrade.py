@@ -1,14 +1,22 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Back up on one deployment and restore onto the charm under test.
+"""Backup on a published revision, restore onto the charm under test.
 
-Both deployments currently use the same built charm artifact. Once a compatible
-virtual-user revision is published, DOVECOT_OLD_REVISION can be pinned to restore
-cross-revision coverage without testing migration from Linux system users.
+This backs up on an older, published revision of the charm, then restores onto a
+separately deployed instance of the charm under test. It catches regressions that
+a same-revision round-trip cannot, such as a changed mail mountpoint or a change
+in how the backup encryption key is stored, and confirms a backup is portable
+across independent deployments.
+
+TODO: Both deployments currently use the same built charm artifact. Pin
+DOVECOT_OLD_REVISION to a compatible published virtual-user revision once one is
+available to restore cross-revision coverage without testing migration from
+Linux system users.
 
 Both deployments share the same ``backup-encryption-key`` secret (see the
-``backup_secret`` fixture) so the destination can decrypt the source archive.
+``backup_secret`` fixture) so the newer charm can decrypt the archive produced by
+the older one.
 """
 
 import logging
@@ -41,7 +49,7 @@ def test_backup_restore_across_charm_upgrade(
     bacula_fd_old: str,
     baculum: baculum_client_module.Baculum,
 ):
-    """Back up on the source revision and restore onto the charm under test."""
+    """Back up on the published revision and restore onto the charm under test."""
     old_unit = f"{dovecot_old}/0"
     new_unit = f"{dovecot_charm_backup}/0"
 
@@ -57,7 +65,7 @@ def test_backup_restore_across_charm_upgrade(
         backup_job = find_bacula_job(baculum, "-backup", contains=f"{bacula_fd_old}-0")
         restore_job = find_bacula_job(baculum, "-restore", contains=f"{bacula_fd}-0")
 
-        logger.info("Running backup job %s on the source revision", backup_job)
+        logger.info("Running backup job %s on the published revision", backup_job)
         baculum.run_backup_job(backup_job)
         backup_run = wait_for_bacula_job(baculum, backup_job)
 
@@ -71,6 +79,7 @@ def test_backup_restore_across_charm_upgrade(
 
         # Provision authentication separately; backups restore mail data, not secrets.
         configure_mail_users(juju, new_unit, {_BACKUP_TEST_USER: password})
+        # The charm under test is a fresh deployment; confirm before restoring onto it.
         assert not mailbox_has_subject(juju, new_unit, _BACKUP_TEST_USER, _BACKUP_TEST_SUBJECT), (
             "message unexpectedly present on the freshly deployed charm"
         )
