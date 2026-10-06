@@ -12,3 +12,4 @@ jobs:
     with:
       vale-files: '["README.md","CONTRIBUTING.md","docs/"]'
       linkcheck-fail-on-error: false
+
