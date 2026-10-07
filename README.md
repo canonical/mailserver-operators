@@ -4,30 +4,22 @@ This repository contains a collection of operators for deploying and
 managing mail services in the Juju ecosystem. Its goal is to provide
 building blocks for operating mail servers with Juju.
 
-This repository contains the source code for the following mail related
-charms:
+## Repository layout
 
-1. `dovecot`: A machine charm that deploys and manages Dovecot as an
-   IMAP and POP3 mail server. See the
-   [Dovecot README](dovecot-charm/README.md) for more information.
-2. `opendkim`: A machine charm that deploys and manages OpenDKIM for
-   signing and verifying email with DomainKeys Identified Mail (DKIM).
-   See the [OpenDKIM README](opendkim-operator/README.md) for more
-   information.
-3. `postfix-relay`: A machine charm that deploys and manages a Postfix
-   SMTP relay server. See the
-   [Postfix relay README](postfix-relay-operator/README.md) for more
-   information.
-4. `postfix-relay-configurator`: A subordinate charm that manages
-   configuration for the Postfix relay charm. See the
-   [Postfix relay configuration README](postfix-relay-configurator-operator/README.md)
-   for more information.
+```
+dovecot-charm/                       # Juju charm: dovecot IMAP/POP3 mail server source
+opendkim-operator/                   # Juju charm: opendkim DKIM signing/verification source
+postfix-relay-operator/              # Juju charm: postfix-relay SMTP relay source
+postfix-relay-configurator-operator/ # Juju charm: postfix-relay-configurator subordinate source
 
-The repository also holds the snapped workload used by the OpenDKIM
-charm:
+opendkim-snap/                       # Snap: opendkim workload
 
-1. `opendkim`: A snap containing the OpenDKIM email signing and
-   verification milter.
+terraform/                           # Terraform Juju modules for the charms above
+
+docs/                                # Product documentation
+
+tests/                               # Shared integration tests
+```
 
 ## Charmhub and Snapcraft
 
@@ -67,3 +59,9 @@ contributions, suggestions, fixes, and constructive feedback.
 - [Issues](https://github.com/canonical/mailserver-operators/issues)
 - [Matrix](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
 - [Contribute](https://github.com/canonical/mailserver-operators/blob/main/CONTRIBUTING.md)
+
+## License
+
+The mail server operators are free software, distributed under the
+Apache Software License, version 2.0. See [LICENSE](LICENSE) for more
+details.
