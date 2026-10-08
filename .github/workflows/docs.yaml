@@ -10,6 +10,6 @@ jobs:
     uses: canonical/operator-workflows/.github/workflows/docs.yaml@main
     secrets: inherit
     with:
-      vale-files: '["README.md","CONTRIBUTING.md","docs/"]'
+      vale-files: '["README.md","CONTRIBUTING.md","docs/","dovecot-charm/README.md","dovecot-charm/terraform/README.md","opendkim-operator/README.md","opendkim-operator/terraform/README.md","postfix-relay-operator/README.md","postfix-relay-operator/terraform/README.md","postfix-relay-configurator-operator/README.md","postfix-relay-configurator-operator/terraform/README.md","terraform/README.md","terraform/dovecot/README.md","terraform/postfix-relay/README.md"]'
       linkcheck-fail-on-error: false
 

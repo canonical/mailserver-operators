@@ -1,5 +1,5 @@
 .. meta::
-   :description: View the changelog for the __charm_name__ charm, including all versions and changes.
+   :description: View the changelog for the mail server operators, including all versions and changes.
 
 .. _changelog:
 
@@ -28,6 +28,19 @@ Changed
   Bacula does not back up or restore mail users or Juju secrets. Documented
   separate secret protection and recovery, including preserving the backup
   encryption passphrase.
+  
+2026-10-06
+----------
+
+Changed
+~~~~~~~
+
+- Reworked the repository README into a monorepo overview linking to individual
+  charm READMEs for Dovecot, OpenDKIM, Postfix relay, and Postfix relay
+  configuration, following the structure used by other Canonical operator
+  monorepos.
+- Added dedicated READMEs for the OpenDKIM, Postfix relay, and Postfix relay
+  configuration charms.
 
 2026-09-18
 ----------

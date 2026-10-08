@@ -7,7 +7,10 @@
 # Vale settings
 VALE_DIR ?= .vale
 PRAECEPTA_CONFIG 	?= .vale.ini
-DOCS_FILES 	?= README.md CONTRIBUTING.md docs/**/*.rst docs/**/*.md
+DOCS_FILES 	?= README.md CONTRIBUTING.md docs/**/*.rst docs/**/*.md \
+	$(wildcard *-operator/README.md *-operator/terraform/README.md) \
+	$(wildcard *-charm/README.md *-charm/terraform/README.md) \
+	terraform/README.md $(wildcard terraform/*/README.md)
 
 HAS_VALE			:= $(shell command -v vale;)
 HAS_LYCHEE			:= $(shell command -v lychee;)
