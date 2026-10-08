@@ -288,10 +288,12 @@ Never add outputs containing product inputs or secrets.
 
 ## 7. Update Dovecot mail users
 
-Update the existing secret with the complete list of users and password hashes:
+Select the Dovecot model, then update the mail-user secret with the complete list
+of users and password hashes:
 
 ```bash
-juju update-secret -m <controller-name>:company-dovecot "$TF_VAR_mail_users_secret_uri" \
+juju switch <controller-name>:company-dovecot
+juju update-secret dovecot-mail-users \
   users='["alice:<alice-password-hash>", "bob:<bob-password-hash>"]'
 ```
 

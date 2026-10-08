@@ -59,7 +59,7 @@ Create the mail-user secret in the deployment model before applying Terraform. I
 must contain a non-empty YAML list of `username:password-hash` entries with supported crypt hashes.
 Pass its URI through the required `mail_users_secret_uri` input. The product manages the access
 grant, not the secret or its contents; update credentials separately through Juju or your secret
-management process. The product's input takes precedence over `dovecot.config["mail-users"]`.
+management process.
 
 The LUKS passphrase and controller credentials remain sensitive Terraform state values.
 Mail-user credential contents are not read into Terraform state by this product.
