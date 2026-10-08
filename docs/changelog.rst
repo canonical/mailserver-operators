@@ -12,6 +12,23 @@ The format is based on `Keep a Changelog <https://keepachangelog.com/en/1.1.0/>`
 
 Each revision is versioned by the date of the revision.
 
+2026-10-08
+----------
+
+Added
+~~~~~
+
+- A :ref:`how-to guide <how_to_add_mail_users>` for adding Dovecot mail users
+  through a Juju secret, granting application access, and updating credentials.
+
+Changed
+~~~~~~~
+
+- Clarified in the :ref:`backup and restore guide <how_to_back_up_restore>` that
+  Bacula does not back up or restore mail users or Juju secrets. Documented
+  separate secret protection and recovery, including preserving the backup
+  encryption passphrase.
+
 2026-09-18
 ----------
 
