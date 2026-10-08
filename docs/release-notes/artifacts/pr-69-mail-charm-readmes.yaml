@@ -1,0 +1,21 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version_schema: 2
+
+changes:
+- title: Reworked repository and charm READMEs
+  author: Ignavar
+  type: minor
+  description: |
+    Reworked the root README into a monorepo overview that links out to the Dovecot, OpenDKIM,
+    Postfix relay, and Postfix relay configuration charm READMEs. Added dedicated READMEs for the
+    OpenDKIM, Postfix relay, and Postfix relay configuration charms, each describing their
+    features, deployment, configuration, and relations.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/69"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: false

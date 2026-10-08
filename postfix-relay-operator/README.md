@@ -1,22 +1,83 @@
-[![CharmHub Badge](https://charmhub.io/postfix-relay/badge.svg)](https://charmhub.io/postfix-relay)
-[![Publish to edge](https://github.com/canonical/postfix-relay-operators/actions/workflows/publish_charm.yaml/badge.svg)](https://github.com/canonical/postfix-relay-operators/actions/workflows/publish_charm.yaml)
-[![Promote charm](https://github.com/canonical/postfix-relay-operators/actions/workflows/promote_charm.yaml/badge.svg)](https://github.com/canonical/postfix-relay-operators/actions/workflows/promote_charm.yaml)
-[![Discourse Status](https://img.shields.io/discourse/status?server=https%3A%2F%2Fdiscourse.charmhub.io&style=flat&label=CharmHub%20Discourse)](https://discourse.charmhub.io)
+[![Charmhub badge](https://charmhub.io/postfix-relay/badge.svg)](https://charmhub.io/postfix-relay)
 
-# Postfix relay operator
+# Postfix relay charm
 
-A [Juju](https://juju.is/) [charm](https://documentation.ubuntu.com/juju/3.6/reference/charm/)
-deploying and managing a Postfix relay server on bare metal.
+[Postfix](https://www.postfix.org/) is a widely used mail transfer
+agent. This charm installs Postfix and configures it as an SMTP relay,
+allowing specific users, hosts, or networks to send mail through it.
 
-For information about how to deploy, integrate, and manage this charm, see the Official [postfix-relay Operator Documentation](https://charmhub.io/postfix-relay/docs).
+This [Juju](https://juju.is/) charm handles one-line deployment,
+configuration, relations, and scaling for Postfix relay, including:
+
+* Relaying mail for configured domains, hosts, and networks
+* SMTP authentication and sender restrictions
+* Virtual aliases, transport maps, and header checks
+* Configurable TLS policies, protocols, and cipher suites
+* Connection, message size, and rate limits
+* Relations with mail filters and Canonical Observability Stack
+
+For information about how to deploy, integrate, and manage this charm,
+see the official
+[Postfix relay documentation](https://charmhub.io/postfix-relay/docs).
+
+## Get started
+
+See the
+[getting started tutorial](docs/tutorial/getting-started.md)
+for prerequisites and a complete walkthrough.
+
+### Deploy
+
+Deploy the charm with at least one destination domain:
+
+```bash
+juju deploy postfix-relay --config 'relay_domains=[example.com]'
+```
+
+Run `juju status` to monitor the deployment.
+
+### Basic operations
+
+Update the domains for which the server relays mail:
+
+```bash
+juju config postfix-relay 'relay_domains=[example.com, example.net]'
+```
+
+See the
+[configuration reference](https://charmhub.io/postfix-relay/configurations)
+for SMTP authentication, relay restrictions, TLS, rate limits, and
+other available options.
+
+## Integrations
+
+The charm supports the following relations:
+
+* `milter` connects mail filters such as the OpenDKIM charm.
+* `certificates` supplies TLS certificates.
+* `cos-agent` provides logs and metrics to Canonical Observability
+  Stack.
+* `metrics` exposes Postfix metrics.
+
+See the
+[integration documentation](https://charmhub.io/postfix-relay/integrations)
+for endpoint details and supported charms.
 
 ## Learn more
-* [Read more](https://charmhub.io/postfix-relay) <!--Link to the charm's official documentation-->
-* [Developer documentation](https://www.postfix.org/documentation.html) <!--Link to any developer documentation-->
-* [Official webpage](https://www.postfix.org/) <!--(Optional) Link to official webpage/blog/marketing content-->
-* [Troubleshooting](https://matrix.to/#/#charmhub-charmdev:ubuntu.com) <!--(Optional) Link to a page or section about troubleshooting/FAQ-->
-## Project and community
-* [Issues](https://github.com/canonical/postfix-relay-operators/issues) <!--Link to GitHub issues (if applicable)-->
-* [Contributing](https://charmhub.io/postfix-relay/docs/how-to-contribute) <!--Link to any contribution guides-->
-* [Matrix](https://matrix.to/#/#charmhub-charmdev:ubuntu.com) <!--Link to contact info (if applicable), e.g. Matrix channel-->
 
+* [Postfix relay documentation](https://charmhub.io/postfix-relay/docs)
+* [Postfix documentation](https://www.postfix.org/documentation.html)
+* [Postfix official website](https://www.postfix.org/)
+* [Troubleshooting and support](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
+
+## Project and community
+
+* [Issues](https://github.com/canonical/mailserver-operators/issues)
+* [Contributing](../CONTRIBUTING.md)
+* [Matrix](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
+
+## Licensing and trademark
+
+The Postfix relay charm is free software, distributed under the Apache
+Software License, version 2.0. See the [license](../LICENSE) for more
+information.

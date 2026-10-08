@@ -12,6 +12,6 @@ standardized outputs. The charm modules remain beside their charms under `<charm
 
 See [Installing the Terraform products](INSTALL.md) for a complete deployment procedure.
 
-The products intentionally do not form a single mailserver module. Postfix Relay and Dovecot do
+The products intentionally do not form a single mail server module. Postfix Relay and Dovecot do
 not currently have a first-class relation for mailbox-backend discovery. Consumers that deploy
 both products must configure routing explicitly until that charm integration exists.
