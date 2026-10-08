@@ -21,6 +21,10 @@ The charm expects these config values for a working deployment:
 - `mailname`
 - `postmaster-address`
 - `primary-unit`
+- `mail-users`, referencing a Juju secret whose `users` field contains a non-empty YAML list
+  of `username:password-hash` entries
+
+The caller must grant the application access to the mail-user secret.
 
 For encrypted mail storage:
 
@@ -75,6 +79,7 @@ module "dovecot" {
     "mailname"              = "mail.example.com"
     "postmaster-address"    = "postmaster@example.com"
     "primary-unit"          = "dovecot/0"
+    "mail-users"            = var.mail_users_secret_uri
     "luks-auto-provisioning" = true
     "luks-key"              = "<secret-id>"
   }
@@ -85,6 +90,12 @@ module "dovecot" {
       space    = "internal"
     }
   ])
+}
+
+resource "juju_access_secret" "dovecot_mail_users" {
+  model_uuid   = data.juju_model.this.uuid
+  secret_id    = trimprefix(var.mail_users_secret_uri, "secret:")
+  applications = [module.dovecot.application.name]
 }
 
 resource "juju_integration" "dovecot_certificates" {

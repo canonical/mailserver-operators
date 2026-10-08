@@ -119,6 +119,7 @@ export TF_VAR_mail_domain="mail.example.com"
 export TF_VAR_risk="edge"
 export TF_VAR_dkim_private_key="$(cat /secure/path/default.private)"
 export TF_VAR_postmaster_address="postmaster@$TF_VAR_mail_domain"
+export TF_VAR_mail_users_secret_uri="<existing-mail-user-secret-uri>"
 
 umask 077
 test -s terraform/dovecot/luks-key.secret ||
@@ -127,6 +128,19 @@ export TF_VAR_luks_key="$(
   cat terraform/dovecot/luks-key.secret
 )"
 ```
+
+Before deploying Dovecot, create the mail-user secret in its target model and set
+`TF_VAR_mail_users_secret_uri` to the URI returned by Juju:
+
+```bash
+juju add-secret -m "$JUJU_CONTROLLER_NAME:$DOVECOT_MODEL_UUID" dovecot-mail-users \
+  users='["alice:<alice-password-hash>", "bob:<bob-password-hash>"]'
+```
+
+Replace the placeholders with complete crypt password hashes. Supported identifiers are
+`$1$`, `$5$`, `$6$`, and `$y$`. For a manually added password, `openssl passwd -6`
+prompts for the password and prints a SHA-512 crypt hash. Terraform configures Dovecot
+and grants access to this existing secret; it does not create or own the secret.
 
 Verify the required fields before planning without printing their sensitive values:
 
@@ -272,28 +286,18 @@ terraform -chdir=terraform/postfix-relay output -json dkim | jq
 
 Never add outputs containing product inputs or secrets.
 
-## 7. Create Dovecot mail users
+## 7. Update Dovecot mail users
 
-Create or update a mailbox account with the charm action:
+Update the existing secret with the complete list of users and password hashes:
 
 ```bash
-printf 'Mailbox password: ' >&2
-stty -echo
-trap 'stty echo' EXIT INT TERM
-IFS= read -r MAIL_PASSWORD
-stty echo
-trap - EXIT INT TERM
-printf '\n' >&2
-juju run -m <controller-name>:company-dovecot dovecot/0 create-mail-user \
-  username=alice \
-  mailbox-user=alice@mail.example.com \
-  password="$MAIL_PASSWORD"
-unset MAIL_PASSWORD
+juju update-secret -m <controller-name>:company-dovecot "$TF_VAR_mail_users_secret_uri" \
+  users='["alice:<alice-password-hash>", "bob:<bob-password-hash>"]'
 ```
 
-Repeat for each user. The action argument is visible briefly to local processes and is retained in
-Juju task history; use test credentials locally and follow your credential-handling policy in
-production.
+The list replaces all configured credentials, so retain every user who should continue to
+authenticate. The charm applies secret revisions automatically. Secret contents are managed
+outside Terraform; use an appropriate secret manager to protect them separately from mail backups.
 
 ## 8. Test end-to-end mail delivery
 
@@ -324,13 +328,14 @@ export RELAY_IP="$(
 printf 'Dovecot: %s\nPostfix Relay: %s\n' "$DOVECOT_IP" "$RELAY_IP"
 ```
 
-Create Alice and Bob:
+For this disposable test only, update Alice and Bob to use the test password.
+This replaces the complete user list:
 
 ```bash
-juju run -m "$DOVECOT_MODEL" dovecot/0 create-mail-user \
-  username=alice mailbox-user="alice@$MAIL_DOMAIN" password="$MAIL_PASSWORD"
-juju run -m "$DOVECOT_MODEL" dovecot/0 create-mail-user \
-  username=bob mailbox-user="bob@$MAIL_DOMAIN" password="$MAIL_PASSWORD"
+MAIL_HASH=$(printf '%s\n' "$MAIL_PASSWORD" | openssl passwd -6 -stdin)
+juju update-secret -m "$DOVECOT_MODEL" "$TF_VAR_mail_users_secret_uri" \
+  users="[\"alice:${MAIL_HASH}\", \"bob:${MAIL_HASH}\"]"
+unset MAIL_HASH
 ```
 
 For a disposable test deployment, configure Postfix to relay the mail domain to the current
