@@ -8,7 +8,9 @@ How to add mail users
 
 Use the ``mail-users`` configuration option to provide Dovecot with mailbox
 usernames and password hashes through a Juju secret. This secret is the only
-way to add mail users to the charm. You need a deployed Dovecot application and
+way to add mail users to the charm.
+
+You need a deployed Dovecot application and
 model administrator permissions to manage Juju secrets. The examples use the
 application name ``dovecot``; replace it with your application name and select its
 Juju model before running the commands.

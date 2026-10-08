@@ -1,6 +1,7 @@
 .. meta::
 .. meta::
-:description: Learn how to back up and restore the Dovecot charm and its associated data.
+.. meta::
+    :description: Learn how to back up and restore the Dovecot charm and its associated data.
 
 .. _how_to_back_up_restore:
 
