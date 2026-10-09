@@ -116,6 +116,12 @@ variable "mail_domain" {
   nullable    = false
 }
 
+variable "mail_users_secret_uri" {
+  description = "URI of an existing Juju secret containing mail-user credentials in the deployment model."
+  type        = string
+  nullable    = false
+}
+
 variable "model_uuid" {
   description = "UUID of the existing Juju model where the product is deployed."
   type        = string

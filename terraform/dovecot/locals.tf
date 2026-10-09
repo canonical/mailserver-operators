@@ -9,6 +9,7 @@ locals {
   dovecot_config = merge(var.dovecot.config, {
     luks-auto-provisioning = "true"
     luks-key               = "secret:${juju_secret.dovecot_luks.secret_id}"
+    mail-users             = var.mail_users_secret_uri
     mailname               = var.mail_domain
     postmaster-address     = var.postmaster_address
     primary-unit           = coalesce(var.primary_unit, "${var.dovecot.app_name}/0")

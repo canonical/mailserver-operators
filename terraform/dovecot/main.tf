@@ -34,6 +34,12 @@ resource "juju_access_secret" "dovecot_luks" {
   secret_id    = juju_secret.dovecot_luks.secret_id
 }
 
+resource "juju_access_secret" "dovecot_mail_users" {
+  applications = [module.dovecot.application.name]
+  model_uuid   = var.model_uuid
+  secret_id    = trimprefix(var.mail_users_secret_uri, "secret:")
+}
+
 resource "juju_application" "self_signed_certificates" {
   count      = var.tls == null ? 1 : 0
   model_uuid = var.model_uuid
