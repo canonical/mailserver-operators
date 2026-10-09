@@ -1,6 +1,7 @@
 .. meta::
 .. meta::
-:description: Learn how to back up and restore the Dovecot charm and its associated data.
+.. meta::
+    :description: Learn how to back up and restore the Dovecot charm and its associated data.
 
 .. _how_to_back_up_restore:
 
@@ -13,6 +14,19 @@ hands that encrypted artifact to Bacula for offsite storage and restoration.
 
 Backups do not rely on Bacula-native encryption. Instead, the Dovecot charm
 encrypts the backup payload before the Bacula file daemon uploads it.
+
+.. important::
+
+   Mail users and their credentials are not backed up or restored by Bacula.
+   They are managed through the Juju secret referenced by the ``mail-users``
+   configuration option, and Bacula does not manage Juju secrets.
+
+   Use Vault or another appropriate secrets-management method to manage and
+   separately protect these secrets. See Juju's `How to manage secrets
+   <https://canonical.com/juju/docs/juju-cli/3.6/howto/manage-secrets/>`_
+   for instructions on managing secrets and granting applications access.
+   The backup encryption passphrase must also be preserved separately: it is
+   required to decrypt a restored backup.
 
 Prerequisites
 -------------
@@ -77,6 +91,14 @@ wizard, set the "Restore to directory" option to ``/`` so files are restored to
 their original locations. The restored encrypted artifact is placed back
 onto the Dovecot unit by Bacula, and the Dovecot post-restore hook decrypts it
 and restores the mail tree under ``/srv/mail``.
+
+If restoring to a new deployment, separately recover or recreate the
+``mail-users`` Juju secret, grant it to Dovecot, and set the ``mail-users``
+configuration option to reference it. Restoring mailbox data alone does not
+restore mail users or their credentials. See :ref:`how_to_add_mail_users` for
+instructions on creating and configuring this secret. Ensure that the original backup
+encryption passphrase is available through the ``backup-encryption-key`` secret
+before running the restore.
 
 .. note::
 
