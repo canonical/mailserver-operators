@@ -137,8 +137,10 @@ juju add-secret -m "$JUJU_CONTROLLER_NAME:$DOVECOT_MODEL_UUID" dovecot-mail-user
   users='["alice:<alice-password-hash>", "bob:<bob-password-hash>"]'
 ```
 
-Replace the placeholders with complete crypt password hashes. Supported identifiers are
-`$1$`, `$5$`, `$6$`, and `$y$`. For a manually added password, `openssl passwd -6`
+Replace the placeholders with complete crypt password hashes. The prefix identifies the
+hashing algorithm: `$1$` is MD5-crypt, `$5$` is SHA-256-crypt, `$6$` is SHA-512-crypt,
+and `$y$` is yescrypt. These are the formats supported by the charm; each hash also
+includes its salt and hashed password. For a manually added password, `openssl passwd -6`
 prompts for the password and prints a SHA-512 crypt hash. Terraform configures Dovecot
 and grants access to this existing secret; it does not create or own the secret.
 

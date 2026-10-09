@@ -18,12 +18,12 @@ module "dovecot" {
     ca       = var.juju_ca
   }
 
-  model_uuid         = var.model_uuid
-  mail_domain       = "mail.example.com"
-  postmaster_address = "postmaster@mail.example.com"
-  luks_key           = var.mail_luks_key
+  model_uuid            = var.model_uuid
+  mail_domain           = "mail.example.com"
+  postmaster_address    = "postmaster@mail.example.com"
+  luks_key              = var.mail_luks_key
   mail_users_secret_uri = var.mail_users_secret_uri
-  risk               = "edge"
+  risk                  = "edge"
 }
 ```
 
