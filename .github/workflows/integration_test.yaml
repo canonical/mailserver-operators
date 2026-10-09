@@ -7,7 +7,7 @@ on:
 
 jobs:
   integration-test:
-    uses: canonical/charm-ci/.github/workflows/integration-test.yml@58ae6614a3b143d4e57eff0fd1770e97d8c30fab # v1.0.1
+    uses: canonical/charm-ci/.github/workflows/integration-test.yml@b2a5b31094070dae95c0fb33c2e654d8afe4b95e # v1.0.2
     permissions:
       actions: read
       contents: read
