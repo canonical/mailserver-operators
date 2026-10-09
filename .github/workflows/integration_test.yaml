@@ -7,7 +7,7 @@ on:
 
 jobs:
   integration-test:
-    uses: canonical/charm-ci/.github/workflows/integration-test.yml@edea5c8f49f9e98a7b99c128b60802e03310808d # Test uv tool update-shell
+    uses: canonical/charm-ci/.github/workflows/integration-test.yml@7c2c2b838feffff262428ed492ca6957a47794c0 # Test uv tool update-shell
     permissions:
       actions: read
       contents: read
