@@ -1,0 +1,23 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version_schema: 2
+
+changes:
+- title: Documented mail-user configuration and secret recovery
+  author: Ignavar
+  type: minor
+  description: |
+    Added a how-to guide for adding Dovecot mail users through a Juju secret,
+    granting application access, and updating credentials. Clarified that Bacula
+    does not back up or restore mail users or Juju secrets, and documented the
+    need to protect secrets and preserve the backup encryption passphrase separately.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/70"
+    related_doc:
+      - "https://github.com/canonical/mailserver-operators/blob/chore/update-docs/docs/how-to/how-to-add-mail-users.rst"
+      - "https://github.com/canonical/mailserver-operators/blob/chore/update-docs/docs/how-to/back-up-restore.rst"
+    related_issue:
+  visibility: public
+  highlight: false
