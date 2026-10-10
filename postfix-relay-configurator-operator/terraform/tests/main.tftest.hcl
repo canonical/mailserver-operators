@@ -20,7 +20,7 @@ run "basic_deploy" {
     model_uuid        = "00000000-0000-0000-0000-000000000000"
     resources         = {}
     # renovate: depName="postfix-relay-configurator"
-    revision = 12
+    revision = 13
   }
 
   assert {
