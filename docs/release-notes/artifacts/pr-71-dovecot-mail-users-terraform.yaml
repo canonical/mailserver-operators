@@ -1,0 +1,24 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version_schema: 2
+
+changes:
+- title: Updated the Dovecot Terraform product to use an existing mail-user secret
+  author: Ignavar
+  type: breaking
+  description: |
+    Added the required mail_users_secret_uri input to the Dovecot Terraform product.
+    The product configured mail-users from the supplied secret and managed the access
+    grant to Dovecot without owning the secret or its contents. Existing callers must
+    supply the new input when upgrading. Updated the installation guide and module
+    documentation to use secret-based credentials instead of the removed create-mail-user action.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/71"
+    related_doc:
+      - "https://github.com/canonical/mailserver-operators/blob/chore/update-terraform-modules/terraform/dovecot/README.md"
+      - "https://github.com/canonical/mailserver-operators/blob/chore/update-terraform-modules/terraform/INSTALL.md"
+    related_issue:
+  visibility: public
+  highlight: false

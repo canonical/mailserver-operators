@@ -17,11 +17,12 @@ variables {
     password = "test-password"
     username = "admin"
   }
-  luks_key           = "test-luks-passphrase"
-  mail_domain        = "mail.example.test"
-  model_uuid         = "00000000-0000-0000-0000-000000000000"
-  postmaster_address = "postmaster@mail.example.test"
-  risk               = "edge"
+  luks_key              = "test-luks-passphrase"
+  mail_domain           = "mail.example.test"
+  mail_users_secret_uri = "secret:existingmailusers"
+  model_uuid            = "00000000-0000-0000-0000-000000000000"
+  postmaster_address    = "postmaster@mail.example.test"
+  risk                  = "edge"
 }
 
 run "default_product_contract" {
@@ -45,6 +46,20 @@ run "default_product_contract" {
   assert {
     condition     = module.dovecot.application.config["luks-key"] == "secret:test-secret-id"
     error_message = "The product must wire the managed LUKS secret into Dovecot."
+  }
+
+  assert {
+    condition     = module.dovecot.application.config["mail-users"] == var.mail_users_secret_uri
+    error_message = "The product must configure the supplied mail-user secret."
+  }
+
+  assert {
+    condition = (
+      juju_access_secret.dovecot_mail_users.secret_id == "existingmailusers"
+      && juju_access_secret.dovecot_mail_users.model_uuid == var.model_uuid
+      && juju_access_secret.dovecot_mail_users.applications == toset(["dovecot"])
+    )
+    error_message = "The product must grant Dovecot access to the existing mail-user secret in the deployment model."
   }
 
   assert {
