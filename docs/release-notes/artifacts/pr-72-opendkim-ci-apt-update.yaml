@@ -1,0 +1,21 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version_schema: 2
+
+changes:
+- title: Fixed OpenDKIM integration-test dependency setup
+  author: Ignavar
+  type: bugfix
+  description: |
+    Refreshed APT package indexes before installing opendkim-tools for OpenDKIM
+    integration tests, with repository errors reported as setup failures.
+    Updated the integration-test workflow to charm-ci v1.0.2, including its
+    tool PATH fix.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/72"
+    related_doc:
+    related_issue:
+  visibility: internal
+  highlight: false
