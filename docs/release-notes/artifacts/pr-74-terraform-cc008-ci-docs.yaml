@@ -1,0 +1,18 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Version of the artifact schema
+version_schema: 2
+
+changes:
+- title: Completed CC008 Terraform CI wiring and documentation
+  author: Copilot
+  type: minor
+  description: Pinned the terraform_modules_test reusable-workflow call to the commit SHA already used elsewhere in the repository, added the terraform_modules_release and generate_terraform_docs reusable workflows (both pinned to the same SHA and scoped to every discovered Terraform module directory), and replaced each module README's hand-maintained Inputs/Outputs sections with terraform-docs BEGIN_TF_DOCS/END_TF_DOCS markers so the docs workflow can keep them current. No module behaviour changed; the CC008 compliance checker, tflint, terraform fmt and terraform test already passed for every module.
+  urls:
+    pr:
+      - ""
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: false
