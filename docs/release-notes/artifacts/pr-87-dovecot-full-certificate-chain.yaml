@@ -1,0 +1,21 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version_schema: 2
+
+changes:
+- title: Fixed incomplete TLS certificate chains in Dovecot
+  author: Ignavar
+  type: bugfix
+  description: |
+    Included the complete provider-supplied TLS certificate chain in Dovecot's
+    certificate bundle, including intermediate and cross-signed certificates.
+    Fixed trust failures for clients that could not build a chain to their trusted
+    root. Removed duplicate certificates while preserving leaf-first chain order.
+  urls:
+    pr:
+      - "https://github.com/canonical/mailserver-operators/pull/87"
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: false
