@@ -30,8 +30,26 @@ def test_no_tls_cert_yet_blocks(tls_ctx, base_state):
     assert "certificate" in state_out.unit_status.message.lower()
 
 
-def test_setup_tls_writes_cert_key_and_chain(tls_ctx, base_state, tmp_path):
-    """setup_tls writes cert (+ CA chain) and private key to tls_cert_dir.
+@pytest.mark.parametrize(
+    ("chain", "expected_certificates"),
+    [
+        pytest.param([], ["CERT_DATA", "CA_DATA"], id="ca-only-provider"),
+        pytest.param(
+            ["CA_DATA", "CROSS_SIGNED_CA"],
+            ["CERT_DATA", "CA_DATA", "CROSS_SIGNED_CA"],
+            id="full-chain",
+        ),
+        pytest.param(
+            ["CERT_DATA", "CA_DATA", "CROSS_SIGNED_CA", "CA_DATA"],
+            ["CERT_DATA", "CA_DATA", "CROSS_SIGNED_CA"],
+            id="chain-includes-leaf-and-duplicates",
+        ),
+    ],
+)
+def test_setup_tls_writes_cert_key_and_chain(
+    tls_ctx, base_state, tmp_path, chain, expected_certificates
+):
+    """setup_tls writes the full certificate chain and private key to tls_cert_dir.
 
     setup_tls is invoked by _reconcile at event dispatch time (context manager
     __exit__).  We patch dovecot_setup.TLS_CERT_DIR to tmp_path so no real
@@ -40,6 +58,7 @@ def test_setup_tls_writes_cert_key_and_chain(tls_ctx, base_state, tmp_path):
     mock_cert = MagicMock()
     mock_cert.certificate.__str__ = MagicMock(return_value="CERT_DATA")
     mock_cert.ca.__str__ = MagicMock(return_value="CA_DATA")
+    mock_cert.chain = chain
     mock_key = MagicMock()
     mock_key.__str__ = MagicMock(return_value="KEY_DATA")
 
@@ -55,7 +74,7 @@ def test_setup_tls_writes_cert_key_and_chain(tls_ctx, base_state, tmp_path):
     key_file = tmp_path / "example.com.key"
 
     assert cert_file.exists()
-    assert cert_file.read_text() == "CERT_DATA\nCA_DATA"
+    assert cert_file.read_text().splitlines() == expected_certificates
     assert oct(cert_file.stat().st_mode)[-3:] == "644"
 
     assert key_file.exists()
@@ -68,6 +87,7 @@ def test_setup_tls_no_ca_omits_chain(tls_ctx, base_state, tmp_path):
     mock_cert = MagicMock()
     mock_cert.certificate.__str__ = MagicMock(return_value="CERT_DATA")
     mock_cert.ca = None  # no CA attached
+    mock_cert.chain = []
     mock_key = MagicMock()
     mock_key.__str__ = MagicMock(return_value="KEY_DATA")
 
@@ -79,7 +99,7 @@ def test_setup_tls_no_ca_omits_chain(tls_ctx, base_state, tmp_path):
         mgr.charm._tls.get_assigned_certificate.return_value = (mock_cert, mock_key)
 
     cert_file = tmp_path / "example.com.pem"
-    assert cert_file.read_text() == "CERT_DATA"
+    assert cert_file.read_text().splitlines() == ["CERT_DATA"]
 
 
 def test_setup_tls_no_private_key_raises(tls_ctx, base_state):
@@ -111,6 +131,7 @@ def test_certificate_available_event_triggers_reconcile(tls_ctx, base_state, tmp
     mock_cert = MagicMock()
     mock_cert.certificate.__str__ = MagicMock(return_value="CERT_DATA")
     mock_cert.ca = None
+    mock_cert.chain = []
     mock_key = MagicMock()
     mock_key.__str__ = MagicMock(return_value="KEY_DATA")
 

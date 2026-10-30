@@ -1,0 +1,20 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+version_schema: 2
+
+changes:
+- title: Fixed incomplete TLS certificate chains in Dovecot
+  author: Ignavar
+  type: bugfix
+  description: |
+    Dovecot now serves the complete certificate chain supplied by its TLS provider,
+    including intermediate and cross-signed certificates. This fixes certificate
+    trust failures for clients that could not build a chain to their trusted root.
+    Duplicate certificates are omitted while preserving leaf-first chain order.
+  urls:
+    pr: []
+    related_doc:
+    related_issue:
+  visibility: public
+  highlight: false
