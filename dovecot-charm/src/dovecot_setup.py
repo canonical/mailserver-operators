@@ -91,9 +91,12 @@ class DovecotSetup:
         cert_path = TLS_CERT_DIR / f"{dovecot_config.mailname}.pem"
         key_path = TLS_CERT_DIR / f"{dovecot_config.mailname}.key"
 
-        cert_content = str(provider_cert.certificate)
+        certificates = [provider_cert.certificate, *provider_cert.chain]
         if provider_cert.ca:
-            cert_content += "\n" + str(provider_cert.ca)
+            certificates.append(provider_cert.ca)
+        # Providers may include the leaf and CA in the chain. Preserve issuer
+        # order while writing each certificate only once.
+        cert_content = "\n".join(dict.fromkeys(str(cert).strip() for cert in certificates)) + "\n"
         cert_path.write_text(cert_content)
         cert_path.chmod(0o644)
         logger.info(f"TLS certificate written to {cert_path}")
