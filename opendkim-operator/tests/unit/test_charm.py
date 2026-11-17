@@ -32,16 +32,10 @@ def test_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     subprocess_run_mock.returncode = 1
     monkeypatch.setattr(subprocess, "run", subprocess_run_mock)
 
-    # Mock SnapCache for opendkim snap
-    opendkim_snap_mock = MagicMock()
-    opendkim_snap_mock.present = False
-    snap_cache_mock = MagicMock()
-    snap_cache_mock.__getitem__.return_value = opendkim_snap_mock
-    monkeypatch.setattr("charm.snap.SnapCache", MagicMock(return_value=snap_cache_mock))
-
-    telegraf_snap_mock = MagicMock()
-    snap_add_mock = MagicMock(return_value=telegraf_snap_mock)
-    monkeypatch.setattr(charm.snap, "add", snap_add_mock)
+    ensure_installed_mock = MagicMock()
+    monkeypatch.setattr(charm.snap, "ensure_installed", ensure_installed_mock)
+    restart_mock = MagicMock()
+    monkeypatch.setattr(charm.snap, "restart", restart_mock)
     telegraf_conf = tmp_path / "telegraf.conf"
     monkeypatch.setattr(charm, "TELEGRAF_CONF_DST", telegraf_conf)
 
@@ -62,12 +56,12 @@ def test_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     assert out.unit_status.name == ops.testing.WaitingStatus.name
 
     # Telegraf configuration
-    snap_add_mock.assert_called_once_with(["telegraf"])
+    ensure_installed_mock.assert_any_call("telegraf", classic=True)
     write_file_mock.assert_has_calls([call(telegraf_conf, ANY, 0o644, user="root")])
-    telegraf_snap_mock.restart.assert_called_once()
+    restart_mock.assert_called_once_with("telegraf")
 
     # OpenDKIM snap installation from store
-    opendkim_snap_mock.ensure.assert_called_once()
+    ensure_installed_mock.assert_any_call("opendkim", channel="stable")
 
 
 @pytest.mark.parametrize(
@@ -232,17 +226,13 @@ def test_correct_config(
 
     monkeypatch.setattr("utils.write_file", write_file_mock)
 
-    opendkim_snap_mock = MagicMock()
-    telegraf_snap_mock = MagicMock()
-    monkeypatch.setattr(charm.snap, "add", MagicMock(return_value=telegraf_snap_mock))
+    monkeypatch.setattr(charm.snap, "ensure_installed", MagicMock())
+    restart_mock = MagicMock()
+    monkeypatch.setattr(charm.snap, "restart", restart_mock)
     telegraf_conf = tmp_path / "telegraf.conf"
     monkeypatch.setattr(charm, "TELEGRAF_CONF_DST", telegraf_conf)
 
     monkeypatch.setattr("charm.Path.exists", MagicMock(return_value=True))
-
-    snap_cache_mock = MagicMock()
-    snap_cache_mock.__getitem__ = MagicMock(return_value=opendkim_snap_mock)
-    monkeypatch.setattr("charm.snap.SnapCache", MagicMock(return_value=snap_cache_mock))
 
     context = ops.testing.Context(
         charm_type=OpenDKIMCharm,
@@ -256,7 +246,7 @@ def test_correct_config(
 
     if restart_expected:
         assert len(write_calls) == 5
-        opendkim_snap_mock.restart.assert_called_once()
+        restart_mock.assert_called_once_with("opendkim")
         write_paths = {c[0] for c in write_calls}
         assert Path("/var/snap/opendkim/current/etc/opendkim.conf") in write_paths
         assert Path("/var/snap/opendkim/current/etc/dkimkeys/key1.private") in write_paths
@@ -265,7 +255,7 @@ def test_correct_config(
         assert Path("/var/snap/opendkim/current/etc/dkimkeys/keytable") in write_paths
     else:
         assert len(write_calls) == 0, f"Unexpected write calls: {[str(c[0]) for c in write_calls]}"
-        opendkim_snap_mock.restart.assert_not_called()
+        restart_mock.assert_not_called()
 
 
 def test_write_file():
