@@ -44,8 +44,10 @@ def test_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     subprocess_mock = Mock()
     monkeypatch.setattr(charm, "subprocess", subprocess_mock)
     telegraf_snap_mock = Mock()
-    snap_add_mock = Mock(return_value=telegraf_snap_mock)
-    monkeypatch.setattr(charm.snap, "add", snap_add_mock)
+    ensure_installed_mock = Mock(return_value=telegraf_snap_mock)
+    monkeypatch.setattr(charm.snap, "ensure_installed", ensure_installed_mock)
+    restart_mock = Mock()
+    monkeypatch.setattr(charm.snap, "restart", restart_mock)
 
     charm_state = State(config={}, leader=True)
 
@@ -60,14 +62,14 @@ def test_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     copytree_mock.assert_called_once_with("files", "/", dirs_exist_ok=True)
     service_start_mock.assert_called_once_with(charm.INOTIFY_SERVICE_NAME)
     # Telegraf configuration
-    snap_add_mock.assert_called_once_with(["telegraf"])
+    ensure_installed_mock.assert_called_once_with("telegraf", classic=True)
     subprocess_mock.check_call.assert_any_call(
         ["setfacl", "-Rm", "g:snap_daemon:rX", "/var/spool/postfix"], timeout=5
     )
     subprocess_mock.check_call.assert_any_call(
         ["setfacl", "-dm", "g:snap_daemon:rX", "/var/spool/postfix"], timeout=5
     )
-    telegraf_snap_mock.restart.assert_called_once()
+    restart_mock.assert_called_once_with("telegraf")
 
 
 @patch(

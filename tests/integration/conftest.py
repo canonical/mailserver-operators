@@ -262,10 +262,17 @@ def deploy_opendkim_fixture(
     if not juju.status().apps.get(OPENDKIM_APP):
         juju.deploy(_get_charm_path(request, "opendkim"), OPENDKIM_APP)
         # Charm starts blocked (not yet configured) or waiting for milter relation.
+        # Also wait for the unit's machine to get a public address, since the
+        # snap is scp'd to the unit right after this and juju scp fails with
+        # "no available address(es)" if the machine isn't provisioned yet.
         juju.wait(
             lambda status: (
-                status.apps[OPENDKIM_APP].is_blocked
-                or status.apps[OPENDKIM_APP].app_status.current == "waiting"
+                bool(status.apps[OPENDKIM_APP].units)
+                and all(unit.public_address for unit in status.apps[OPENDKIM_APP].units.values())
+                and (
+                    status.apps[OPENDKIM_APP].is_blocked
+                    or status.apps[OPENDKIM_APP].app_status.current == "waiting"
+                )
             ),
             timeout=10 * 60,
         )
