@@ -11,7 +11,7 @@ import shutil
 import socket
 import subprocess  # nosec
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import ops
 from charmlibs import apt, snap
@@ -138,7 +138,8 @@ class PostfixRelayCharm(ops.CharmBase):
     def _install_telegraf(self) -> None:
         """Install telegraf."""
         try:
-            telegraf_snap = cast(snap.Snap, snap.add(["telegraf"]))
+            # telegraf requires classic confinement.
+            snap.ensure_installed("telegraf", classic=True)
             utils.write_file(TELEGRAF_CONF_SRC.read_text(), TELEGRAF_CONF_DST)
             # It is necessary to set permissions for the telegraf process to access
             # the queue directory.
@@ -147,8 +148,8 @@ class PostfixRelayCharm(ops.CharmBase):
             set_default_acl_cmd = ["setfacl", "-dm", f"g:{SNAP_GROUP}:rX", POSTFIX_SPOOL_DIR]
             for cmd in (set_acl_cmd, set_default_acl_cmd):
                 subprocess.check_call(cmd, timeout=5)  # nosec
-            telegraf_snap.restart()
-        except snap.SnapError:
+            snap.restart("telegraf")
+        except snap.Error:
             logger.exception("An exception occurred when installing Telegraf snap")
         except subprocess.SubprocessError:
             logger.exception("Error setting ACL commands for Telegraf")
