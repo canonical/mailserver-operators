@@ -8,14 +8,14 @@ description = "Postfix relay charm"
 requires-python = ">=3.12"
 dependencies = [
     "charmlibs-apt==1.0.0.post1",
-    "charmlibs-interfaces-tls-certificates==1.12.0",
-    "charmlibs-snap==2.0.0",
+    "charmlibs-interfaces-tls-certificates==1.13.0",
+    "charmlibs-snap==2.2.0",
     "cosl==1.11.3",
     "cryptography==50.0.2",
-    "email-validator==2.3.0",
+    "email-validator==2.4.0",
     "jinja2==3.1.6",
-    "ops==3.9.0",
-    "pydantic==2.14.2",
+    "ops==3.10.0",
+    "pydantic==2.14.4",
 ]
 
 [dependency-groups]
@@ -60,7 +60,7 @@ static = [
 integration = [
     "allure-pytest>=2.8.18",
     "allure-pytest-collection-report @ git+https://github.com/canonical/data-platform-workflows@v24.0.0#subdirectory=python/pytest_plugins/allure_pytest_collection_report",
-    "jubilant==1.14.0",
+    "jubilant==1.15.0",
     "juju==3.6.1.3",
     "opcli",
     "pytest",
